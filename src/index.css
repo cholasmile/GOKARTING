@@ -1,0 +1,188 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Premium Motorsport Dashboard Colors */
+  --color-bg-primary: #0A0A0A; /* Charcoal Black */
+  --color-bg-secondary: #0A0A0A;
+  --color-card-bg: rgba(28, 28, 28, 0.85); /* Graphite Glass (#1C1C1C) */
+  --color-sidebar-bg: #0A0A0A;
+
+  --color-brand-graphite: #1C1C1C;
+  --color-brand-yale: #00356B;
+  --color-brand-star: #007B8B;
+  --color-brand-tiffany: #00ABAB;
+  --color-brand-tufts: #3E8EDE;
+  --color-brand-turquoise: #40E0D0;
+
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #E2E8F0;
+  --color-text-muted: #94A3B8;
+}
+
+/* Global Base */
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  background-attachment: fixed;
+  min-height: 100vh;
+  margin: 0;
+  
+  /* High-energy speed lines and radial Turquoise glow */
+  background-image: 
+    radial-gradient(circle at 10% 10%, rgba(64, 224, 208, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 90% 90%, rgba(0, 171, 171, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(62, 142, 222, 0.08) 0%, transparent 60%);
+}
+
+/* Luxury Racing Panels */
+.glass-panel {
+  background: var(--color-card-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 171, 171, 0.25); /* Tiffany Blue */
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+.glass-card {
+  background: var(--color-card-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 171, 171, 0.25);
+  box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.3);
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 1.25rem;
+}
+.glass-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(64, 224, 208, 0.5); /* Turquoise */
+  box-shadow: 0 20px 40px -10px rgba(64, 224, 208, 0.2);
+}
+
+/* Gradients & Glows */
+.text-gradient {
+  background: linear-gradient(to right, #40E0D0, #00ABAB);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.btn-glow {
+  background: linear-gradient(135deg, #3E8EDE 0%, #007B8B 100%);
+  color: #FFFFFF;
+  border: 1px solid rgba(64, 224, 208, 0.4);
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0.75rem;
+  box-shadow: 0 0 15px rgba(0, 171, 171, 0.3);
+}
+.btn-glow:hover {
+  background: linear-gradient(135deg, #007B8B 0%, #40E0D0 100%);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 0 25px rgba(64, 224, 208, 0.6);
+  border-color: #40E0D0;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-brand-tiffany);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brand-turquoise);
+}
+
+/* Professional 3D clickable Buttons */
+.btn-3d-primary {
+  background: linear-gradient(135deg, #3E8EDE 0%, #007B8B 100%);
+  border-bottom: 3px solid #00356B;
+  color: #FFFFFF;
+  border-radius: 0.5rem;
+  box-shadow: 
+    0 4px 10px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease;
+}
+
+.btn-3d-primary:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #007B8B 0%, #00ABAB 100%);
+  box-shadow: 
+    0 6px 14px rgba(64, 224, 208, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-3d-primary:active {
+  transform: translateY(2px);
+  border-bottom-width: 1px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Success Button */
+.btn-3d-success {
+  background: linear-gradient(135deg, #40E0D0 0%, #00ABAB 100%);
+  border-bottom: 3px solid #007B8B;
+  color: #00356B; /* Dark contrast text */
+  font-weight: 800;
+  border-radius: 0.5rem;
+  box-shadow: 
+    0 4px 10px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: all 0.2s ease;
+}
+
+.btn-3d-success:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #00ABAB 0%, #40E0D0 100%);
+  box-shadow: 
+    0 6px 15px rgba(64, 224, 208, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.btn-3d-success:active {
+  transform: translateY(2px);
+  border-bottom-width: 1px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Custom CSS Animations */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+@keyframes shine {
+  0% { transform: translateX(-100%) skewX(12deg); }
+  100% { transform: translateX(200%) skewX(12deg); }
+}

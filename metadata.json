@@ -1,0 +1,6 @@
+{
+  "name": "Deuce",
+  "description": "A comprehensive mobile-first management platform for an adventure park and food street. Includes multi-activity booking, QR ticketing, staff check-in, multi-vendor food ordering, real-time tracking, payment simulations, inventory alerts, and interactive reporting dashboards.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
