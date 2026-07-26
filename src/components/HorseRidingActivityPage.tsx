@@ -112,23 +112,70 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
 
     const details = `Horse: ${selectedHorse.name} (${selectedHorse.type}) | Route: ${selectedRoute.name}`;
 
-    const result = createBooking({
-      customerName, customerEmail, customerPhone,
-      activityId: 'act-horse-riding',
-      activityName: 'Royal Horse Riding',
-      date: bookingDate,
-      timeSlot: selectedSlot,
-      ticketType: 'standard',
-      details,
-      quantity: adultCount + childCount,
-      totalAmount: bookingTotal,
-      paymentMethod
-    });
+    const finalizeBooking = () => {
+      const result = createBooking({
+        customerName, customerEmail, customerPhone,
+        activityId: 'act-horse-riding',
+        activityName: 'Royal Horse Riding',
+        date: bookingDate,
+        timeSlot: selectedSlot,
+        ticketType: 'standard',
+        details,
+        quantity: adultCount + childCount,
+        totalAmount: bookingTotal,
+        paymentMethod
+      });
+  
+      if (typeof result === 'string') {
+        setErrorMessage(result);
+      } else {
+        setSuccessBooking(result);
+      }
+    };
 
-    if (typeof result === 'string') {
-      setErrorMessage(result);
-    } else {
-      setSuccessBooking(result);
+    if (paymentMethod !== 'upi' && paymentMethod !== 'card' && paymentMethod !== 'net_banking') {
+      finalizeBooking();
+      return;
+    }
+
+    try {
+      fetch('/api/razorpay/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: bookingTotal, currency: 'USD' })
+      }).then(res => res.json()).then(order => {
+        const options = {
+          key: 'rzp_test_TI7eXiGfnUXpao',
+          amount: order.amount,
+          currency: order.currency,
+          name: 'Deuce Adventure Park',
+          description: 'Horse Riding Booking',
+          order_id: order.id,
+          handler: async function (response: any) {
+            const verifyResponse = await fetch('/api/razorpay/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(response)
+            });
+            if (verifyResponse.ok) finalizeBooking();
+            else setErrorMessage('Payment verification failed');
+          },
+          prefill: { name: customerName, email: customerEmail, contact: customerPhone },
+          theme: { color: '#14F1D9' },
+          config: {
+            display: {
+              blocks: { upi: { name: 'Pay via UPI QR', instruments: [{ method: 'upi' }] } },
+              sequence: ['block.upi'],
+              preferences: { show_default_blocks: true }
+            }
+          }
+        };
+        const rzp1 = new (window as any).Razorpay(options);
+        rzp1.on('payment.failed', (resp: any) => setErrorMessage(resp.error.description));
+        rzp1.open();
+      });
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Payment initialization failed');
     }
   };
 
@@ -439,7 +486,7 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
         >
           <motion.div 
             initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="glass-panel border border-[#14F1D9]/30 rounded-2xl shadow-[0_0_30px_rgba(20,241,217,0.15)] max-w-sm w-full p-6 relative overflow-hidden"
+            className={`glass-panel border border-[#14F1D9]/30 rounded-2xl shadow-[0_0_30px_rgba(20,241,217,0.15)] w-full p-6 relative overflow-hidden ${successBooking ? 'max-w-lg' : 'max-w-sm'}`}
           >
             <div className="absolute top-0 right-0 w-48 h-48 bg-[#14F1D9]/10 rounded-full blur-[60px] pointer-events-none"></div>
 
@@ -454,32 +501,59 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
             </div>
 
             {successBooking ? (
-                <div className="text-center py-2 relative z-10">
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.5 }} className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${successBooking.booking.paymentStatus === 'pending' ? 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]' : 'bg-gradient-to-br from-[#14F1D9] to-[#00B4FF] shadow-[0_0_20px_rgba(20,241,217,0.4)]'}`}>
-                    {successBooking.booking.paymentStatus === 'pending' ? <AlertTriangle className="h-8 w-8 text-[#0B1120]" /> : <Check className="h-8 w-8 text-[#0B1120]" />}
-                  </motion.div>
-                  <h4 className="font-black text-xl text-white mb-1 tracking-tight">
-                    {successBooking.booking.paymentStatus === 'pending' ? 'Payment Pending' : 'Confirmed!'}
+              <div className="text-center py-2 relative z-10" id="printable-ticket">
+                <style>{`
+                  @media print {
+                    body * { visibility: hidden; }
+                    #printable-ticket, #printable-ticket * { visibility: visible; }
+                    #printable-ticket { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; color: black !important; }
+                    #printable-ticket .bg-\\[\\#050816\\] { background-color: white !important; color: black !important; border: 1px solid #ccc !important; }
+                    #printable-ticket span, #printable-ticket p, #printable-ticket h4 { color: black !important; }
+                    .no-print { display: none !important; }
+                  }
+                `}</style>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-black text-2xl text-white tracking-tight text-left">
+                    {successBooking.booking.paymentStatus === 'pending' ? 'Payment Pending' : 'Booking Confirmed!'}
                   </h4>
-                  <p className="text-xs text-[#9CA3AF] mb-5 font-medium leading-relaxed">
-                    {successBooking.booking.paymentStatus === 'pending' ? 'Your booking has been reserved successfully. Please arrive at least 30 minutes before your activity and complete your payment at the ticket counter. Your reservation will remain valid until the scheduled reporting time.' : 'Your trail pass is ready.'}
-                  </p>
-                  
-                  <div className="p-4 bg-[#050816] rounded-xl border border-white/10 text-[10px] text-white text-left space-y-3 font-mono mb-6 shadow-inner">
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.5 }} className={`w-12 h-12 rounded-full flex items-center justify-center ${successBooking.booking.paymentStatus === 'pending' ? 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]' : 'bg-gradient-to-br from-[#14F1D9] to-[#00B4FF] shadow-[0_0_20px_rgba(20,241,217,0.4)]'}`}>
+                    {successBooking.booking.paymentStatus === 'pending' ? <AlertTriangle className="h-6 w-6 text-[#0B1120]" /> : <Check className="h-6 w-6 text-[#0B1120]" />}
+                  </motion.div>
+                </div>
+                
+                <p className="text-sm text-[#9CA3AF] mb-6 font-medium leading-relaxed text-left border-b border-white/10 pb-4">
+                  {successBooking.booking.paymentStatus === 'pending' ? 'Your booking has been reserved successfully. Please arrive at least 30 minutes before your activity and complete your payment at the ticket counter. Your reservation will remain valid until the scheduled reporting time.' : 'Your trail pass is ready. Please present the QR code below at the entry gates.'}
+                </p>
+                
+                <div className="flex flex-col md:flex-row gap-6 mb-6">
+                  <div className="flex-1 p-5 bg-[#050816] rounded-xl border border-white/10 text-xs text-white text-left space-y-3 font-mono shadow-inner">
                     <div className="flex justify-between items-center border-b border-white/5 pb-2"><span className="text-[#9CA3AF] font-bold">Ticket ID</span> <span className="font-black text-[#14F1D9]">TKT-{successBooking.booking.id}</span></div>
-                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Companion</span> <span className="font-bold text-right">{selectedHorse.name}</span></div>
-                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Route</span> <span className="font-bold truncate max-w-[120px] text-right">{selectedRoute.name}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Activity</span> <span className="font-bold">Royal Trails</span></div>
+                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Trail</span> <span className="font-bold truncate max-w-[120px] text-right">{selectedRoute.name}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Riders</span> <span className="font-bold">{adultCount + childCount}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Session</span> <span className="font-bold">{bookingDate} @ {selectedSlot}</span></div>
                     {successBooking.booking.paymentStatus === 'pending' && (
                       <div className="flex justify-between items-center border-t border-white/5 pt-2"><span className="text-[#9CA3AF] font-bold">Amount Due</span> <span className="font-black text-amber-400">${bookingTotal.toFixed(2)} (Cash)</span></div>
                     )}
                   </div>
+                  <div className="w-full md:w-32 flex flex-col justify-center items-center p-4 bg-white rounded-xl shadow-lg border-2 border-dashed border-gray-300">
+                    <svg className="w-full h-auto text-black" viewBox="0 0 100 100">
+                       <path d="M5 5h30v30H5V5zm5 5v20h20V10H10zm55-5h30v30H65V5zm5 5v20h20V10H70zM5 65h30v30H5V65zm5 5v20h20V70H10z" fill="currentColor"/>
+                       <path d="M45 10h10v10H45V10zm20 45h10v10H65V55zm15 15h15v15H80V70zm-15 15h10v10H65V85zm-20-20h10v10H45V65zm20-20h10v10H65V45zm-10 10h10v10H55V55z" fill="currentColor"/>
+                    </svg>
+                    <span className="text-black font-bold text-[8px] font-mono mt-2 tracking-widest text-center">SCAN AT GATE</span>
+                  </div>
+                </div>
 
-                  <button onClick={() => { setIsPaymentOpen(false); onSuccessClose?.(); }} className="w-full py-3 rounded-lg bg-white/10 text-white font-black uppercase tracking-widest text-[10px] hover:bg-white/20 transition-colors cursor-pointer border border-white/10">
-                    View Ticket Pass
+                <div className="flex flex-col md:flex-row gap-3 no-print">
+                  <button onClick={() => window.print()} className="flex-1 py-3 rounded-lg bg-[#14F1D9] text-[#0B1120] font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(20,241,217,0.3)]">
+                    Print Ticket
+                  </button>
+                  <button onClick={() => { setIsPaymentOpen(false); onSuccessClose?.(); }} className="flex-1 py-3 rounded-lg bg-transparent border border-[#14F1D9]/50 text-[#14F1D9] font-black uppercase tracking-widest text-xs hover:bg-[#14F1D9]/10 transition-colors">
+                    Close & Go to Dashboard
                   </button>
                 </div>
+              </div>
             ) : (
               <form onSubmit={handleBookingSubmit} className="space-y-4 relative z-10">
                 {errorMessage && (
@@ -512,8 +586,8 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
                   <span className="text-2xl font-black font-mono text-[#14F1D9] tracking-tighter">${bookingTotal.toFixed(2)}</span>
                 </div>
 
-                <button type="submit" className="w-full py-4 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-[0_0_20px_rgba(20,241,217,0.3)] mt-4">
-                  Pay Now
+                <button type="submit" className="w-full py-4 rounded-xl bg-gradient-to-r from-[#FFB703] to-[#F59E0B] text-[#0B1120] font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-[0_0_20px_rgba(255,183,3,0.3)] mt-4">
+                  {(paymentMethod === 'upi' || paymentMethod === 'card' || paymentMethod === 'net_banking') ? 'Pay with Razorpay' : 'Confirm Booking'}
                 </button>
               </form>
             )}

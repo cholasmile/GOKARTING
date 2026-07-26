@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAppContext } from '../context/AppContext';
 import { Activity, MenuItem, Booking, FoodOrder } from '../types';
@@ -28,6 +28,7 @@ export const CustomerDashboard: React.FC = () => {
 
   // Navigation Subtabs
   const [activeSubTab, setActiveSubTab] = useState<string>('act-go-karting');
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // -----------------------------------------------------------------
   // 1. ACTIVITY BOOKING FLOW STATES
@@ -153,14 +154,74 @@ export const CustomerDashboard: React.FC = () => {
   };
 
   // Handle food checkout submission
-  const executeFoodCheckout = (e: React.FormEvent) => {
+  const executeFoodCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (paymentMethod !== 'upi' && paymentMethod !== 'card' && paymentMethod !== 'net_banking') {
+      try {
+        const order = submitFoodOrder('John Watson', 'watson@baker.street', paymentMethod);
+        setFoodSuccessOrder(order);
+        setIsFoodCheckoutOpen(false);
+      } catch (err: any) {
+        alert(err.message || 'Payment processing failed');
+      }
+      return;
+    }
+
     try {
-      const order = submitFoodOrder('John Watson', 'watson@baker.street', paymentMethod);
-      setFoodSuccessOrder(order);
-      setIsFoodCheckoutOpen(false);
+      const amount = foodCart.reduce((s, i) => s + (i.price * i.quantity), 0);
+      
+      // 1. Create order on backend
+      const orderResponse = await fetch('/api/razorpay/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, currency: 'USD' })
+      });
+      const order = await orderResponse.json();
+
+      // 2. Open Razorpay Modal
+      const options = {
+        key: 'rzp_test_TI7eXiGfnUXpao', // Using test key ID directly for frontend
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Deuce Adventure Park',
+        description: 'Food Street Order',
+        order_id: order.id,
+        handler: async function (response: any) {
+          // 3. Verify payment signature on backend
+          const verifyResponse = await fetch('/api/razorpay/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(response)
+          });
+          const verifyData = await verifyResponse.json();
+
+          if (verifyResponse.ok) {
+             const successOrder = submitFoodOrder('John Watson', 'watson@baker.street', paymentMethod);
+             setFoodSuccessOrder(successOrder);
+             setIsFoodCheckoutOpen(false);
+          } else {
+             alert('Payment verification failed: ' + verifyData.message);
+          }
+        },
+        prefill: { name: customerName, email: customerEmail, contact: customerPhone },
+        theme: { color: '#14F1D9' },
+        config: {
+          display: {
+            blocks: { upi: { name: 'Pay via UPI QR', instruments: [{ method: 'upi' }] } },
+            sequence: ['block.upi'],
+            preferences: { show_default_blocks: true }
+          }
+        }
+      };
+      
+      const rzp1 = new (window as any).Razorpay(options);
+      rzp1.on('payment.failed', function (response: any){
+         alert(response.error.description);
+      });
+      rzp1.open();
+
     } catch (err: any) {
-      alert(err.message || 'Payment processing failed');
+      alert(err.message || 'Payment initialization failed');
     }
   };
 
@@ -242,7 +303,12 @@ export const CustomerDashboard: React.FC = () => {
                 initial={{ opacity: 0, y: 50, rotateX: 10 }}
                 animate={{ opacity: 1, y: 0, rotateX: 0 }}
                 transition={{ duration: 0.6, delay: index * 0.15, ease: "easeOut" }}
-                onClick={() => setActiveSubTab(item.id)}
+                onClick={() => {
+                  setActiveSubTab(item.id);
+                  setTimeout(() => {
+                    contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 100);
+                }}
                 className={`group relative h-[220px] rounded-3xl overflow-hidden cursor-pointer bg-[#0B1120]/80 backdrop-blur-xl border-2 transition-all duration-500 hover:shadow-[0_0_40px_rgba(20,241,217,0.2)] ${
                   activeSubTab === item.id ? 'border-[#14F1D9] scale-[1.02]' : 'border-white/10 hover:border-white/30'
                 }`}
@@ -264,9 +330,6 @@ export const CustomerDashboard: React.FC = () => {
 
                 {/* Content */}
                 <div className="absolute inset-0 z-20 flex flex-col justify-end p-6">
-                  <div className="bg-white/10 backdrop-blur-md w-12 h-12 rounded-2xl flex items-center justify-center text-2xl border border-white/20 mb-4 group-hover:scale-110 transition-transform shadow-xl">
-                    {item.icon}
-                  </div>
                   <h3 className="text-xl font-black text-white group-hover:text-[#14F1D9] transition-colors drop-shadow-md">
                     {item.name}
                   </h3>
@@ -297,6 +360,9 @@ export const CustomerDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Anchor for scrolling to selected activity */}
+      <div ref={contentRef} className="scroll-mt-24"></div>
 
       {activeSubTab === 'act-horse-riding' && <HorseRidingActivityPage onSuccessClose={() => setActiveSubTab('history')} />}
       {activeSubTab === 'act-air-gun' && <ShootingActivityPage onSuccessClose={() => setActiveSubTab('history')} />}
@@ -735,7 +801,8 @@ export const CustomerDashboard: React.FC = () => {
                 id="btn-submit-food-payment"
                 className="w-full py-4 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-[0_0_20px_rgba(20,241,217,0.3)] mt-4 flex items-center justify-center gap-2"
               >
-                <ShieldCheck className="h-4 w-4 text-[#0B1120]" /> Dispatch Kitchen Order
+                <ShieldCheck className="h-4 w-4 text-[#0B1120]" /> 
+                {(paymentMethod === 'upi' || paymentMethod === 'card' || paymentMethod === 'net_banking') ? 'Pay with Razorpay' : 'Dispatch Kitchen Order'}
               </button>
             </form>
           </motion.div>
