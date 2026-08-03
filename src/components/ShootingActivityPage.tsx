@@ -5,6 +5,7 @@ import {
   Calendar as CalendarIcon, Clock, Target, Shield, Crosshair,
   ArrowRight, Check, X, CreditCard, AlertTriangle, RotateCcw, Minus, Plus, Zap
 } from 'lucide-react';
+import { PrintReceipt } from './PrintReceipt';
 
 interface BulletHole {
   x: number;
@@ -151,6 +152,10 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
     }
 
     try {
+      if (!navigator.onLine) {
+        throw new Error('Online payments are not available offline. Please use Cash or another offline payment method.');
+      }
+
       fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -192,7 +197,20 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
   };
 
   return (
-    <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full">
+    <>
+      {successBooking && (
+        <PrintReceipt
+          receiptId={`TKT-${successBooking.booking.id}`}
+          type="booking"
+          date={successBooking.booking.date}
+          customerName={successBooking.booking.customerName}
+          totalAmount={successBooking.booking.totalAmount}
+          items={[
+            { name: "Pro Shooting Setup", qty: bookingQuantity, price: selectedPackage.price }
+          ]}
+        />
+      )}
+      <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full print:hidden">
       
       {/* 1. FULL WIDTH HERO EXPERIENCE SECTION */}
       <div className="relative rounded-2xl overflow-hidden group shadow-[0_0_30px_rgba(20,241,217,0.05)] border border-white/5 flex-shrink-0">
@@ -575,6 +593,7 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
         </motion.div>
       )}
       </AnimatePresence>
-    </div>
+      </div>
+    </>
   );
 };

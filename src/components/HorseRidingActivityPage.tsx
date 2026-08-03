@@ -5,6 +5,7 @@ import {
   Calendar as CalendarIcon, Clock, Heart, Shield, Compass, Map,
   ChevronRight, ArrowRight, Check, X, CreditCard, AlertTriangle, Play, Minus, Plus, MapPin, Star
 } from 'lucide-react';
+import { PrintReceipt } from './PrintReceipt';
 
 interface HorseBreed {
   id: string;
@@ -139,6 +140,10 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
     }
 
     try {
+      if (!navigator.onLine) {
+        throw new Error('Online payments are not available offline. Please use Cash or another offline payment method.');
+      }
+
       fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -180,7 +185,20 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
   };
 
   return (
-    <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full">
+    <>
+      {successBooking && (
+        <PrintReceipt
+          receiptId={`TKT-${successBooking.booking.id}`}
+          type="booking"
+          date={successBooking.booking.date}
+          customerName={successBooking.booking.customerName}
+          totalAmount={successBooking.booking.totalAmount}
+          items={[
+            { name: "Horse Riding Excursion", qty: bookingQuantity, price: (selectedRoute?.price || 0) }
+          ]}
+        />
+      )}
+      <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full print:hidden">
       
       {/* 1. FULL WIDTH HERO EXPERIENCE SECTION */}
       <div className="relative rounded-2xl overflow-hidden group shadow-[0_0_30px_rgba(20,241,217,0.05)] border border-white/5 flex-shrink-0">
@@ -595,6 +613,7 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
         </motion.div>
       )}
       </AnimatePresence>
-    </div>
+      </div>
+    </>
   );
 };

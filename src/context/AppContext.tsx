@@ -17,6 +17,9 @@ import {
 } from '../data/initialData';
 import { mockKarts, mockSessions, mockLapRecords } from '../data/kartingMockData';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { db } from '../db/db';
+import { syncEngine, SyncStatus } from '../lib/syncEngine';
+import { generateOfflineId } from '../lib/deviceSetup';
 
 interface AppContextProps {
   // Authentication & Role
@@ -43,6 +46,11 @@ interface AppContextProps {
   sessions: GoKartingSession[];
   lapRecords: LapRecord[];
   waivers: GoKartingWaiver[];
+
+  // Sync State
+  isOnline: boolean;
+  syncStatus: SyncStatus;
+  pendingSyncCount: number;
 
   // Mutators - Activities
   addActivity: (activity: Omit<Activity, 'id'>) => void;
@@ -152,6 +160,29 @@ const writeToSupabase = (promise: Promise<any>, description: string) => {
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
+  // Sync Status
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    const unsubscribe = syncEngine.subscribe((status, count) => {
+      setSyncStatus(status);
+      setPendingSyncCount(count);
+    });
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      unsubscribe();
+    };
+  }, []);
+
   const [selectedVendorId, setSelectedVendorId] = useState<string>(() => {
     const saved = localStorage.getItem('ap_selected_vendor_id');
     return saved || 'vendor-forest-cafe';
@@ -210,16 +241,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           supabase!.from('users').select('*')
         ]);
 
-        if (dbActivities && dbActivities.length > 0) setActivities(dbActivities);
-        if (dbVendors && dbVendors.length > 0) setVendors(dbVendors);
-        if (dbMenuItems && dbMenuItems.length > 0) setMenuItems(dbMenuItems);
-        if (dbInventory && dbInventory.length > 0) setInventory(dbInventory);
-        if (dbBookings && dbBookings.length > 0) setBookings(dbBookings);
-        if (dbTickets && dbTickets.length > 0) setTickets(dbTickets);
-        if (dbOrders && dbOrders.length > 0) setOrders(dbOrders);
-        if (dbNotifications && dbNotifications.length > 0) setNotifications(dbNotifications);
-        if (dbPayments && dbPayments.length > 0) setPayments(dbPayments);
-        if (dbUsers && dbUsers.length > 0) setUsers(dbUsers);
+        if (dbActivities && dbActivities.length > 0) { setActivities(dbActivities); db.activities.bulkPut(dbActivities); }
+        if (dbVendors && dbVendors.length > 0) { setVendors(dbVendors); db.vendors.bulkPut(dbVendors); }
+        if (dbMenuItems && dbMenuItems.length > 0) { setMenuItems(dbMenuItems); db.menuItems.bulkPut(dbMenuItems); }
+        if (dbInventory && dbInventory.length > 0) { setInventory(dbInventory); db.inventory.bulkPut(dbInventory); }
+        if (dbBookings && dbBookings.length > 0) { setBookings(dbBookings); db.bookings.bulkPut(dbBookings); }
+        if (dbTickets && dbTickets.length > 0) { setTickets(dbTickets); db.tickets.bulkPut(dbTickets); }
+        if (dbOrders && dbOrders.length > 0) { setOrders(dbOrders); db.orders.bulkPut(dbOrders); }
+        if (dbNotifications && dbNotifications.length > 0) { setNotifications(dbNotifications); db.notifications.bulkPut(dbNotifications); }
+        if (dbPayments && dbPayments.length > 0) { setPayments(dbPayments); db.payments.bulkPut(dbPayments); }
+        if (dbUsers && dbUsers.length > 0) { setUsers(dbUsers); db.users.bulkPut(dbUsers); }
       } catch (err) {
         console.error('Failed to load initial data from Supabase, using localStorage:', err);
       }
@@ -302,10 +333,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setNotifications(prev => [newLog, ...prev]);
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('notifications').insert([newLog]),
-        'sendMockNotification'
-      );
+      writeToLocalAndSync('notifications', 'insert', newLog);
     }
   };
 
@@ -318,10 +346,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActivities(prev => [...prev, newAct]);
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('activities').insert([newAct]),
-        'addActivity'
-      );
+      writeToLocalAndSync('activities', 'insert', newAct);
     }
 
     sendMockNotification(
@@ -336,10 +361,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActivities(prev => prev.map(item => item.id === act.id ? act : item));
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('activities').update(act).eq('id', act.id),
-        'updateActivity'
-      );
+      writeToLocalAndSync('activities', 'update', act);
     }
   };
 
@@ -347,10 +369,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActivities(prev => prev.filter(item => item.id !== id));
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('activities').delete().eq('id', id),
-        'deleteActivity'
-      );
+      writeToLocalAndSync('activities', 'delete', { id });
     }
   };
 
@@ -358,10 +377,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateUserRole = (userId: string, role: UserRole) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('users').update({ role }).eq('id', userId),
-        'updateUserRole'
-      );
+      writeToLocalAndSync('users', 'update', { id: userId, role });
     }
   };
 
@@ -373,10 +389,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setUsers(prev => [...prev, newUser]);
     
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('users').insert([newUser]),
-        'addUser'
-      );
+      writeToLocalAndSync('users', 'insert', newUser);
     }
   };
 
@@ -408,8 +421,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return `Booking limit exceeded for this slot. Only ${perSlotCapacity - existingBookedCount} spots remaining.`;
     }
 
-    const bookingId = `bk-${Math.floor(1000 + Math.random() * 9000)}`;
-    const txId = `tx-${Math.floor(10000000 + Math.random() * 90000000)}`;
+    const bookingId = generateOfflineId('bk');
+    const txId = generateOfflineId('tx');
     const timestamp = new Date().toISOString();
 
     const isCash = data.paymentMethod === 'cash';
@@ -466,14 +479,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPayments(prev => [newPayment, ...prev]);
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        Promise.all([
-          supabase!.from('bookings').insert([newBooking]),
-          supabase!.from('tickets').insert([newTicket]),
-          supabase!.from('payments').insert([newPayment])
-        ]),
-        'createBooking'
-      );
+      writeToLocalAndSync('bookings', 'insert', newBooking);
+    writeToLocalAndSync('tickets', 'insert', newTicket);
+    writeToLocalAndSync('payments', 'insert', newPayment);
     }
 
     // 5. Trigger Notifications on multiple channels!
@@ -548,18 +556,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setPayments(prev => prev.map(p => p.id === payment.id ? updatedPayment : p));
       
       if (isSupabaseConfigured) {
-        writeToSupabase(
-          supabase!.from('payments').update({ status: 'success', timestamp: updatedPayment.timestamp }).eq('id', payment.id),
-          'updatePaymentStatus'
-        );
+        writeToLocalAndSync('payments', 'update', updatedPayment);
       }
     }
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('bookings').update({ paymentStatus: 'paid', status: 'confirmed' }).eq('id', bookingId),
-        'updateBookingStatus'
-      );
+      writeToLocalAndSync('bookings', 'update', updatedBooking);
     }
 
     sendMockNotification(
@@ -609,14 +611,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setTickets(prev => prev.map(t => t.id === foundTicket.id ? updatedTicket : t));
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('tickets').update({
-          status: 'used',
-          scannedAt: updatedTicket.scannedAt,
-          scannedBy: staffName
-        }).eq('id', foundTicket.id),
-        'scanTicket'
-      );
+      writeToLocalAndSync('tickets', 'update', updatedTicket);
     }
     
     // Log notifications to visitors and admin
@@ -639,10 +634,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setVendors(prev => [...prev, newVendor]);
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('food_vendors').insert([newVendor]),
-        'addVendor'
-      );
+      writeToLocalAndSync('vendors', 'insert', newVendor);
     }
 
     sendMockNotification(
@@ -657,10 +649,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setVendors(prev => prev.map(item => item.id === v.id ? v : item));
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('food_vendors').update(v).eq('id', v.id),
-        'updateVendor'
-      );
+      writeToLocalAndSync('vendors', 'update', v);
     }
   };
 
@@ -668,10 +657,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setVendors(prev => prev.filter(item => item.id !== id));
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('food_vendors').delete().eq('id', id),
-        'deleteVendor'
-      );
+      writeToLocalAndSync('vendors', 'delete', { id });
     }
   };
 
@@ -684,10 +670,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setMenuItems(prev => [...prev, newItem]);
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('menu_items').insert([newItem]),
-        'addMenuItem'
-      );
+      writeToLocalAndSync('menuItems', 'insert', newItem);
     }
   };
 
@@ -695,10 +678,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setMenuItems(prev => prev.map(m => m.id === item.id ? item : m));
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('menu_items').update(item).eq('id', item.id),
-        'updateMenuItem'
-      );
+      writeToLocalAndSync('menuItems', 'update', item);
     }
   };
 
@@ -706,10 +686,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setMenuItems(prev => prev.filter(m => m.id !== id));
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('menu_items').delete().eq('id', id),
-        'deleteMenuItem'
-      );
+      writeToLocalAndSync('menuItems', 'delete', { id });
     }
   };
 
@@ -721,10 +698,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const boundedStock = Math.max(0, nextStock);
 
         if (isSupabaseConfigured) {
-          writeToSupabase(
-            supabase!.from('inventory').update({ currentStock: boundedStock }).eq('id', id),
-            'updateInventoryStock'
-          );
+          writeToLocalAndSync('inventory', 'update', { id, currentStock: boundedStock });
         }
 
         // Check if stock dips below minimum level
@@ -752,10 +726,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setInventory(prev => [...prev, newItem]);
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        supabase!.from('inventory').insert([newItem]),
-        'addInventoryItem'
-      );
+      writeToLocalAndSync('inventory', 'insert', newItem);
     }
   };
 
@@ -769,7 +740,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return prev.map(i => i.menuItemId === item.id ? { ...i, quantity: i.quantity + quantity } : i);
       } else {
         return [...prev, {
-          id: `cart-item-${Date.now()}-${Math.floor(Math.random()*100)}`,
+          id: generateOfflineId('cart-item'),
           menuItemId: item.id,
           name: item.name,
           price: item.price,
@@ -793,8 +764,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const submitFoodOrder = (customerName: string, customerEmail: string, paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash') => {
     if (foodCart.length === 0) throw new Error('Cart is empty');
 
-    const orderId = `ord-${Math.floor(5000 + Math.random() * 5000)}`;
-    const txId = `tx-${Math.floor(10000000 + Math.random() * 90000000)}`;
+    const orderId = generateOfflineId('ord');
+    const txId = generateOfflineId('tx');
     const timestamp = new Date().toISOString();
     const totalAmount = foodCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
@@ -823,13 +794,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPayments(prev => [newPayment, ...prev]);
 
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        Promise.all([
-          supabase!.from('food_orders').insert([newOrder]),
-          supabase!.from('payments').insert([newPayment])
-        ]),
-        'submitFoodOrder'
-      );
+      writeToLocalAndSync('orders', 'insert', newOrder);
+    writeToLocalAndSync('payments', 'insert', newPayment);
     }
 
     // Reduce inventory stocks for standard ordering simulation
@@ -883,10 +849,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const updated = { ...o, status };
 
         if (isSupabaseConfigured) {
-          writeToSupabase(
-            supabase!.from('food_orders').update({ status }).eq('id', orderId),
-            'updateOrderStatus'
-          );
+          writeToLocalAndSync('orders', 'update', { id: orderId, status });
         }
 
         let title = '';
@@ -974,6 +937,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   return (
     <AppContext.Provider value={{
+      isOnline,
+      syncStatus,
+      pendingSyncCount,
       currentUser,
       setCurrentUser,
       selectedVendorId,

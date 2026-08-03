@@ -168,6 +168,10 @@ export const CustomerDashboard: React.FC = () => {
     }
 
     try {
+      if (!navigator.onLine) {
+        throw new Error('Online payments are not available offline. Please use Cash or another offline payment method.');
+      }
+
       const amount = foodCart.reduce((s, i) => s + (i.price * i.quantity), 0);
       
       // 1. Create order on backend
@@ -177,6 +181,7 @@ export const CustomerDashboard: React.FC = () => {
         body: JSON.stringify({ amount, currency: 'USD' })
       });
       const order = await orderResponse.json();
+
 
       // 2. Open Razorpay Modal
       const options = {

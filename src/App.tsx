@@ -13,6 +13,7 @@ import { CustomerDashboard } from './components/CustomerDashboard';
 import { NotificationToast } from './components/NotificationToast';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ProtectedLayout } from './components/ProtectedLayout';
+import { SyncStatusIndicator } from './components/SyncStatusIndicator';
 import { Mail, Lock, KeyRound } from 'lucide-react';
 
 function LoginPage() {
@@ -251,6 +252,7 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <SyncStatusIndicator />
       </BrowserRouter>
     </AppProvider>
   );

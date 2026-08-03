@@ -6,6 +6,7 @@ import {
   ArrowRight, Check, X, CreditCard, AlertTriangle, Play, Minus, Plus,
   Info, ChevronRight, Zap, Target
 } from 'lucide-react';
+import { PrintReceipt } from './PrintReceipt';
 
 interface KartType {
   id: string;
@@ -156,6 +157,10 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
     }
 
     try {
+      if (!navigator.onLine) {
+        throw new Error('Online payments are not available offline. Please use Cash or another offline payment method.');
+      }
+
       // 1. Create order on backend
       const orderResponse = await fetch('/api/razorpay/create-order', {
         method: 'POST',
@@ -209,7 +214,20 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
 
 
   return (
-    <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full">
+    <>
+      {successBooking && (
+        <PrintReceipt
+          receiptId={`TKT-${successBooking.booking.id}`}
+          type="booking"
+          date={successBooking.booking.date}
+          customerName={successBooking.booking.customerName}
+          totalAmount={successBooking.booking.totalAmount}
+          items={[
+            { name: "Pro Go-Karting", qty: bookingQuantity, price: selectedPackage.price }
+          ]}
+        />
+      )}
+      <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full print:hidden">
       
       {/* 1. FULL WIDTH HERO EXPERIENCE SECTION */}
       <div className="relative rounded-2xl overflow-hidden group shadow-[0_0_30px_rgba(20,241,217,0.05)] border border-white/5 flex-shrink-0">
@@ -705,6 +723,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
         </motion.div>
       )}
       </AnimatePresence>
-    </div>
+      </div>
+    </>
   );
 };
