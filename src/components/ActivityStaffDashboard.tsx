@@ -8,6 +8,7 @@ import { useAppContext } from '../context/AppContext';
 import { Scan, ClipboardList, CheckCircle2, AlertTriangle, Search, Activity as ActivityIcon } from 'lucide-react';
 
 import GoKartingOpsDashboard from './karting/GoKartingOpsDashboard';
+import StaffScanner from './StaffScanner';
 
 export const ActivityStaffDashboard: React.FC = () => {
   const { tickets, bookings, scanTicket, markBookingAsPaid, activities, timeSlots } = useAppContext();
@@ -200,81 +201,9 @@ export const ActivityStaffDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* QR Manual Scanner Console */}
-              <div className="p-5 bg-[#0A0A0A] border border-[#00ABAB]/30 text-teal-950 rounded-2xl  space-y-4 relative overflow-hidden">
-                <div className="absolute right-0 top-0 w-24 h-24 bg-teal-100/40 rounded-full -mr-6 -mt-6 pointer-events-none" />
-                
-                <div>
-                  <h3 className="font-bold text-sm flex items-center gap-1.5 font-sans text-teal-950">
-                    <Scan className="h-4.5 w-4.5 text-teal-700" /> QR Barcode Simulator
-                  </h3>
-                  <p className="text-[11px] text-[#40E0D0]/80">Type or paste QR code strings from visitor passes to check in</p>
-                </div>
-
-                <form onSubmit={handleManualScan} className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="block text-[10px] text-[#40E0D0] uppercase font-bold font-mono">Enter Code String</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        id="input-qr-simulator"
-                        value={qrInput}
-                        onChange={e => setQrInput(e.target.value)}
-                        placeholder="e.g. adventure-park-ticket-bk-1009"
-                        className="flex-1 glass-panel border border-teal-300 px-3 py-2 rounded-lg text-xs font-mono text-[#FFFFFF] focus:outline-none focus:border-[#3E8EDE] focus:ring-1 focus:ring-[#7DF9FF]"
-                      />
-                      <button
-                        type="submit"
-                        id="btn-scan-qr"
-                        className="bg-[#007B8B] hover:bg-[#0D5C56] font-bold text-[#0B0F14] px-3 py-1.5 rounded-lg text-xs flex items-center justify-center transition-colors cursor-pointer"
-                      >
-                        Scan
-                      </button>
-                    </div>
-                  </div>
-                </form>
-
-                {/* Scanning feedback alert panel */}
-                {scanResult && (
-                  <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${
-                    scanResult.success 
-                      ? 'glass-panel border-teal-300 text-[#40E0D0]' 
-                      : 'bg-red-50 border-red-200 text-red-800'
-                  }`}>
-                    <div className="flex items-center gap-1.5 font-bold">
-                      {scanResult.success ? (
-                        <CheckCircle2 className="h-4.5 w-4.5 text-[#3E8EDE] flex-shrink-0" />
-                      ) : (
-                        <AlertTriangle className="h-4.5 w-4.5 text-red-600 flex-shrink-0" />
-                      )}
-                      <span className="text-[#FFFFFF] font-extrabold">{scanResult.success ? 'Access Approved' : 'Access Denied'}</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed opacity-90">{scanResult.message}</p>
-                    {scanResult.customerName && (
-                      <div className="border-t border-[#00ABAB]/30 pt-1.5 text-[10px] font-mono opacity-80">
-                        <div>Visitor: <strong className="text-[#40E0D0]">{scanResult.customerName}</strong> {scanResult.customerPhone && <span className="ml-1 text-[#3E8EDE]">({scanResult.customerPhone})</span>}</div>
-                        <div>Item: {scanResult.activityName}</div>
-                        <div>Detail: {scanResult.details}</div>
-                      </div>
-                    )}
-                    {scanResult.isPendingPayment && scanResult.bookingId && (
-                      <div className="pt-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (scanResult.bookingId) {
-                              markBookingAsPaid(scanResult.bookingId, 'Activity Ranger Smith');
-                              setScanResult(null);
-                            }
-                          }}
-                          className="w-full bg-amber-500 hover:bg-amber-600 text-amber-950 font-bold py-1.5 rounded text-xs transition-colors cursor-pointer"
-                        >
-                          Mark as Paid & Check In
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+              {/* QR Scanner Console */}
+              <div className="p-5 bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-2xl relative overflow-hidden">
+                <StaffScanner />
               </div>
             </div>
 

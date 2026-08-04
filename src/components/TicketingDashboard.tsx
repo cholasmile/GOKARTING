@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import { Ticket, Users, CreditCard, CheckCircle, Smartphone } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Activity } from '../types';
-import { GoKartingActivityPage } from './GoKartingActivityPage';
-import { ShootingActivityPage } from './ShootingActivityPage';
-import { HorseRidingActivityPage } from './HorseRidingActivityPage';
+import { UnifiedTicketingFlow } from './UnifiedTicketingFlow';
 
 const TicketingDashboard: React.FC = () => {
   const { activities, currentUser } = useAppContext();
@@ -23,10 +21,7 @@ const TicketingDashboard: React.FC = () => {
           </button>
         </div>
         <div className="overflow-y-auto h-[calc(100vh-80px)]">
-          {selectedActivity.id === 'act-go-karting' && <GoKartingActivityPage />}
-          {selectedActivity.id === 'act-shooting' && <ShootingActivityPage />}
-          {selectedActivity.id === 'act-horse-riding' && <HorseRidingActivityPage />}
-          {/* For dynamic activities, we would add a generic POS screen here */}
+          <UnifiedTicketingFlow activity={selectedActivity} onCancel={() => setSelectedActivity(null)} />
         </div>
       </div>
     );

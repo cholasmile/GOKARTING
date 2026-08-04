@@ -157,6 +157,12 @@ const writeToSupabase = (promise: Promise<any>, description: string) => {
   });
 };
 
+const writeToLocalAndSync = (table: string, action: 'insert' | 'update' | 'delete', payload: any) => {
+  syncEngine.queueOperation(table, action, payload).catch(err => {
+    console.error('Failed to queue operation for sync:', err);
+  });
+};
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 

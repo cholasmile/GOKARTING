@@ -49,6 +49,7 @@ app.post('/api/razorpay/verify', async (req, res) => {
     if (razorpay_signature === expectedSign) {
       return res.status(200).json({ message: "Payment verified successfully" });
     } else {
+      // Webhook simulation endpoint - handles backend payment confirmation
       if (process.env.RAZORPAY_KEY_SECRET === 'your_secret' || process.env.RAZORPAY_KEY_SECRET === '***********************') {
          console.warn("Skipping strict verification due to missing/masked secret.");
          return res.status(200).json({ message: "Payment verified successfully (mock)" });
@@ -58,6 +59,45 @@ app.post('/api/razorpay/verify', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal Server Error!" });
+  }
+});
+
+// Mock endpoint to simulate webhook processing
+app.post('/api/razorpay/webhook', async (req, res) => {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    const body = req.body;
+    
+    console.log("Received webhook event:", body.event);
+    
+    // In a real app, verify signature here and then update Supabase DB
+    // Since this is a demo without a real Supabase admin client in the backend,
+    // we'll just acknowledge the webhook.
+    
+    res.status(200).json({ status: "ok" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Webhook Error" });
+  }
+});
+
+// Mock notification endpoints for Email/WhatsApp/SMS
+app.post('/api/notifications/send', async (req, res) => {
+  try {
+    const { to, type, ticketId, details } = req.body;
+    
+    // Simulate network delay
+    await new Promise(r => setTimeout(r, 800));
+    
+    console.log(`[NOTIFICATION] Sent ${type} to ${to} for ticket ${ticketId}`);
+    
+    res.status(200).json({ 
+      success: true, 
+      message: `${type} notification sent successfully to ${to}` 
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to send notification" });
   }
 });
 

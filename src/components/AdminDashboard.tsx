@@ -19,7 +19,7 @@ import {
 export const AdminDashboard: React.FC = () => {
   const { 
     users, updateUserRole,
-    activities, vendors, bookings, orders, payments,
+    activities, vendors, bookings, orders, payments, tickets,
     addActivity, updateActivity, deleteActivity,
     addVendor, updateVendor, deleteVendor, addUser
   } = useAppContext();
@@ -832,6 +832,49 @@ export const AdminDashboard: React.FC = () => {
                       <td className="p-3 text-right font-mono font-bold text-[#FFFFFF]">${o.totalAmount.toFixed(2)}</td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Gate Scan Logs */}
+          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden ">
+            <div className="p-4 border-b border-[#00ABAB]/30 flex justify-between items-center bg-[#0A0A0A]/50">
+              <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Gate Scan Activity</h4>
+              <span className="text-[10px] font-mono font-bold text-[#9CA3AF] uppercase">Live Scanner Stream</span>
+            </div>
+            <div className="overflow-x-auto max-h-[300px]">
+              <table className="w-full text-left text-xs text-[#FFFFFF]">
+                <thead className="sticky top-0 bg-[#0A0A0A] shadow-md z-10">
+                  <tr className="bg-[#0A0A0A]/90 border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold">
+                    <th className="p-3">Ticket ID</th>
+                    <th className="p-3">Customer</th>
+                    <th className="p-3">Gate Staff</th>
+                    <th className="p-3 text-right">Scanned Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-teal-100">
+                  {tickets.filter(t => t.status === 'used' && t.usedAt).map(t => (
+                    <tr key={`scan-${t.id}`} className="hover:bg-[#0A0A0A]/40 transition-colors">
+                      <td className="p-3 font-mono font-bold text-[#FFFFFF]">{t.id}</td>
+                      <td className="p-3">
+                        <div className="font-bold text-[#FFFFFF]">{t.customerName}</div>
+                      </td>
+                      <td className="p-3">
+                        <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-[#134E4A] text-[#40E0D0] border border-[#00ABAB]/30">
+                          {t.usedByStaffName || 'Unknown Staff'}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right font-mono text-[#9CA3AF]">
+                        {new Date(t.usedAt!).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                  {tickets.filter(t => t.status === 'used' && t.usedAt).length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="p-6 text-center text-[#9CA3AF] text-xs font-mono">No tickets scanned at gates yet.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
