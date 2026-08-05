@@ -6,7 +6,7 @@ import {
   ArrowRight, Check, X, CreditCard, AlertTriangle, Play, Minus, Plus,
   Info, ChevronRight, Zap, Target
 } from 'lucide-react';
-import { PrintReceipt } from './PrintReceipt';
+import { printTicket } from '../lib/printTicket';
 
 interface KartType {
   id: string;
@@ -215,18 +215,6 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
 
   return (
     <>
-      {successBooking && (
-        <PrintReceipt
-          receiptId={`TKT-${successBooking.booking.id}`}
-          type="booking"
-          date={successBooking.booking.date}
-          customerName={successBooking.booking.customerName}
-          totalAmount={successBooking.booking.totalAmount}
-          items={[
-            { name: "Pro Go-Karting", qty: bookingQuantity, price: selectedPackage.price }
-          ]}
-        />
-      )}
       <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full print:hidden">
       
       {/* 1. FULL WIDTH HERO EXPERIENCE SECTION */}
@@ -627,16 +615,6 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
 
             {successBooking ? (
               <div className="text-center py-2 relative z-10" id="printable-ticket">
-                <style>{`
-                  @media print {
-                    body * { visibility: hidden; }
-                    #printable-ticket, #printable-ticket * { visibility: visible; }
-                    #printable-ticket { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; color: black !important; }
-                    #printable-ticket .bg-\\[\\#050816\\] { background-color: white !important; color: black !important; border: 1px solid #ccc !important; }
-                    #printable-ticket span, #printable-ticket p, #printable-ticket h4 { color: black !important; }
-                    .no-print { display: none !important; }
-                  }
-                `}</style>
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-black text-2xl text-white tracking-tight text-left">
                     {successBooking.booking.paymentStatus === 'pending' ? 'Payment Pending' : 'Booking Confirmed!'}
@@ -671,8 +649,18 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                   </div>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-3 no-print">
-                  <button onClick={() => window.print()} className="flex-1 py-3 rounded-lg bg-[#14F1D9] text-[#0B1120] font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(20,241,217,0.3)]">
+                <div className="flex flex-col md:flex-row gap-3">
+                  <button onClick={() => printTicket({
+                    receiptId: `TKT-${successBooking.booking.id}`,
+                    activityName: 'Pro Go-Karting',
+                    customerName: successBooking.booking.customerName,
+                    date: successBooking.booking.date,
+                    slot: selectedSlot,
+                    items: [{ label: `Chassis: ${selectedKart.name}`, value: selectedPackage.name }],
+                    totalAmount: successBooking.booking.totalAmount,
+                    paymentStatus: successBooking.booking.paymentStatus === 'pending' ? 'pending' : 'paid',
+                    quantity: bookingQuantity,
+                  })} className="flex-1 py-3 rounded-lg bg-[#14F1D9] text-[#0B1120] font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(20,241,217,0.3)]">
                     Print Ticket
                   </button>
                   <button onClick={() => { setIsPaymentOpen(false); onSuccessClose?.(); }} className="flex-1 py-3 rounded-lg bg-transparent border border-[#14F1D9]/50 text-[#14F1D9] font-black uppercase tracking-widest text-xs hover:bg-[#14F1D9]/10 transition-colors">

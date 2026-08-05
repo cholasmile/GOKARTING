@@ -6,7 +6,7 @@ import { QrCode, CreditCard, CheckCircle, User, Loader2, Calendar } from 'lucide
 import TicketPass from './TicketPass';
 
 interface Props {
-  activity: Activity;
+  activities: Activity[];
   onCancel: () => void;
 }
 
@@ -21,7 +21,7 @@ const TIME_SLOTS = [
   '05:00 PM - 06:00 PM'
 ];
 
-export const UnifiedTicketingFlow: React.FC<Props> = ({ activity, onCancel }) => {
+export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) => {
   const { createBooking } = useAppContext();
   
   const [step, setStep] = useState(1);
@@ -39,8 +39,13 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activity, onCancel }) =>
   const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(null);
   const [confirmedTicket, setConfirmedTicket] = useState<Ticket | null>(null);
 
-  const totalAmount = (adultCount * (activity.adultPrice || 0)) + (childCount * (activity.childPrice || 0));
+  const totalAdultPrice = activities.reduce((sum, act) => sum + (act.adultPrice || 0), 0);
+  const totalChildPrice = activities.reduce((sum, act) => sum + (act.childPrice || 0), 0);
+  const totalAmount = (adultCount * totalAdultPrice) + (childCount * totalChildPrice);
   const totalQuantity = adultCount + childCount;
+  
+  const combinedActivityIds = activities.map(a => a.id).join(',');
+  const combinedActivityNames = activities.map(a => a.name).join(' + ');
 
   const handlePayment = async () => {
     if (!guestName || !guestEmail) return alert("Please fill in required guest details");
@@ -65,7 +70,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activity, onCancel }) =>
         amount: orderData.amount,
         currency: orderData.currency,
         name: 'Adventure Park',
-        description: `Booking for ${activity.name}`,
+        description: `Booking for ${combinedActivityNames}`,
         order_id: orderData.id,
         handler: async (response: any) => {
           // 3. Verify Payment with webhook
@@ -85,8 +90,8 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activity, onCancel }) =>
               customerName: guestName,
               customerEmail: guestEmail,
               customerPhone: guestPhone,
-              activityId: activity.id,
-              activityName: activity.name,
+              activityId: combinedActivityIds,
+              activityName: combinedActivityNames,
               date: date,
               timeSlot: timeSlot,
               ticketType: 'standard',
@@ -175,7 +180,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activity, onCancel }) =>
               <div className="space-y-6">
                 <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] hover:border-[#00ABAB]/50 transition-colors">
                   <div className="flex justify-between items-center mb-2">
-                    <span>Adult (₹{activity.adultPrice})</span>
+                    <span>Adult (₹{totalAdultPrice})</span>
                     <div className="flex items-center gap-4">
                       <button onClick={() => setAdultCount(Math.max(1, adultCount - 1))} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors">-</button>
                       <span className="font-bold w-4 text-center">{adultCount}</span>
@@ -186,7 +191,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activity, onCancel }) =>
 
                 <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] hover:border-[#00ABAB]/50 transition-colors">
                   <div className="flex justify-between items-center mb-2">
-                    <span>Child (₹{activity.childPrice})</span>
+                    <span>Child (₹{totalChildPrice})</span>
                     <div className="flex items-center gap-4">
                       <button onClick={() => setChildCount(Math.max(0, childCount - 1))} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors">-</button>
                       <span className="font-bold w-4 text-center">{childCount}</span>
@@ -233,7 +238,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activity, onCancel }) =>
               <label className="flex items-start gap-3 cursor-pointer">
                 <input type="checkbox" checked={waiverSigned} onChange={e => setWaiverSigned(e.target.checked)} className="mt-1 w-5 h-5 accent-[#00ABAB] cursor-pointer" />
                 <span className="text-sm text-[#94A3B8] leading-relaxed">
-                  I agree to the <strong className="text-white">Liability Waiver</strong> and confirm that all participants have read the safety instructions for {activity.name}. I understand the risks involved and agree to follow staff directions at all times.
+                  I agree to the <strong className="text-white">Liability Waiver</strong> and confirm that all participants have read the safety instructions for {combinedActivityNames}. I understand the risks involved and agree to follow staff directions at all times.
                 </span>
               </label>
             </div>
@@ -249,7 +254,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activity, onCancel }) =>
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="glass-panel p-8 rounded-2xl text-center border border-[#00ABAB]/30 shadow-[0_0_30px_rgba(0,171,171,0.1)]">
             <CreditCard className="w-16 h-16 text-[#00ABAB] mx-auto mb-6" />
             <h3 className="text-2xl font-bold mb-2">Complete Payment</h3>
-            <p className="text-[#94A3B8] mb-8">You are about to pay for <strong className="text-white">{totalQuantity} tickets</strong> to {activity.name}.</p>
+            <p className="text-[#94A3B8] mb-8">You are about to pay for <strong className="text-white">{totalQuantity} tickets</strong> to {combinedActivityNames}.</p>
             
             <div className="bg-[#0A0A0A] p-6 rounded-2xl border border-[#1C1C1C] max-w-sm mx-auto mb-8 text-left hover:border-[#00ABAB]/30 transition-colors">
               <div className="flex justify-between mb-2">
@@ -280,7 +285,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activity, onCancel }) =>
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel p-8 rounded-2xl text-center border border-[#00ABAB]/30 shadow-[0_0_30px_rgba(0,171,171,0.2)]">
             <CheckCircle className="w-16 h-16 text-emerald-400 mx-auto mb-6 drop-shadow-[0_0_15px_rgba(52,211,153,0.5)]" />
             <h3 className="text-3xl font-black mb-2 text-emerald-400 tracking-tight">Payment Successful!</h3>
-            <p className="text-[#94A3B8] mb-8 text-lg">Your booking for {activity.name} is confirmed. A copy of the ticket has been sent to {guestEmail}.</p>
+            <p className="text-[#94A3B8] mb-8 text-lg"><span className="text-[#00ABAB] text-lg font-bold">{combinedActivityNames}</span> is confirmed. A copy of the ticket has been sent to {guestEmail}.</p>
             
             <div className="max-w-md mx-auto mb-8 text-left">
               <TicketPass ticket={confirmedTicket} booking={confirmedBooking} />
