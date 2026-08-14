@@ -8,102 +8,167 @@ dotenv.config();
 
 const app = express();
 app.use(cors());
+
+// Raw body needed for webhook signature verification
+app.use('/api/razorpay/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET || 'your_secret',
+  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+  key_secret: process.env.RAZORPAY_KEY_SECRET || 'placeholder_secret',
 });
 
-// Endpoint to create an order
+// Idempotency store — prevents duplicate ticket generation for same Razorpay order
+const processedOrders = new Set();
+
+// ─── CREATE ORDER ─────────────────────────────────────────────────────────────
 app.post('/api/razorpay/create-order', async (req, res) => {
   try {
-    const { amount, currency = 'INR', receipt } = req.body;
+    const { amount, currency = 'INR', receipt, bookingRef } = req.body;
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: 'Invalid amount' });
+    }
+
     const options = {
-      amount: amount * 100, // amount in smallest currency unit
+      amount: Math.round(amount * 100), // paise
       currency,
-      receipt: receipt || `receipt_${Date.now()}`
+      receipt: receipt || `rcpt_${Date.now()}`,
+      notes: {
+        bookingRef: bookingRef || '',
+        source: 'deuce_adventure_park'
+      }
     };
 
     const order = await razorpay.orders.create(options);
-    if (!order) return res.status(500).send("Some error occurred");
+    if (!order) return res.status(500).json({ message: 'Could not create order' });
 
     res.json(order);
   } catch (error) {
-    console.error(error);
-    res.status(500).send(error);
+    console.error('[create-order]', error);
+    res.status(500).json({ message: 'Order creation failed', error: String(error) });
   }
 });
 
-// Endpoint to verify payment
+// ─── VERIFY PAYMENT (frontend callback) ──────────────────────────────────────
 app.post('/api/razorpay/verify', async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    const sign = razorpay_order_id + "|" + razorpay_payment_id;
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ message: 'Missing payment parameters' });
+    }
+
+    // Idempotency: return success immediately for already-processed orders
+    if (processedOrders.has(razorpay_order_id)) {
+      return res.status(200).json({ message: 'Payment already verified', alreadyProcessed: true });
+    }
+
+    const secret = process.env.RAZORPAY_KEY_SECRET || '';
+    const sign = razorpay_order_id + '|' + razorpay_payment_id;
     const expectedSign = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || 'your_secret')
-      .update(sign.toString())
-      .digest("hex");
+      .createHmac('sha256', secret)
+      .update(sign)
+      .digest('hex');
 
     if (razorpay_signature === expectedSign) {
-      return res.status(200).json({ message: "Payment verified successfully" });
+      processedOrders.add(razorpay_order_id);
+      return res.status(200).json({
+        message: 'Payment verified successfully',
+        razorpay_order_id,
+        razorpay_payment_id
+      });
     } else {
-      // Webhook simulation endpoint - handles backend payment confirmation
-      if (process.env.RAZORPAY_KEY_SECRET === 'your_secret' || process.env.RAZORPAY_KEY_SECRET === '***********************') {
-         console.warn("Skipping strict verification due to missing/masked secret.");
-         return res.status(200).json({ message: "Payment verified successfully (mock)" });
+      // Allow mock verification when secret is not configured (dev/demo mode)
+      if (!secret || secret === 'placeholder_secret') {
+        console.warn('[verify] Skipping strict verification – RAZORPAY_KEY_SECRET not configured');
+        processedOrders.add(razorpay_order_id);
+        return res.status(200).json({
+          message: 'Payment verified (demo mode)',
+          razorpay_order_id,
+          razorpay_payment_id
+        });
       }
-      return res.status(400).json({ message: "Invalid signature sent!" });
+      return res.status(400).json({ message: 'Invalid payment signature' });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal Server Error!" });
+    console.error('[verify]', error);
+    res.status(500).json({ message: 'Verification failed' });
   }
 });
 
-// Mock endpoint to simulate webhook processing
-app.post('/api/razorpay/webhook', async (req, res) => {
+// ─── WEBHOOK (Razorpay server-to-server events) ───────────────────────────────
+app.post('/api/razorpay/webhook', (req, res) => {
   try {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
     const signature = req.headers['x-razorpay-signature'];
-    const body = req.body;
-    
-    console.log("Received webhook event:", body.event);
-    
-    // In a real app, verify signature here and then update Supabase DB
-    // Since this is a demo without a real Supabase admin client in the backend,
-    // we'll just acknowledge the webhook.
-    
-    res.status(200).json({ status: "ok" });
+
+    if (webhookSecret && signature) {
+      const expectedSig = crypto
+        .createHmac('sha256', webhookSecret)
+        .update(req.body) // raw buffer
+        .digest('hex');
+
+      if (signature !== expectedSig) {
+        console.warn('[webhook] Signature mismatch – possible spoofed request');
+        return res.status(400).json({ status: 'invalid_signature' });
+      }
+    }
+
+    const event = JSON.parse(req.body.toString());
+    console.log('[webhook] Event received:', event.event);
+
+    switch (event.event) {
+      case 'payment.captured': {
+        const orderId = event.payload?.payment?.entity?.order_id;
+        const paymentId = event.payload?.payment?.entity?.id;
+        if (orderId) processedOrders.add(orderId);
+        console.log(`[webhook] Payment captured – order: ${orderId}, payment: ${paymentId}`);
+        break;
+      }
+      case 'payment.failed': {
+        const orderId = event.payload?.payment?.entity?.order_id;
+        console.log(`[webhook] Payment failed – order: ${orderId}`);
+        break;
+      }
+      default:
+        console.log(`[webhook] Unhandled event: ${event.event}`);
+    }
+
+    res.status(200).json({ status: 'ok' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Webhook Error" });
+    console.error('[webhook]', error);
+    res.status(500).json({ message: 'Webhook processing error' });
   }
 });
 
-// Mock notification endpoints for Email/WhatsApp/SMS
+// ─── COUNTER UPI ID (read from env, no secret exposed) ───────────────────────
+app.get('/api/config/upi-id', (req, res) => {
+  res.json({
+    upiId: process.env.COUNTER_UPI_ID || '',
+    businessName: process.env.BUSINESS_NAME || 'Deuce Adventure Park',
+    currency: process.env.CURRENCY || 'INR'
+  });
+});
+
+// ─── NOTIFICATIONS (mock) ─────────────────────────────────────────────────────
 app.post('/api/notifications/send', async (req, res) => {
   try {
     const { to, type, ticketId, details } = req.body;
-    
-    // Simulate network delay
-    await new Promise(r => setTimeout(r, 800));
-    
-    console.log(`[NOTIFICATION] Sent ${type} to ${to} for ticket ${ticketId}`);
-    
-    res.status(200).json({ 
-      success: true, 
-      message: `${type} notification sent successfully to ${to}` 
+    await new Promise(r => setTimeout(r, 400));
+    console.log(`[notification] Sent ${type} to ${to} for ticket ${ticketId}`);
+    res.status(200).json({
+      success: true,
+      message: `${type} notification sent to ${to}`
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to send notification" });
+    console.error('[notification]', error);
+    res.status(500).json({ message: 'Notification failed' });
   }
 });
 
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+  app.listen(PORT, () => console.log(`[server] Listening on port ${PORT}`));
 }
 
 export default app;

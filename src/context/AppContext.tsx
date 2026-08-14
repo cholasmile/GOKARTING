@@ -78,6 +78,20 @@ interface AppContextProps {
 
   markBookingAsPaid: (bookingId: string, staffName: string) => { success: boolean; message: string };
 
+  markPaymentConfirmed: (params: {
+    bookingId: string;
+    method: 'upi' | 'card' | 'cash' | 'razorpay';
+    staffId?: string;
+    referenceNumber?: string;
+    amountReceived?: number;
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+  }) => { success: boolean; message: string };
+
+  // Counter UPI ID setting
+  counterUpiId: string;
+  setCounterUpiId: (id: string) => void;
+
   scanTicket: (qrValue: string, staffName: string) => { success: boolean; message: string; ticket?: Ticket; isPendingPayment?: boolean; bookingId?: string };
 
   // Mutators - Vendors
@@ -212,8 +226,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [lapRecords, setLapRecords] = useState<LapRecord[]>(() => localLoadHelper('ap_lapRecords', mockLapRecords));
   const [waivers, setWaivers] = useState<GoKartingWaiver[]>(() => localLoadHelper('ap_waivers', []));
 
-  // Cart state (transient, kept in memory/session)
   const [foodCart, setFoodCart] = useState<FoodOrderItem[]>([]);
+
+  // Counter UPI ID — settable by admin, persisted in localStorage
+  const [counterUpiId, setCounterUpiIdState] = useState<string>(() =>
+    localStorage.getItem('ap_counter_upi_id') || ''
+  );
+  const setCounterUpiId = (id: string) => {
+    setCounterUpiIdState(id);
+    localStorage.setItem('ap_counter_upi_id', id);
+  };
 
   // -----------------------------------------------------------------
   // SUPABASE INITIAL LOAD & AUTOMATIC SYNC
@@ -578,6 +600,61 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
 
     return { success: true, message: 'Payment successfully recorded.' };
+  };
+
+  // Confirm counter payment (UPI / CARD / CASH) and mark booking as PAID
+  const markPaymentConfirmed = (params: {
+    bookingId: string;
+    method: 'upi' | 'card' | 'cash' | 'razorpay';
+    staffId?: string;
+    referenceNumber?: string;
+    amountReceived?: number;
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+  }) => {
+    const booking = bookings.find(b => b.id === params.bookingId);
+    if (!booking) return { success: false, message: 'Booking not found.' };
+    if (booking.paymentStatus === 'paid') return { success: true, message: 'Already paid.' };
+
+    const now = new Date().toISOString();
+
+    const updatedBooking: Booking = {
+      ...booking,
+      paymentStatus: 'paid',
+      status: 'confirmed'
+    };
+    setBookings(prev => prev.map(b => b.id === params.bookingId ? updatedBooking : b));
+
+    // Update existing pending payment record
+    const existingPayment = payments.find(p => p.bookingId === params.bookingId && p.status === 'pending');
+    if (existingPayment) {
+      const updatedPayment: Payment = {
+        ...existingPayment,
+        method: params.method,
+        status: 'success',
+        timestamp: now,
+        referenceNumber: params.referenceNumber,
+        amountReceived: params.amountReceived,
+        changeGiven: params.amountReceived != null ? Math.max(0, params.amountReceived - booking.totalAmount) : undefined,
+        staffId: params.staffId,
+        confirmedAt: now,
+        razorpayOrderId: params.razorpayOrderId,
+        razorpayPaymentId: params.razorpayPaymentId
+      };
+      setPayments(prev => prev.map(p => p.id === existingPayment.id ? updatedPayment : p));
+      if (isSupabaseConfigured) writeToLocalAndSync('payments', 'update', updatedPayment);
+    }
+
+    if (isSupabaseConfigured) writeToLocalAndSync('bookings', 'update', updatedBooking);
+
+    sendMockNotification(
+      booking.customerEmail,
+      '✅ Payment Confirmed – Deuce Adventure Park',
+      `Hi ${booking.customerName}, your ${params.method.toUpperCase()} payment of ₹${booking.totalAmount} is confirmed. Booking ID: ${booking.id}. Enjoy your adventure!`,
+      'email'
+    );
+
+    return { success: true, message: 'Payment confirmed successfully.' };
   };
 
   // Ticket Scanning Check-In
@@ -971,7 +1048,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       
       createBooking,
       markBookingAsPaid,
+      markPaymentConfirmed,
       scanTicket,
+
+      counterUpiId,
+      setCounterUpiId,
 
       addVendor,
       updateVendor,

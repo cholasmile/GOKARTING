@@ -6,26 +6,41 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Activity, FoodVendor, ActivityPackage } from '../types';
-import { 
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
-import { 
+import {
   TrendingUp, Users, Ticket, Utensils, Award, ShieldAlert,
-  Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle, 
-  MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check
+  Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle,
+  MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check,
+  Banknote, Smartphone, Filter, Search, IndianRupee
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
-  const { 
+  const {
     users, updateUserRole,
     activities, vendors, bookings, orders, payments, tickets,
     addActivity, updateActivity, deleteActivity,
-    addVendor, updateVendor, deleteVendor, addUser
+    addVendor, updateVendor, deleteVendor, addUser,
+    counterUpiId, setCounterUpiId
   } = useAppContext();
 
+  // Payment settings local state
+  const [upiIdInput, setUpiIdInput] = useState(counterUpiId);
+  const [upiSaved, setUpiSaved] = useState(false);
+  const handleSaveUpiId = () => {
+    setCounterUpiId(upiIdInput.trim());
+    setUpiSaved(true);
+    setTimeout(() => setUpiSaved(false), 2500);
+  };
+
+  // Payment report filters
+  const [payFilter, setPayFilter] = useState<'all' | 'razorpay' | 'upi' | 'card' | 'cash' | 'pending' | 'failed'>('all');
+  const [paySearch, setPaySearch] = useState('');
+
   // Active Admin Tabs
-  const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'vendors' | 'users' | 'reports' | 'database'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'vendors' | 'users' | 'reports' | 'database' | 'payments' | 'pay_settings'>('analytics');
   const [activeDbSubTab, setActiveDbSubTab] = useState<'schema' | 'rls' | 'hierarchy' | 'api_routes' | 'deploy'>('schema');
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -268,13 +283,13 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       {/* Admin Tabs */}
-      <div className="flex border-b border-[#00ABAB]/30 gap-2 overflow-x-auto text-[#FFFFFF]">
-        {(['analytics', 'activities', 'vendors', 'users', 'reports', 'database'] as const).map(tab => (
+      <div className="flex border-b border-[#00ABAB]/30 gap-1 overflow-x-auto text-[#FFFFFF] pb-px">
+        {(['analytics', 'activities', 'vendors', 'users', 'reports', 'payments', 'pay_settings', 'database'] as const).map(tab => (
           <button
             key={tab}
             id={`btn-admin-tab-${tab}`}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 text-xs font-bold capitalize transition-all border-b-2 flex items-center gap-1.5 cursor-pointer ${
+            className={`px-4 py-2.5 text-xs font-bold capitalize transition-all border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === tab
                 ? 'border-teal-600 text-[#40E0D0] font-extrabold bg-[#0A0A0A] rounded-t-lg'
                 : 'border-transparent text-[#9CA3AF] hover:text-[#FFFFFF]'
@@ -285,8 +300,10 @@ export const AdminDashboard: React.FC = () => {
             {tab === 'vendors' && <Coffee className="h-4 w-4" />}
             {tab === 'users' && <Users className="h-4 w-4" />}
             {tab === 'reports' && <FileText className="h-4 w-4" />}
+            {tab === 'payments' && <IndianRupee className="h-4 w-4" />}
+            {tab === 'pay_settings' && <Settings className="h-4 w-4" />}
             {tab === 'database' && <Database className="h-4 w-4" />}
-            {tab === 'database' ? 'Supabase & RLS' : tab}
+            {tab === 'database' ? 'Supabase & RLS' : tab === 'pay_settings' ? 'Pay Settings' : tab === 'payments' ? 'Pay Reports' : tab}
           </button>
         ))}
       </div>
@@ -880,6 +897,200 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* ── PAYMENT REPORTS TAB ── */}
+      {activeTab === 'payments' && (() => {
+        const filteredPayments = payments.filter(p => {
+          const matchesMethod = payFilter === 'all' ? true
+            : payFilter === 'pending' ? p.status === 'pending'
+            : payFilter === 'failed' ? p.status === 'failed'
+            : p.method === payFilter;
+          const booking = bookings.find(b => b.id === p.bookingId);
+          const ticket = tickets.find(t => t.bookingId === p.bookingId);
+          const searchLower = paySearch.toLowerCase();
+          const matchesSearch = !paySearch
+            || booking?.customerName?.toLowerCase().includes(searchLower)
+            || p.bookingId?.toLowerCase().includes(searchLower)
+            || ticket?.id?.toLowerCase().includes(searchLower)
+            || p.transactionId?.toLowerCase().includes(searchLower);
+          return matchesMethod && matchesSearch;
+        }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        const totalRevenue = filteredPayments.filter(p => p.status === 'success').reduce((s, p) => s + p.amount, 0);
+        const methodColors: Record<string, string> = { upi: 'text-violet-400', card: 'text-blue-400', cash: 'text-emerald-400', razorpay: 'text-[#00ABAB]', net_banking: 'text-amber-400' };
+        const statusColors: Record<string, string> = { success: 'text-emerald-400 bg-emerald-500/10', pending: 'text-amber-400 bg-amber-500/10', failed: 'text-red-400 bg-red-500/10', cancelled: 'text-gray-400 bg-gray-500/10', refunded: 'text-purple-400 bg-purple-500/10' };
+
+        return (
+          <div className="space-y-6">
+            <div className="glass-panel p-6 rounded-2xl border border-[#00ABAB]/30">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                <div>
+                  <h3 className="font-bold text-xl text-white flex items-center gap-2"><IndianRupee className="w-5 h-5 text-[#00ABAB]" /> Payment Reconciliation</h3>
+                  <p className="text-[#94A3B8] text-sm mt-1">All transactions across online and counter payments</p>
+                </div>
+                <div className="bg-[#0A0A0A] px-5 py-3 rounded-xl border border-[#00ABAB]/30 text-right">
+                  <p className="text-xs text-[#94A3B8] font-mono uppercase">Filtered Revenue</p>
+                  <p className="text-2xl font-black text-[#00ABAB]">₹{totalRevenue.toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="flex flex-wrap gap-3 mb-4">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, booking ID, ticket ID..."
+                    value={paySearch}
+                    onChange={e => setPaySearch(e.target.value)}
+                    className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-[#94A3B8] focus:border-[#00ABAB] outline-none"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(['all', 'razorpay', 'upi', 'card', 'cash', 'pending', 'failed'] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setPayFilter(f)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors capitalize ${payFilter === f ? 'bg-[#00ABAB] text-black' : 'bg-[#1C1C1C] text-[#94A3B8] hover:text-white'}`}
+                    >
+                      {f === 'all' ? 'All' : f === 'razorpay' ? 'Online (Razorpay)' : f.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-[#1C1C1C] text-[#94A3B8] text-xs uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left">Booking ID</th>
+                      <th className="px-4 py-3 text-left">Ticket ID</th>
+                      <th className="px-4 py-3 text-left">Customer</th>
+                      <th className="px-4 py-3 text-left">Activity</th>
+                      <th className="px-4 py-3 text-right">Amount</th>
+                      <th className="px-4 py-3 text-left">Method</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Txn / Ref ID</th>
+                      <th className="px-4 py-3 text-left">Date &amp; Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#1C1C1C]">
+                    {filteredPayments.length === 0 ? (
+                      <tr><td colSpan={9} className="text-center py-10 text-[#94A3B8]">No payments found matching filters.</td></tr>
+                    ) : filteredPayments.map(pay => {
+                      const booking = bookings.find(b => b.id === pay.bookingId);
+                      const ticket = tickets.find(t => t.bookingId === pay.bookingId);
+                      return (
+                        <tr key={pay.id} className="hover:bg-[#1C1C1C]/50 transition-colors">
+                          <td className="px-4 py-3 font-mono text-[10px] text-[#94A3B8]">{pay.bookingId?.slice(-8) || '—'}</td>
+                          <td className="px-4 py-3 font-mono text-[10px] text-[#94A3B8]">{ticket?.id?.slice(-8) || '—'}</td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-white">{booking?.customerName || '—'}</p>
+                            <p className="text-[10px] text-[#94A3B8]">{booking?.customerPhone || booking?.customerEmail?.split('@')[0] || '—'}</p>
+                          </td>
+                          <td className="px-4 py-3 text-[#94A3B8] text-xs">{booking?.activityName?.split(' + ').map(a => a.split(' ').slice(-1)[0]).join(' + ') || '—'}</td>
+                          <td className="px-4 py-3 text-right font-bold text-white">₹{pay.amount.toLocaleString('en-IN')}</td>
+                          <td className="px-4 py-3">
+                            <span className={`font-bold uppercase text-xs ${methodColors[pay.method] || 'text-white'}`}>{pay.method}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${statusColors[pay.status] || 'text-white'}`}>{pay.status}</span>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-[10px] text-[#94A3B8] max-w-[120px] truncate">
+                            {pay.razorpayPaymentId || pay.referenceNumber || pay.transactionId || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-[10px] text-[#94A3B8] whitespace-nowrap">
+                            {new Date(pay.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-[#94A3B8] mt-3">{filteredPayments.length} records shown</p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── PAYMENT SETTINGS TAB ── */}
+      {activeTab === 'pay_settings' && (
+        <div className="space-y-6">
+          <div className="glass-panel p-6 rounded-2xl border border-[#00ABAB]/30">
+            <h3 className="font-bold text-xl text-white flex items-center gap-2 mb-2"><Settings className="w-5 h-5 text-[#00ABAB]" /> Payment Configuration</h3>
+            <p className="text-[#94A3B8] text-sm mb-6">Configure payment methods for counter staff. Secret keys are never displayed to staff users.</p>
+
+            {/* Counter UPI ID */}
+            <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-4 mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Smartphone className="w-4 h-4 text-violet-400" />
+                <h4 className="font-bold text-white">Counter UPI ID</h4>
+              </div>
+              <p className="text-[#94A3B8] text-xs">This UPI ID is shown to customers at the counter as a QR code for scanning and payment.</p>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={upiIdInput}
+                  onChange={e => setUpiIdInput(e.target.value)}
+                  placeholder="e.g. yourbusiness@upi"
+                  className="flex-1 bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl px-4 py-2.5 text-white outline-none font-mono"
+                />
+                <button onClick={handleSaveUpiId} className="px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 bg-[#00ABAB] text-black hover:bg-[#00ABAB]/80 transition-colors">
+                  {upiSaved ? <><Check className="w-4 h-4" /> Saved!</> : 'Save'}
+                </button>
+              </div>
+              {counterUpiId && (
+                <p className="text-xs text-emerald-400">✅ Active UPI ID: <span className="font-mono">{counterUpiId}</span></p>
+              )}
+            </div>
+
+            {/* Razorpay Config Info */}
+            <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-3">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-[#00ABAB]" />
+                <h4 className="font-bold text-white">Razorpay (Online Payments)</h4>
+              </div>
+              <p className="text-[#94A3B8] text-xs">Razorpay keys are configured as environment variables on the server. They are never exposed in the browser.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                <div className="bg-[#1C1C1C] p-3 rounded-xl">
+                  <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-widest mb-1">Key ID (Public)</p>
+                  <p className="font-mono text-xs text-[#00ABAB]">{import.meta.env.VITE_RAZORPAY_KEY_ID || 'Not configured (VITE_RAZORPAY_KEY_ID)'}</p>
+                </div>
+                <div className="bg-[#1C1C1C] p-3 rounded-xl">
+                  <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-widest mb-1">Key Secret (Server-side)</p>
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-3 h-3 text-red-400" />
+                    <p className="font-mono text-xs text-red-400">Hidden — stored in server env vars only</p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl mt-2">
+                <p className="text-amber-400 text-xs font-bold">⚠ To update Razorpay keys, go to your Vercel dashboard → Environment Variables and set RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_WEBHOOK_SECRET.</p>
+              </div>
+            </div>
+
+            {/* Currency & Business */}
+            <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-3 mt-4">
+              <div className="flex items-center gap-2">
+                <IndianRupee className="w-4 h-4 text-[#00ABAB]" />
+                <h4 className="font-bold text-white">Business Settings</h4>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs text-[#94A3B8]">
+                <div className="bg-[#1C1C1C] p-3 rounded-xl">
+                  <p className="uppercase tracking-widest font-mono mb-1">Currency</p>
+                  <p className="text-white font-bold">INR (₹ Indian Rupee)</p>
+                </div>
+                <div className="bg-[#1C1C1C] p-3 rounded-xl">
+                  <p className="uppercase tracking-widest font-mono mb-1">Business Name</p>
+                  <p className="text-white font-bold">Deuce Adventure Park</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

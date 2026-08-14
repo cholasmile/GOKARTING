@@ -46,7 +46,7 @@ export interface Booking {
   details: string; // e.g. "2x Adult, 1x Child" or "Package: Sharp Shooter (25 shots)"
   quantity: number;
   totalAmount: number;
-  paymentStatus: 'pending' | 'paid';
+  paymentStatus: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded';
   bookingDate: string;
   status?: 'confirmed' | 'reserved';
 }
@@ -125,10 +125,19 @@ export interface Payment {
   orderId?: string;
   bookingId?: string;
   amount: number;
-  method: 'upi' | 'card' | 'net_banking' | 'cash';
-  status: 'success' | 'failed' | 'pending';
+  method: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay';
+  status: 'success' | 'failed' | 'pending' | 'cancelled' | 'refunded';
   transactionId: string;
   timestamp: string;
+  // Razorpay-specific
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  // Counter-specific
+  referenceNumber?: string; // Card transaction reference
+  amountReceived?: number;  // Cash amount received
+  changeGiven?: number;     // Cash change
+  staffId?: string;         // Staff who confirmed the payment
+  confirmedAt?: string;     // When payment was confirmed
 }
 
 export interface NotificationLog {
