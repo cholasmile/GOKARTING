@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowRight, Compass, Calendar, Users, MapPin, Search } from 'lucide-react';
+import { ArrowRight, Compass, Calendar, Users, MapPin, Search, User as UserIcon, LogIn } from 'lucide-react';
+import { useAppContext } from '../context/AppContext';
 
-export const AdventureHero: React.FC = () => {
+interface AdventureHeroProps {
+  onOpenMemberModal?: () => void;
+}
+
+export const AdventureHero: React.FC<AdventureHeroProps> = ({ onOpenMemberModal }) => {
+  const { currentUser, setCurrentUser } = useAppContext();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const heroImages = [
@@ -103,13 +109,60 @@ export const AdventureHero: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.4 }}
-          className="text-lg sm:text-xl text-[#CBD5E1] max-w-2xl mb-12 leading-relaxed font-medium"
+          className="text-lg sm:text-xl text-[#CBD5E1] max-w-2xl mb-8 leading-relaxed font-medium"
         >
           Experience high-speed Go Karting, Horse Riding, Air Rifle Shooting, ATV Adventures, Food Street and Family Entertainment from one destination.
         </motion.p>
 
-        {/* Buttons Removed per user request */}
+        {/* Member & Guest Access Bar in Hero */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+          className="bg-[#050816]/80 border border-[#14F1D9]/30 rounded-2xl p-4 max-w-xl shadow-[0_0_30px_rgba(20,241,217,0.15)] backdrop-blur-xl"
+        >
+          {currentUser ? (
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black flex items-center justify-center text-base">
+                  {currentUser.name ? currentUser.name[0].toUpperCase() : 'M'}
+                </div>
+                <div>
+                  <span className="font-bold text-white text-sm block">{currentUser.name}</span>
+                  <span className="text-[10px] text-[#14F1D9] font-mono font-bold uppercase">Verified Member • {currentUser.email}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setCurrentUser(null)}
+                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold font-mono transition-all border border-rose-500/30"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[#14F1D9]">
+                  <UserIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white text-sm">Guest Mode Active</span>
+                    <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase">Instant Booking</span>
+                  </div>
+                  <span className="text-xs text-[#9CA3AF]">Book directly as guest or sign in to sync tickets</span>
+                </div>
+              </div>
 
+              <button
+                onClick={onOpenMemberModal}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase tracking-wider hover:scale-[1.02] transition-all cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.3)] flex items-center justify-center gap-1.5"
+              >
+                <LogIn className="w-4 h-4" /> Member Login / Sign Up
+              </button>
+            </div>
+          )}
+        </motion.div>
 
       </div>
 

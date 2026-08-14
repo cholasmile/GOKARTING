@@ -178,10 +178,12 @@ function LoginPage() {
 
 // Wrapper for public layout with no explicit auth needed but some styling
 const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser, setCurrentUser } = useAppContext();
+
   return (
     <div className="min-h-screen flex flex-col text-[#FFFFFF] font-sans selection:bg-[#007B8B]/30 selection:text-white bg-transparent">
-      <header className="sticky top-0 z-30 glass-panel border-b border-[#00ABAB]/30">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-40 glass-panel border-b border-[#00ABAB]/30 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="bg-gradient-to-tr from-[#007B8B] via-[#00ABAB] to-[#3E8EDE] text-white w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xl shadow-[0_4px_12px_rgba(20,184,166,0.3)] font-sans border border-white/20">
               D
@@ -191,9 +193,38 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
               <p className="text-[9px] text-[#40E0D0] tracking-widest font-mono uppercase font-bold mt-1">Racing & Adventure</p>
             </div>
           </div>
-          <Link to="/login" className="text-xs font-bold text-white px-4 py-2 rounded-lg btn-glow">
-            Staff Portal
-          </Link>
+
+          {/* Member Status & Guest Controls in Header */}
+          <div className="flex items-center gap-3">
+            {currentUser ? (
+              <div className="flex items-center gap-2 bg-[#050816]/90 border border-[#14F1D9]/40 rounded-2xl px-3 py-1.5 shadow-[0_0_15px_rgba(20,241,217,0.2)]">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-[#14F1D9] to-[#00B4FF] text-[#0B1120] flex items-center justify-center font-black text-xs">
+                  {currentUser.name ? currentUser.name[0].toUpperCase() : 'M'}
+                </div>
+                <div className="text-left hidden sm:block">
+                  <p className="text-[11px] font-bold text-white leading-tight">{currentUser.name}</p>
+                  <span className="text-[8px] uppercase tracking-wider font-mono font-bold text-[#14F1D9] block">Verified Member</span>
+                </div>
+                <button
+                  onClick={() => setCurrentUser(null)}
+                  className="text-[10px] text-rose-400 font-bold hover:underline font-mono ml-2 cursor-pointer"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  <span>Guest Mode</span>
+                </div>
+              </div>
+            )}
+
+            <Link to="/login" className="text-xs font-bold text-white px-3.5 py-2 rounded-xl btn-glow flex items-center gap-1">
+              Staff Portal
+            </Link>
+          </div>
         </div>
       </header>
       <main className="flex-1 w-full mx-auto">

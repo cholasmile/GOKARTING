@@ -305,7 +305,7 @@ export const CustomerDashboard: React.FC = () => {
   return (
     <div className="space-y-6 flex flex-col w-full">
       <div className="w-full overflow-hidden">
-        <AdventureHero />
+        <AdventureHero onOpenMemberModal={() => setIsMemberModalOpen(true)} />
       </div>
 
       {/* MEMBER ACCOUNT & GUEST OPTIONS BAR */}
