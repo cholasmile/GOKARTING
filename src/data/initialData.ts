@@ -11,7 +11,8 @@ export const INITIAL_USERS: User[] = [
   { id: 'usr-vendor', name: 'Sarah Jenkins', email: 'vendor@deucepark.com', role: 'food_vendor', vendorId: 'vendor-forest-cafe' },
   { id: 'usr-gkm', name: 'Karting Manager', email: 'kartingmanager@deucepark.com', role: 'go_karting_manager' },
   { id: 'usr-gks', name: 'Karting Staff', email: 'kartingstaff@deucepark.com', role: 'go_karting_staff' },
-  { id: 'usr-tcs', name: 'Ticket Counter Staff', email: 'ticketing@deucepark.com', role: 'ticket_counter_staff' }
+  { id: 'usr-tcs', name: 'Ticket Counter Staff', email: 'ticketing@deucepark.com', role: 'ticket_counter_staff' },
+  { id: 'usr-customer-watson', name: 'John Watson', email: 'watson@baker.street', role: 'customer' }
 ];
 
 export const INITIAL_ACTIVITIES: Activity[] = [

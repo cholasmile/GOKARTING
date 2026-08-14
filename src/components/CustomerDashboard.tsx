@@ -3,17 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAppContext } from '../context/AppContext';
-import { Activity, MenuItem, Booking, FoodOrder } from '../types';
+import { Activity, MenuItem, Booking, FoodOrder, User } from '../types';
 import { InvoiceModal } from './InvoiceModal';
 import { 
   Calendar as CalendarIcon, Clock, Users, Ticket, 
   ShoppingBag, Search, Plus, Minus, CreditCard, 
   Trash2, BookOpen, Utensils, History, Sparkles, 
   ArrowRight, ShieldCheck, Check, X, AlertTriangle,
-  Compass, Crosshair, Flag
+  Compass, Crosshair, Flag, User as UserIcon, LogIn, LogOut, UserPlus, Key, Mail, Phone
 } from 'lucide-react';
 import { HorseRidingActivityPage } from './HorseRidingActivityPage';
 import { ShootingActivityPage } from './ShootingActivityPage';
@@ -23,12 +23,28 @@ import { AdventureHero } from './AdventureHero';
 export const CustomerDashboard: React.FC = () => {
   const { 
     activities, vendors, menuItems, foodCart, timeSlots, bookings, orders, tickets,
-    addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder, createBooking 
+    addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder, createBooking,
+    currentUser, setCurrentUser, users, addUser
   } = useAppContext();
 
   // Navigation Subtabs
   const [activeSubTab, setActiveSubTab] = useState<string>('act-go-karting');
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // -----------------------------------------------------------------
+  // MEMBER / GUEST AUTHENTICATION STATES
+  // -----------------------------------------------------------------
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [memberTab, setMemberTab] = useState<'login' | 'register'>('login');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [memberAuthError, setMemberAuthError] = useState<string | null>(null);
+
+  // History Tab Email Retrieval Search
+  const [historySearchEmail, setHistorySearchEmail] = useState('');
 
   // -----------------------------------------------------------------
   // 1. ACTIVITY BOOKING FLOW STATES
@@ -53,6 +69,62 @@ export const CustomerDashboard: React.FC = () => {
   const [customerName, setCustomerName] = useState<string>('');
   const [customerEmail, setCustomerEmail] = useState<string>('');
   const [customerPhone, setCustomerPhone] = useState<string>('');
+
+  // Auto pre-fill customer details from member login state
+  useEffect(() => {
+    if (currentUser) {
+      setCustomerName(currentUser.name || '');
+      setCustomerEmail(currentUser.email || '');
+      setCustomerPhone(currentUser.phone || '');
+    }
+  }, [currentUser]);
+
+  const handleMemberLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setMemberAuthError(null);
+    if (!loginEmail) {
+      setMemberAuthError('Please enter your member email address.');
+      return;
+    }
+    const foundUser = users.find(u => u.email.toLowerCase() === loginEmail.trim().toLowerCase());
+    if (foundUser) {
+      setCurrentUser(foundUser);
+    } else {
+      const newMember: User = {
+        id: `usr-cust-${Date.now()}`,
+        name: loginEmail.split('@')[0],
+        email: loginEmail.trim(),
+        role: 'customer'
+      };
+      addUser(newMember);
+      setCurrentUser(newMember);
+    }
+    setIsMemberModalOpen(false);
+  };
+
+  const handleMemberRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    setMemberAuthError(null);
+    if (!regName || !regEmail) {
+      setMemberAuthError('Name and Email are required to register.');
+      return;
+    }
+    const newMember: User = {
+      id: `usr-cust-${Date.now()}`,
+      name: regName,
+      email: regEmail.trim(),
+      phone: regPhone,
+      role: 'customer'
+    };
+    addUser(newMember);
+    setCurrentUser(newMember);
+    setIsMemberModalOpen(false);
+  };
+
+  const handleQuickDemoLogin = (user: User) => {
+    setCurrentUser(user);
+    setIsMemberModalOpen(false);
+  };
 
   // Booking Checkout & Payment Modal
   const [isBookingPaymentOpen, setIsBookingPaymentOpen] = useState(false);
@@ -234,6 +306,68 @@ export const CustomerDashboard: React.FC = () => {
     <div className="space-y-6 flex flex-col w-full">
       <div className="w-full overflow-hidden">
         <AdventureHero />
+      </div>
+
+      {/* MEMBER ACCOUNT & GUEST OPTIONS BAR */}
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6">
+        {currentUser ? (
+          <div className="bg-[#0B1120]/90 border border-[#14F1D9]/30 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-lg backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#14F1D9] to-[#00B4FF] flex items-center justify-center text-[#0B1120] font-black text-lg shadow-[0_0_15px_rgba(20,241,217,0.4)]">
+                {currentUser.name ? currentUser.name[0].toUpperCase() : 'M'}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white text-sm">{currentUser.name}</span>
+                  <span className="bg-[#14F1D9]/10 text-[#14F1D9] border border-[#14F1D9]/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase">Verified Member</span>
+                </div>
+                <span className="text-xs text-[#9CA3AF] font-mono">{currentUser.email}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              <button
+                onClick={() => {
+                  setActiveSubTab('history');
+                  setTimeout(() => contentRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold transition-all border border-white/10 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Ticket className="w-4 h-4 text-[#14F1D9]" /> My Saved Passes & Orders
+              </button>
+              <button
+                onClick={() => setCurrentUser(null)}
+                className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold transition-all border border-rose-500/20 flex items-center gap-1 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" /> Sign Out
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-[#0B1120]/90 border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-lg backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[#9CA3AF]">
+                <UserIcon className="w-5 h-5 text-[#14F1D9]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white text-sm">Guest Mode Active</span>
+                  <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase">Instant Booking</span>
+                </div>
+                <span className="text-xs text-[#9CA3AF]">Continue as guest to book immediately, or log in to sync past passes across devices.</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <button
+                onClick={() => setIsMemberModalOpen(true)}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase tracking-wider hover:scale-[1.02] transition-all shadow-[0_0_20px_rgba(20,241,217,0.3)] cursor-pointer flex items-center justify-center gap-2"
+              >
+                <LogIn className="w-4 h-4" /> Member Login / Sign Up
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* PREMIUM ACTIVITY SELECTION GRID */}
@@ -649,135 +783,164 @@ export const CustomerDashboard: React.FC = () => {
       {/* ----------------------------------------------------------------- */}
       {/* 3. HISTORY & WALLET SUB-TAB */}
       {/* ----------------------------------------------------------------- */}
-      {activeSubTab === 'history' && (
-        <div className="space-y-6">
-          
-          {/* Active Gate passes with QR codes */}
-          <div className="space-y-3">
-            <span className="text-[10px] uppercase font-bold text-[#40E0D0] font-mono tracking-wider block">My Gate Admission Passes (QR Tickets)</span>
-            {tickets.filter(t => t.customerEmail === 'watson@baker.street').length === 0 ? (
-              <div className="text-center py-12 glass-panel border border-[#00ABAB]/30 rounded-2xl text-xs text-[#9CA3AF]">
-                No active trail tickets booked.
+      {activeSubTab === 'history' && (() => {
+        const effectiveEmail = (historySearchEmail.trim() || currentUser?.email || customerEmail || 'watson@baker.street').toLowerCase();
+        const userTickets = tickets.filter(t => !effectiveEmail || t.customerEmail?.toLowerCase().includes(effectiveEmail));
+        const userOrders = orders.filter(o => !effectiveEmail || o.customerEmail?.toLowerCase().includes(effectiveEmail));
+
+        return (
+          <div className="space-y-6">
+            
+            {/* Email Data Retrieval Box for Guests & Members */}
+            <div className="glass-panel p-4 rounded-2xl border border-[#00ABAB]/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Search className="w-4 h-4 text-[#40E0D0]" /> Retrieve Booking Data & Admission Passes
+                </h3>
+                <p className="text-xs text-[#9CA3AF] mt-0.5">
+                  {currentUser ? `Showing verified member records for ${currentUser.email}` : 'Enter your email below to retrieve guest tickets and food order status instantly.'}
+                </p>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {tickets.filter(t => t.customerEmail === 'watson@baker.street').map(ticket => {
-                  const correlatedBooking = bookings.find(b => b.id === ticket.bookingId);
-                  
-                  return (
-                    <div 
-                      key={ticket.id} 
-                      id={`customer-ticket-${ticket.id}`}
-                      className={`glass-panel border rounded-2xl overflow-hidden  flex ${
-                        ticket.status === 'used' ? 'opacity-60 border-dashed border-[#00ABAB]/30' : 'border-[#00ABAB]/30 ring-1 ring-teal-100/30'
-                      }`}
-                    >
-                      {/* Left: Info */}
-                      <div className="p-4 flex-1 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] uppercase font-mono font-bold text-teal-700 bg-[#0A0A0A] px-2 py-0.5 rounded border border-[#00ABAB]/30">
-                              Pass ID: {ticket.id}
-                            </span>
-                            <span className={`text-[9px] uppercase font-mono font-bold px-1.5 py-0.5 rounded ${
-                              ticket.status === 'valid' ? 'bg-teal-100 text-[#40E0D0] border border-[#00ABAB]/30' : 'bg-neutral-100 text-neutral-500'
-                            }`}>
-                              {ticket.status}
-                            </span>
+
+              <div className="relative w-full sm:w-72">
+                <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-2.5" />
+                <input
+                  type="email"
+                  placeholder="Enter email to search..."
+                  value={historySearchEmail}
+                  onChange={e => setHistorySearchEmail(e.target.value)}
+                  className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-[#9CA3AF] focus:border-[#00ABAB] focus:outline-none font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Active Gate passes with QR codes */}
+            <div className="space-y-3">
+              <span className="text-[10px] uppercase font-bold text-[#40E0D0] font-mono tracking-wider block">My Gate Admission Passes (QR Tickets)</span>
+              {userTickets.length === 0 ? (
+                <div className="text-center py-12 glass-panel border border-[#00ABAB]/30 rounded-2xl text-xs text-[#9CA3AF]">
+                  No active admission passes found for {effectiveEmail || 'search query'}.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {userTickets.map(ticket => {
+                    const correlatedBooking = bookings.find(b => b.id === ticket.bookingId);
+                    
+                    return (
+                      <div 
+                        key={ticket.id} 
+                        id={`customer-ticket-${ticket.id}`}
+                        className={`glass-panel border rounded-2xl overflow-hidden  flex ${
+                          ticket.status === 'used' ? 'opacity-60 border-dashed border-[#00ABAB]/30' : 'border-[#00ABAB]/30 ring-1 ring-teal-100/30'
+                        }`}
+                      >
+                        {/* Left: Info */}
+                        <div className="p-4 flex-1 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] uppercase font-mono font-bold text-teal-700 bg-[#0A0A0A] px-2 py-0.5 rounded border border-[#00ABAB]/30">
+                                Pass ID: {ticket.id}
+                              </span>
+                              <span className={`text-[9px] uppercase font-mono font-bold px-1.5 py-0.5 rounded ${
+                                ticket.status === 'valid' ? 'bg-teal-100 text-[#40E0D0] border border-[#00ABAB]/30' : 'bg-neutral-100 text-neutral-500'
+                              }`}>
+                                {ticket.status}
+                              </span>
+                            </div>
+                            <h4 className="font-bold text-sm text-[#FFFFFF] font-sans mt-2">{ticket.activityName}</h4>
+                            <p className="text-[11px] text-[#9CA3AF] font-mono mt-0.5">{ticket.ticketType}</p>
+                            <p className="text-[11px] text-[#9CA3AF] font-mono mt-1 flex items-center gap-1">
+                              <CalendarIcon className="h-3.5 w-3.5 text-[#3E8EDE]" /> {ticket.date}
+                            </p>
+                            <p className="text-[11px] text-[#9CA3AF] font-mono flex items-center gap-1 mt-0.5">
+                              <Clock className="h-3.5 w-3.5 text-[#3E8EDE]" /> {ticket.timeSlot}
+                            </p>
                           </div>
-                          <h4 className="font-bold text-sm text-[#FFFFFF] font-sans mt-2">{ticket.activityName}</h4>
-                          <p className="text-[11px] text-[#9CA3AF] font-mono mt-0.5">{ticket.ticketType}</p>
-                          <p className="text-[11px] text-[#9CA3AF] font-mono mt-1 flex items-center gap-1">
-                            <CalendarIcon className="h-3.5 w-3.5 text-[#3E8EDE]" /> {ticket.date}
-                          </p>
-                          <p className="text-[11px] text-[#9CA3AF] font-mono flex items-center gap-1 mt-0.5">
-                            <Clock className="h-3.5 w-3.5 text-[#3E8EDE]" /> {ticket.timeSlot}
-                          </p>
+
+                          {correlatedBooking && (
+                            <button
+                              id={`btn-open-invoice-booking-${ticket.id}`}
+                              onClick={() => setSelectedInvoiceBooking(correlatedBooking)}
+                              className="mt-3 self-start text-[10px] font-mono text-teal-700 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+                            >
+                              Open Bill Receipt →
+                            </button>
+                          )}
                         </div>
 
-                        {correlatedBooking && (
-                          <button
-                            id={`btn-open-invoice-booking-${ticket.id}`}
-                            onClick={() => setSelectedInvoiceBooking(correlatedBooking)}
-                            className="mt-3 self-start text-[10px] font-mono text-teal-700 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
-                          >
-                            Open Bill Receipt â†’
-                          </button>
-                        )}
+                        {/* Right: Simulated QR */}
+                        <div className="p-4 bg-[#0A0A0A]/50 border-l border-[#00ABAB]/30 flex flex-col items-center justify-center gap-2">
+                          <svg className="w-20 h-20 text-teal-950" viewBox="0 0 100 100">
+                             <path d="M5 5h30v30H5V5zm5 5v20h20V10H10zm55-5h30v30H65V5zm5 5v20h20V10H70zM5 65h30v30H5V65zm5 5v20h20V70H10z" fill="currentColor"/>
+                             <path d="M45 10h10v10H45V10zm20 45h10v10H65V55zm15 15h15v15H80V70zm-15 15h10v10H65V85zm-20-20h10v10H45V65zm20-20h10v10H65V45zm-10 10h10v10H55V55z" fill="currentColor"/>
+                          </svg>
+                          <span className="font-mono text-[8px] text-[#40E0D0] font-bold truncate max-w-[80px]">Scan at gate</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Food Order Tracking Histories */}
+            <div className="space-y-3 pt-4 border-t border-[#00ABAB]/30">
+              <span className="text-[10px] uppercase font-bold text-[#40E0D0] font-mono tracking-wider block">My Food Orders (Live Status tracking)</span>
+              {userOrders.length === 0 ? (
+                <div className="text-center py-12 glass-panel border border-[#00ABAB]/30 rounded-2xl text-xs text-[#9CA3AF]">
+                  No food orders found for {effectiveEmail || 'search query'}.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {userOrders.map(order => (
+                    <div 
+                      key={order.id} 
+                      id={`customer-order-row-${order.id}`}
+                      className="p-4 glass-panel border border-[#00ABAB]/30 rounded-2xl  flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs text-[#FFFFFF]">{order.id}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            order.status === 'pending'
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200 animate-pulse'
+                              : order.status === 'preparing'
+                              ? 'bg-blue-50 text-blue-800 border border-blue-200 animate-pulse'
+                              : order.status === 'ready'
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 animate-bounce'
+                              : 'bg-neutral-100 text-neutral-500 border border-neutral-200'
+                          }`}>
+                            {order.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#FFFFFF] mt-1 leading-normal max-w-md font-medium">
+                          {order.items.map(item => `${item.quantity}x ${item.name}`).join(', ')}
+                        </p>
+                        <span className="text-[10px] text-[#9CA3AF] font-mono">{new Date(order.createdAt).toLocaleString()}</span>
                       </div>
 
-                      {/* Right: Simulated QR */}
-                      <div className="p-4 bg-[#0A0A0A]/50 border-l border-[#00ABAB]/30 flex flex-col items-center justify-center gap-2">
-                        <svg className="w-20 h-20 text-teal-950" viewBox="0 0 100 100">
-                           <path d="M5 5h30v30H5V5zm5 5v20h20V10H10zm55-5h30v30H65V5zm5 5v20h20V10H70zM5 65h30v30H5V65zm5 5v20h20V70H10z" fill="currentColor"/>
-                           <path d="M45 10h10v10H45V10zm20 45h10v10H65V55zm15 15h15v15H80V70zm-15 15h10v10H65V85zm-20-20h10v10H45V65zm20-20h10v10H65V45zm-10 10h10v10H55V55z" fill="currentColor"/>
-                        </svg>
-                        <span className="font-mono text-[8px] text-[#40E0D0] font-bold truncate max-w-[80px]">Scan at gate</span>
+                      <div className="flex items-center gap-3 self-end md:self-auto">
+                        <div className="text-right">
+                          <span className="text-[10px] text-[#9CA3AF] uppercase font-bold block font-mono">Total Paid</span>
+                          <span className="font-mono font-bold text-sm text-teal-950">₹{order.totalAmount.toFixed(2)}</span>
+                        </div>
+                        <button
+                          id={`btn-open-invoice-order-${order.id}`}
+                          onClick={() => setSelectedInvoiceOrder(order)}
+                          className="px-3 py-1.5 rounded-lg border border-[#00ABAB]/30 hover:bg-[#0A0A0A] font-bold text-xs text-[#40E0D0] cursor-pointer"
+                        >
+                          Receipt
+                        </button>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
+
           </div>
-
-          {/* Food Order Tracking Histories */}
-          <div className="space-y-3 pt-4 border-t border-[#00ABAB]/30">
-            <span className="text-[10px] uppercase font-bold text-[#40E0D0] font-mono tracking-wider block">My Food Orders (Live Status tracking)</span>
-            {orders.filter(o => o.customerEmail === 'watson@baker.street').length === 0 ? (
-              <div className="text-center py-12 glass-panel border border-[#00ABAB]/30 rounded-2xl text-xs text-[#9CA3AF]">
-                No food orders placed.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {orders.filter(o => o.customerEmail === 'watson@baker.street').map(order => (
-                  <div 
-                    key={order.id} 
-                    id={`customer-order-row-${order.id}`}
-                    className="p-4 glass-panel border border-[#00ABAB]/30 rounded-2xl  flex flex-col md:flex-row md:items-center justify-between gap-4"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs text-[#FFFFFF]">{order.id}</span>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                          order.status === 'pending'
-                            ? 'bg-amber-50 text-amber-800 border border-amber-200 animate-pulse'
-                            : order.status === 'preparing'
-                            ? 'bg-blue-50 text-blue-800 border border-blue-200 animate-pulse'
-                            : order.status === 'ready'
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 animate-bounce'
-                            : 'bg-neutral-100 text-neutral-500 border border-neutral-200'
-                        }`}>
-                          {order.status}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-[#FFFFFF] mt-1 leading-normal max-w-md font-medium">
-                        {order.items.map(item => `${item.quantity}x ${item.name}`).join(', ')}
-                      </p>
-                      <span className="text-[10px] text-[#9CA3AF] font-mono">{new Date(order.createdAt).toLocaleString()}</span>
-                    </div>
-
-                    <div className="flex items-center gap-3 self-end md:self-auto">
-                      <div className="text-right">
-                        <span className="text-[10px] text-[#9CA3AF] uppercase font-bold block font-mono">Total Paid</span>
-                        <span className="font-mono font-bold text-sm text-teal-950">₹{order.totalAmount.toFixed(2)}</span>
-                      </div>
-                      <button
-                        id={`btn-open-invoice-order-${order.id}`}
-                        onClick={() => setSelectedInvoiceOrder(order)}
-                        className="px-3 py-1.5 rounded-lg border border-[#00ABAB]/30 hover:bg-[#0A0A0A] font-bold text-xs text-[#40E0D0] cursor-pointer"
-                      >
-                        Receipt
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-        </div>
-      )}
+        );
+      })()}
 
 
 
@@ -948,19 +1111,183 @@ export const CustomerDashboard: React.FC = () => {
       {/* ----------------------------------------------------------------- */}
       {/* GLOBAL MOUNTED INVOICE MODAL LAUNCHERS */}
       {/* ----------------------------------------------------------------- */}
-      {selectedInvoiceBooking && (
-        <InvoiceModal
-          booking={selectedInvoiceBooking}
-          onClose={() => setSelectedInvoiceBooking(undefined)}
-        />
-      )}
+      {/* MEMBER LOGIN & REGISTER MODAL */}
+      <AnimatePresence>
+        {isMemberModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-[#050816]/90 z-50 flex items-center justify-center p-4 backdrop-blur-xl"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
+              className="glass-panel border border-[#14F1D9]/30 rounded-3xl shadow-[0_0_40px_rgba(20,241,217,0.2)] max-w-md w-full p-6 relative overflow-hidden text-white"
+            >
+              <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => { setMemberTab('login'); setMemberAuthError(null); }}
+                    className={`font-black text-base pb-1 border-b-2 transition-all cursor-pointer ${
+                      memberTab === 'login' ? 'border-[#14F1D9] text-[#14F1D9]' : 'border-transparent text-[#9CA3AF] hover:text-white'
+                    }`}
+                  >
+                    Member Sign In
+                  </button>
+                  <button
+                    onClick={() => { setMemberTab('register'); setMemberAuthError(null); }}
+                    className={`font-black text-base pb-1 border-b-2 transition-all cursor-pointer ${
+                      memberTab === 'register' ? 'border-[#14F1D9] text-[#14F1D9]' : 'border-transparent text-[#9CA3AF] hover:text-white'
+                    }`}
+                  >
+                    New Registration
+                  </button>
+                </div>
 
-      {selectedInvoiceOrder && (
-        <InvoiceModal
-          order={selectedInvoiceOrder}
-          onClose={() => setSelectedInvoiceOrder(undefined)}
-        />
-      )}
+                <button
+                  onClick={() => setIsMemberModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-white/20 transition-colors cursor-pointer border border-white/10"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {memberAuthError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs mb-4 flex items-center gap-2 font-medium">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>{memberAuthError}</span>
+                </div>
+              )}
+
+              {memberTab === 'login' ? (
+                <form onSubmit={handleMemberLogin} className="space-y-4">
+                  <div>
+                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Member Email</label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-3" />
+                      <input
+                        type="email"
+                        required
+                        value={loginEmail}
+                        onChange={e => setLoginEmail(e.target.value)}
+                        placeholder="watson@baker.street"
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Password</label>
+                    <div className="relative">
+                      <Key className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-3" />
+                      <input
+                        type="password"
+                        required
+                        value={loginPassword}
+                        onChange={e => setLoginPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase tracking-widest hover:scale-[1.01] transition-all cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.3)]"
+                  >
+                    Sign In & Sync Data
+                  </button>
+
+                  {/* Demo Quick Logins */}
+                  <div className="pt-3 border-t border-white/10 space-y-2">
+                    <span className="text-[9px] uppercase font-mono font-bold text-[#9CA3AF] block text-center">Quick Demo Member Accounts</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleQuickDemoLogin({ id: 'usr-watson', name: 'John Watson', email: 'watson@baker.street', role: 'customer' })}
+                        className="p-2 bg-white/5 hover:bg-[#14F1D9]/20 hover:border-[#14F1D9]/50 border border-white/10 rounded-xl text-left text-xs transition-all cursor-pointer"
+                      >
+                        <div className="font-bold truncate text-white">John Watson</div>
+                        <div className="text-[9px] text-[#9CA3AF] font-mono truncate">watson@baker.street</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleQuickDemoLogin({ id: 'usr-alex', name: 'Alex Mercer', email: 'alex@example.com', role: 'customer' })}
+                        className="p-2 bg-white/5 hover:bg-[#14F1D9]/20 hover:border-[#14F1D9]/50 border border-white/10 rounded-xl text-left text-xs transition-all cursor-pointer"
+                      >
+                        <div className="font-bold truncate text-white">Alex Mercer</div>
+                        <div className="text-[9px] text-[#9CA3AF] font-mono truncate">alex@example.com</div>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleMemberRegister} className="space-y-4">
+                  <div>
+                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Full Name</label>
+                    <div className="relative">
+                      <UserIcon className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        required
+                        value={regName}
+                        onChange={e => setRegName(e.target.value)}
+                        placeholder="John Doe"
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Email Address</label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-3" />
+                      <input
+                        type="email"
+                        required
+                        value={regEmail}
+                        onChange={e => setRegEmail(e.target.value)}
+                        placeholder="john@example.com"
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Phone Number (Optional)</label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-3" />
+                      <input
+                        type="tel"
+                        value={regPhone}
+                        onChange={e => setRegPhone(e.target.value)}
+                        placeholder="+91 9876543210"
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase tracking-widest hover:scale-[1.01] transition-all cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.3)]"
+                  >
+                    Create Member Account
+                  </button>
+                </form>
+              )}
+
+              <div className="mt-4 pt-3 border-t border-white/10 text-center">
+                <button
+                  type="button"
+                  onClick={() => setIsMemberModalOpen(false)}
+                  className="text-xs text-[#9CA3AF] hover:text-white font-bold transition-colors cursor-pointer"
+                >
+                  Continue as Guest →
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
