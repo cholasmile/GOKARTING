@@ -499,7 +499,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
               <div className="space-y-3">
               
               <div className="flex items-center justify-between p-3 bg-[#050816] rounded-xl border border-white/5 mb-1">
-                <span className="font-bold text-[#9CA3AF] text-[10px] uppercase tracking-wider font-mono">Drivers</span>
+                <span className="font-bold text-[#9CA3AF] text-[10px] uppercase tracking-wider font-mono">Racers</span>
                 <div className="flex items-center gap-3">
                   <button type="button" onClick={() => setBookingQuantity(Math.max(1, bookingQuantity - 1))} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-white hover:bg-white/20 transition-colors cursor-pointer border border-white/5">
                     <Minus className="w-3 h-3" />
@@ -618,7 +618,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                     <div className="flex justify-between items-center border-b border-white/5 pb-2"><span className="text-[#9CA3AF] font-bold">Ticket ID</span> <span className="font-black text-[#14F1D9]">TKT-{successBooking.booking.id}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Activity</span> <span className="font-bold">Pro Go-Karting</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Chassis</span> <span className="font-bold truncate max-w-[120px] text-right">{selectedKart.name}</span></div>
-                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Drivers</span> <span className="font-bold">{bookingQuantity}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Racers</span> <span className="font-bold">{bookingQuantity}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Session</span> <span className="font-bold">{bookingDate} @ {selectedSlot}</span></div>
                     {successBooking.booking.paymentStatus === 'pending' && (
                       <div className="flex justify-between items-center border-t border-white/5 pt-2"><span className="text-[#9CA3AF] font-bold">Amount Due</span> <span className="font-black text-amber-400">₹{bookingTotal.toFixed(2)} (Cash)</span></div>

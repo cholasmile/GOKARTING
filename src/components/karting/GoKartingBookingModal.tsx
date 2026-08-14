@@ -135,7 +135,7 @@ const GoKartingBookingModal: React.FC<GoKartingBookingModalProps> = ({ onClose, 
               <div className="space-y-5 animate-slide-in">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className={labelClass}>Number of Riders</label>
+                    <label className={labelClass}>Number of Racers</label>
                     <input required type="number" min="1" max="15" value={formData.numberOfRiders} onChange={e => setFormData({...formData, numberOfRiders: parseInt(e.target.value)})} className={inputClass} />
                   </div>
                   <div>
