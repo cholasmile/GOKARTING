@@ -71,7 +71,12 @@ export const INITIAL_ACTIVITIES: Activity[] = [
       'Avoid sudden movements or loud noises while near the horses.',
       'Maintain upright posture and keep both feet securely in the stirrups.'
     ],
-    type: 'horse_riding'
+    type: 'horse_riding',
+    packages: [
+      { id: 'pkg-horse-pony', name: 'Pony Walk (15 Mins)', price: 25, description: 'Gentle pony lead walk on flat trails — perfect for young children.' },
+      { id: 'pkg-horse-guided', name: 'Guided Trail Ride (30 Mins)', price: 45, description: 'Scenic guided nature trail ride with an experienced handler.' },
+      { id: 'pkg-horse-advanced', name: 'Advanced Forest Trek (60 Mins)', price: 80, description: 'Full forest trail with trotting/cantering for confident riders.' }
+    ]
   }
 ];
 

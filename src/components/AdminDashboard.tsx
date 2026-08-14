@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Activity, FoodVendor, ActivityPackage } from '../types';
 import {
@@ -14,7 +14,7 @@ import {
   TrendingUp, Users, Ticket, Utensils, Award, ShieldAlert,
   Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle,
   MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check,
-  Banknote, Smartphone, Filter, Search, IndianRupee
+  Banknote, Smartphone, Filter, Search, IndianRupee, Loader2
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
@@ -27,22 +27,129 @@ export const AdminDashboard: React.FC = () => {
   } = useAppContext();
 
   // Payment settings local state
+  const {
+    razorpayKeyId, posProvider: globalPosProvider, posTerminalName: globalPosTerminalName,
+    posTerminalId: globalPosTerminalId, enabledMethods: globalEnabledMethods, setPosConfig
+  } = useAppContext();
+
+  const [razorpayKeyIdInput, setRazorpayKeyIdInput] = useState('');
+  const [razorpayKeySecretInput, setRazorpayKeySecretInput] = useState('');
   const [upiIdInput, setUpiIdInput] = useState(counterUpiId);
-  const [upiSaved, setUpiSaved] = useState(false);
-  const handleSaveUpiId = () => {
-    setCounterUpiId(upiIdInput.trim());
-    setUpiSaved(true);
-    setTimeout(() => setUpiSaved(false), 2500);
+  const [businessNameInput, setBusinessNameInput] = useState('Deuce Park');
+  const [posProviderInput, setPosProviderInput] = useState('mock_pos');
+  const [posTerminalNameInput, setPosTerminalNameInput] = useState('Deuce POS Terminal 1');
+  const [posTerminalIdInput, setPosTerminalIdInput] = useState('POS-TERM-001');
+  const [enabledMethodsInput, setEnabledMethodsInput] = useState<string[]>(['CASH', 'UPI', 'QR_CODE', 'CARD']);
+  
+  const [posTestResult, setPosTestResult] = useState<string | null>(null);
+  const [isTestingPos, setIsTestingPos] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+
+
+  const handleSavePaymentConfig = async () => {
+    try {
+      const response = await fetch('/api/config/payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          razorpayKeyId: razorpayKeyIdInput,
+          razorpayKeySecret: razorpayKeySecretInput,
+          counterUpiId: upiIdInput,
+          businessName: businessNameInput,
+          posProvider: posProviderInput,
+          posTerminalName: posTerminalNameInput,
+          posTerminalId: posTerminalIdInput,
+          enabledMethods: enabledMethodsInput.join(',')
+        })
+      });
+
+      if (response.ok) {
+        setSaveSuccess(true);
+        // Persist to local context state
+        setCounterUpiId(upiIdInput);
+        setPosConfig({
+          posProvider: posProviderInput,
+          posTerminalName: posTerminalNameInput,
+          posTerminalId: posTerminalIdInput,
+          enabledMethods: enabledMethodsInput.join(','),
+          razorpayKeyId: razorpayKeyIdInput
+        });
+        setTimeout(() => setSaveSuccess(false), 2500);
+      } else {
+        alert('Failed to save configurations.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error while saving configurations.');
+    }
+  };
+
+  const handleTestPosConnection = async () => {
+    setIsTestingPos(true);
+    setPosTestResult(null);
+    try {
+      const response = await fetch('/api/pos/status');
+      const data = await response.json();
+      if (data.status === 'Connected') {
+        setPosTestResult(`✅ Connected successfully to ${data.providerName || 'terminal'} (ID: ${data.terminalId}).`);
+      } else {
+        setPosTestResult(`❌ Disconnected: ${data.message || data.error || 'Check terminal ID and server configs.'}`);
+      }
+    } catch (err) {
+      setPosTestResult('❌ Test failed: Cannot connect to local server driver.');
+    } finally {
+      setIsTestingPos(false);
+    }
   };
 
   // Payment report filters
-  const [payFilter, setPayFilter] = useState<'all' | 'razorpay' | 'upi' | 'card' | 'cash' | 'pending' | 'failed'>('all');
+  const [payFilter, setPayFilter] = useState<string>('all');
   const [paySearch, setPaySearch] = useState('');
+
+  // Reconciliation dashboard state
+  const [gatewayPayments, setGatewayPayments] = useState<any[]>([]);
+  const [isReconciling, setIsReconciling] = useState(false);
+  const [reconciliationTab, setReconciliationTab] = useState<'reports' | 'reconciliation'>('reports');
 
   // Active Admin Tabs
   const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'vendors' | 'users' | 'reports' | 'database' | 'payments' | 'pay_settings'>('analytics');
   const [activeDbSubTab, setActiveDbSubTab] = useState<'schema' | 'rls' | 'hierarchy' | 'api_routes' | 'deploy'>('schema');
   const [copiedText, setCopiedText] = useState<string | null>(null);
+
+  // Load configs on mount or activeTab changes
+  useEffect(() => {
+    fetch('/api/config/payment')
+      .then(res => res.json())
+      .then(data => {
+        if (data.counterUpiId) setUpiIdInput(data.counterUpiId);
+        if (data.razorpayKeyId) setRazorpayKeyIdInput(data.razorpayKeyId);
+        if (data.razorpayKeySecret) setRazorpayKeySecretInput(data.razorpayKeySecret);
+        if (data.businessName) setBusinessNameInput(data.businessName);
+        if (data.posProvider) setPosProviderInput(data.posProvider);
+        if (data.posTerminalName) setPosTerminalNameInput(data.posTerminalName);
+        if (data.posTerminalId) setPosTerminalIdInput(data.posTerminalId);
+        if (data.enabledMethods) setEnabledMethodsInput(data.enabledMethods.split(','));
+      })
+      .catch(err => console.error('[admin] Failed to fetch payment config:', err));
+  }, [activeTab]);
+
+  // Load gateway transactions for reconciliation
+  useEffect(() => {
+    if (activeTab === 'payments' && reconciliationTab === 'reconciliation') {
+      setIsReconciling(true);
+      fetch('/api/razorpay/payments')
+        .then(res => res.json())
+        .then(data => {
+          setGatewayPayments(Array.isArray(data) ? data : []);
+          setIsReconciling(false);
+        })
+        .catch(err => {
+          console.error('[reconcile-fetch]', err);
+          setIsReconciling(false);
+        });
+    }
+  }, [activeTab, reconciliationTab]);
 
   const handleCopyText = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -722,8 +829,11 @@ export const AdminDashboard: React.FC = () => {
                           }}
                         >
                           <option value="super_admin">Super Admin</option>
+                          <option value="ticket_counter_staff">Ticket Counter Staff</option>
                           <option value="activity_staff">Activity Staff</option>
                           <option value="food_vendor">Food Vendor</option>
+                          <option value="go_karting_manager">Go Karting Manager</option>
+                          <option value="go_karting_staff">Go Karting Staff</option>
                           <option value="customer">Guest / Customer</option>
                         </select>
                       </td>
@@ -904,8 +1014,8 @@ export const AdminDashboard: React.FC = () => {
       {activeTab === 'payments' && (() => {
         const filteredPayments = payments.filter(p => {
           const matchesMethod = payFilter === 'all' ? true
-            : payFilter === 'pending' ? p.status === 'pending'
-            : payFilter === 'failed' ? p.status === 'failed'
+            : payFilter === 'pending' ? (p.status === 'pending' || p.payment_status === 'PENDING')
+            : payFilter === 'failed' ? (p.status === 'failed' || p.payment_status === 'FAILED')
             : p.method === payFilter;
           const booking = bookings.find(b => b.id === p.bookingId);
           const ticket = tickets.find(t => t.bookingId === p.bookingId);
@@ -914,181 +1024,461 @@ export const AdminDashboard: React.FC = () => {
             || booking?.customerName?.toLowerCase().includes(searchLower)
             || p.bookingId?.toLowerCase().includes(searchLower)
             || ticket?.id?.toLowerCase().includes(searchLower)
-            || p.transactionId?.toLowerCase().includes(searchLower);
+            || p.transactionId?.toLowerCase().includes(searchLower)
+            || p.invoice_id?.toLowerCase().includes(searchLower);
           return matchesMethod && matchesSearch;
         }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-        const totalRevenue = filteredPayments.filter(p => p.status === 'success').reduce((s, p) => s + p.amount, 0);
+        // Summaries across ALL payments in state
+        const allPayments = payments;
+
+        // Overall collection metrics
+        const totalOverallCollection = allPayments
+          .filter(p => p.status === 'paid' || p.status === 'success')
+          .reduce((s, p) => s + p.amount, 0);
+
+        // Counter collections
+        const counterCashCollection = allPayments
+          .filter(p => (p.status === 'paid' || p.status === 'success') && p.method === 'cash')
+          .reduce((s, p) => s + p.amount, 0);
+
+        const counterUpiCollection = allPayments
+          .filter(p => (p.status === 'paid' || p.status === 'success') && (p.method === 'qrcode' || (p.method === 'upi' && (p.staffId || p.counterId === 'counter_1'))))
+          .reduce((s, p) => s + p.amount, 0);
+
+        const counterCardCollection = allPayments
+          .filter(p => (p.status === 'paid' || p.status === 'success') && p.method.startsWith('card'))
+          .reduce((s, p) => s + p.amount, 0);
+
+        const totalCounterCollection = counterCashCollection + counterUpiCollection + counterCardCollection;
+
+        // Online collections
+        const totalOnlineCollection = allPayments
+          .filter(p => (p.status === 'paid' || p.status === 'success') && 
+                       (p.method === 'razorpay' || 
+                        ((p.method === 'upi' || p.method === 'card' || p.method === 'net_banking') && !p.staffId && p.counterId !== 'counter_1')))
+          .reduce((s, p) => s + p.amount, 0);
+
+        // Edge states
+        const failedCount = allPayments.filter(p => p.status === 'failed').length;
+        const pendingCount = allPayments.filter(p => p.status === 'pending').length;
+        const refundsSum = allPayments.filter(p => p.status === 'refunded').reduce((s, p) => s + p.amount, 0);
+
+        const netCollection = totalOverallCollection - refundsSum;
+
         const methodColors: Record<string, string> = { upi: 'text-violet-400', card: 'text-blue-400', cash: 'text-emerald-400', razorpay: 'text-[#00ABAB]', net_banking: 'text-amber-400' };
-        const statusColors: Record<string, string> = { success: 'text-emerald-400 bg-emerald-500/10', pending: 'text-amber-400 bg-amber-500/10', failed: 'text-red-400 bg-red-500/10', cancelled: 'text-gray-400 bg-gray-500/10', refunded: 'text-purple-400 bg-purple-500/10' };
+        const statusColors: Record<string, string> = { success: 'text-emerald-400 bg-emerald-500/10', paid: 'text-emerald-400 bg-emerald-500/10', pending: 'text-amber-400 bg-amber-500/10', failed: 'text-red-400 bg-red-500/10', cancelled: 'text-gray-400 bg-gray-500/10', refunded: 'text-purple-400 bg-purple-500/10' };
 
         return (
           <div className="space-y-6">
-            <div className="glass-panel p-6 rounded-2xl border border-[#00ABAB]/30">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                <div>
-                  <h3 className="font-bold text-xl text-white flex items-center gap-2"><IndianRupee className="w-5 h-5 text-[#00ABAB]" /> Payment Reconciliation</h3>
-                  <p className="text-[#94A3B8] text-sm mt-1">All transactions across online and counter payments</p>
-                </div>
-                <div className="bg-[#0A0A0A] px-5 py-3 rounded-xl border border-[#00ABAB]/30 text-right">
-                  <p className="text-xs text-[#94A3B8] font-mono uppercase">Filtered Revenue</p>
-                  <p className="text-2xl font-black text-[#00ABAB]">₹{totalRevenue.toLocaleString('en-IN')}</p>
-                </div>
-              </div>
-
-              {/* Filters */}
-              <div className="flex flex-wrap gap-3 mb-4">
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
-                  <input
-                    type="text"
-                    placeholder="Search by name, booking ID, ticket ID..."
-                    value={paySearch}
-                    onChange={e => setPaySearch(e.target.value)}
-                    className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-[#94A3B8] focus:border-[#00ABAB] outline-none"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(['all', 'razorpay', 'upi', 'card', 'cash', 'pending', 'failed'] as const).map(f => (
-                    <button
-                      key={f}
-                      onClick={() => setPayFilter(f)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors capitalize ${payFilter === f ? 'bg-[#00ABAB] text-black' : 'bg-[#1C1C1C] text-[#94A3B8] hover:text-white'}`}
-                    >
-                      {f === 'all' ? 'All' : f === 'razorpay' ? 'Online (Razorpay)' : f.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Table */}
-              <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-[#1C1C1C] text-[#94A3B8] text-xs uppercase tracking-wider">
-                      <th className="px-4 py-3 text-left">Booking ID</th>
-                      <th className="px-4 py-3 text-left">Ticket ID</th>
-                      <th className="px-4 py-3 text-left">Customer</th>
-                      <th className="px-4 py-3 text-left">Activity</th>
-                      <th className="px-4 py-3 text-right">Amount</th>
-                      <th className="px-4 py-3 text-left">Method</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-left">Txn / Ref ID</th>
-                      <th className="px-4 py-3 text-left">Date &amp; Time</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#1C1C1C]">
-                    {filteredPayments.length === 0 ? (
-                      <tr><td colSpan={9} className="text-center py-10 text-[#94A3B8]">No payments found matching filters.</td></tr>
-                    ) : filteredPayments.map(pay => {
-                      const booking = bookings.find(b => b.id === pay.bookingId);
-                      const ticket = tickets.find(t => t.bookingId === pay.bookingId);
-                      return (
-                        <tr key={pay.id} className="hover:bg-[#1C1C1C]/50 transition-colors">
-                          <td className="px-4 py-3 font-mono text-[10px] text-[#94A3B8]">{pay.bookingId?.slice(-8) || '—'}</td>
-                          <td className="px-4 py-3 font-mono text-[10px] text-[#94A3B8]">{ticket?.id?.slice(-8) || '—'}</td>
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-white">{booking?.customerName || '—'}</p>
-                            <p className="text-[10px] text-[#94A3B8]">{booking?.customerPhone || booking?.customerEmail?.split('@')[0] || '—'}</p>
-                          </td>
-                          <td className="px-4 py-3 text-[#94A3B8] text-xs">{booking?.activityName?.split(' + ').map(a => a.split(' ').slice(-1)[0]).join(' + ') || '—'}</td>
-                          <td className="px-4 py-3 text-right font-bold text-white">₹{pay.amount.toLocaleString('en-IN')}</td>
-                          <td className="px-4 py-3">
-                            <span className={`font-bold uppercase text-xs ${methodColors[pay.method] || 'text-white'}`}>{pay.method}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${statusColors[pay.status] || 'text-white'}`}>{pay.status}</span>
-                          </td>
-                          <td className="px-4 py-3 font-mono text-[10px] text-[#94A3B8] max-w-[120px] truncate">
-                            {pay.razorpayPaymentId || pay.referenceNumber || pay.transactionId || '—'}
-                          </td>
-                          <td className="px-4 py-3 text-[10px] text-[#94A3B8] whitespace-nowrap">
-                            {new Date(pay.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-xs text-[#94A3B8] mt-3">{filteredPayments.length} records shown</p>
+            
+            {/* Tab Selector: Reports vs Reconciliation */}
+            <div className="flex border-b border-[#1C1C1C]">
+              <button 
+                onClick={() => setReconciliationTab('reports')}
+                className={`px-5 py-3 font-bold text-sm transition-all border-b-2 ${reconciliationTab === 'reports' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
+              >
+                Collection Reports
+              </button>
+              <button 
+                onClick={() => setReconciliationTab('reconciliation')}
+                className={`px-5 py-3 font-bold text-sm transition-all border-b-2 ${reconciliationTab === 'reconciliation' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
+              >
+                Gateway Reconciliation
+              </button>
             </div>
+
+            {reconciliationTab === 'reports' ? (
+              <>
+                {/* ── Collection Summaries Grid ── */}
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#00ABAB]/40 shadow-[0_0_15px_rgba(0,171,171,0.1)]">
+                    <p className="text-[10px] font-mono text-[#00ABAB] uppercase tracking-wider font-bold">Total Overall Collection</p>
+                    <p className="text-lg font-black text-[#00ABAB] mt-1">₹{totalOverallCollection.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Total Online Collection</p>
+                    <p className="text-lg font-black text-violet-400 mt-1">₹{totalOnlineCollection.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Total Counter Collection</p>
+                    <p className="text-lg font-black text-emerald-400 mt-1">₹{totalCounterCollection.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Counter Cash Collection</p>
+                    <p className="text-lg font-black text-emerald-400 mt-1">₹{counterCashCollection.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Counter UPI Collection</p>
+                    <p className="text-lg font-black text-violet-400 mt-1">₹{counterUpiCollection.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Counter Card POS Collection</p>
+                    <p className="text-lg font-black text-blue-400 mt-1">₹{counterCardCollection.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Failed Transactions</p>
+                    <p className="text-lg font-black text-red-400 mt-1">{failedCount}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Pending Transactions</p>
+                    <p className="text-lg font-black text-amber-400 mt-1">{pendingCount}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Refunds Processed</p>
+                    <p className="text-lg font-black text-purple-400 mt-1">₹{refundsSum.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#00ABAB]/30">
+                    <p className="text-[10px] font-mono text-[#00ABAB] uppercase tracking-wider font-bold">Net Collection (Overall - Refund)</p>
+                    <p className="text-lg font-black text-[#00ABAB] mt-1">₹{netCollection.toLocaleString('en-IN')}</p>
+                  </div>
+                </div>
+
+                {/* ── Transaction Log Card ── */}
+                <div className="glass-panel p-6 rounded-2xl border border-[#00ABAB]/30">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                    <div>
+                      <h3 className="font-bold text-lg text-white flex items-center gap-2"><IndianRupee className="w-5 h-5 text-[#00ABAB]" /> Transaction History Log</h3>
+                      <p className="text-[#94A3B8] text-xs mt-0.5">Search and filter cash, card, and UPI collections</p>
+                    </div>
+                  </div>
+
+                  {/* Filters */}
+                  <div className="flex flex-wrap gap-3 mb-4">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+                      <input
+                        type="text"
+                        placeholder="Search by name, invoice, booking ID, txn ref..."
+                        value={paySearch}
+                        onChange={e => setPaySearch(e.target.value)}
+                        className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-[#94A3B8] focus:border-[#00ABAB] outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(['all', 'cash', 'upi', 'card', 'pending', 'failed'] as const).map(f => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => setPayFilter(f)}
+                          className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors capitalize ${payFilter === f ? 'bg-[#00ABAB] text-black' : 'bg-[#1C1C1C] text-[#94A3B8] hover:text-white'}`}
+                        >
+                          {f === 'all' ? 'All Methods' : f.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Table */}
+                  <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-[#1C1C1C] text-[#94A3B8] text-xs uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left">Invoice ID</th>
+                          <th className="px-4 py-3 text-left">Booking ID</th>
+                          <th className="px-4 py-3 text-left">Customer</th>
+                          <th className="px-4 py-3 text-left">Activity</th>
+                          <th className="px-4 py-3 text-right">Amount</th>
+                          <th className="px-4 py-3 text-left">Method</th>
+                          <th className="px-4 py-3 text-left">Status</th>
+                          <th className="px-4 py-3 text-left">Txn / Ref ID</th>
+                          <th className="px-4 py-3 text-left">Date &amp; Time</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#1C1C1C]">
+                        {filteredPayments.length === 0 ? (
+                          <tr><td colSpan={9} className="text-center py-10 text-[#94A3B8]">No payments found matching filters.</td></tr>
+                        ) : filteredPayments.map(pay => {
+                          const booking = bookings.find(b => b.id === pay.bookingId);
+                          return (
+                            <tr key={pay.id} className="hover:bg-[#1C1C1C]/50 transition-colors text-xs">
+                              <td className="px-4 py-3 font-mono text-[10px] text-[#00ABAB] font-bold">{pay.invoice_id || `INV-B-${pay.bookingId?.slice(-6) || '—'}`}</td>
+                              <td className="px-4 py-3 font-mono text-[10px] text-[#94A3B8]">{pay.bookingId?.slice(-8) || '—'}</td>
+                              <td className="px-4 py-3">
+                                <p className="font-medium text-white">{booking?.customerName || '—'}</p>
+                                <p className="text-[9px] text-[#94A3B8]">{booking?.customerEmail || '—'}</p>
+                              </td>
+                              <td className="px-4 py-3 text-[#94A3B8] text-xs">{booking?.activityName || '—'}</td>
+                              <td className="px-4 py-3 text-right font-bold text-white">₹{pay.amount.toLocaleString('en-IN')}</td>
+                              <td className="px-4 py-3">
+                                <span className={`font-bold uppercase text-[10px] ${methodColors[pay.method] || 'text-white'}`}>{pay.method}</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${statusColors[pay.status] || 'text-white'}`}>{pay.status}</span>
+                              </td>
+                              <td className="px-4 py-3 font-mono text-[10px] text-[#94A3B8] max-w-[120px] truncate">
+                                {pay.razorpayPaymentId || pay.referenceNumber || pay.transactionId || '—'}
+                              </td>
+                              <td className="px-4 py-3 text-[10px] text-[#94A3B8] whitespace-nowrap">
+                                {new Date(pay.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-[#94A3B8] mt-3">{filteredPayments.length} records shown</p>
+                </div>
+              </>
+            ) : (
+              /* ── GATEWAY RECONCILIATION SIDE-BY-SIDE VIEW ── */
+              <div className="glass-panel p-6 rounded-2xl border border-[#00ABAB]/30 space-y-6">
+                <div>
+                  <h3 className="font-bold text-lg text-white flex items-center gap-2">🔄 Live Gateway Reconciliation</h3>
+                  <p className="text-[#94A3B8] text-xs mt-0.5">Compare local DEUCE billing records against actual gateway/terminal captures from Razorpay</p>
+                </div>
+
+                {isReconciling ? (
+                  <div className="text-center py-12 space-y-3">
+                    <Loader2 className="w-8 h-8 text-[#00ABAB] animate-spin mx-auto" />
+                    <p className="text-[#94A3B8] text-xs">Syncing logs and running verification comparisons...</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    {/* Local Billing Records */}
+                    <div className="space-y-3">
+                      <h4 className="font-bold text-sm text-[#94A3B8] border-b border-[#1c1c1c] pb-2">DEUCE Local Billing Database ({payments.length} txn)</h4>
+                      <div className="overflow-y-auto max-h-[400px] border border-[#1c1c1c] rounded-xl text-xs divide-y divide-[#1c1c1c]">
+                        {payments.map(local => {
+                          const hasMatch = gatewayPayments.some(g => g.id === local.gateway_payment_id || g.id === local.transactionId || g.notes?.bookingRef === local.bookingId);
+                          return (
+                            <div key={local.id} className="p-3 hover:bg-[#1C1C1C]/30 flex justify-between items-center transition-colors">
+                              <div>
+                                <p className="font-bold text-white font-mono text-[10px]">{local.invoice_id || 'COUNTER CASH'}</p>
+                                <p className="text-[10px] text-[#94A3B8] font-mono mt-0.5">Booking: {local.bookingId?.slice(-8) || '—'}</p>
+                                <p className="text-[9px] text-[#94A3B8] mt-0.5">TxID: {local.transactionId || '—'}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-white">₹{local.amount.toLocaleString('en-IN')}</p>
+                                <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold mt-1 ${hasMatch ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                                  {hasMatch ? 'Reconciled' : 'Local Only (Cash)'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Gateway API captures */}
+                    <div className="space-y-3">
+                      <h4 className="font-bold text-sm text-[#94A3B8] border-b border-[#1c1c1c] pb-2">Gateway/POS Captured API Transactions ({gatewayPayments.length} txn)</h4>
+                      <div className="overflow-y-auto max-h-[400px] border border-[#1c1c1c] rounded-xl text-xs divide-y divide-[#1c1c1c]">
+                        {gatewayPayments.length === 0 ? (
+                          <div className="p-6 text-center text-[#94A3B8]">No gateway API transactions loaded. Configure Razorpay secret key.</div>
+                        ) : gatewayPayments.map(gateway => {
+                          const localMatch = payments.find(p => p.gateway_payment_id === gateway.id || p.transactionId === gateway.id || p.bookingId === gateway.notes?.bookingRef);
+                          const isRefunded = gateway.status === 'refunded';
+                          return (
+                            <div key={gateway.id} className="p-3 hover:bg-[#1C1C1C]/30 flex justify-between items-center transition-colors">
+                              <div>
+                                <p className="font-bold text-white font-mono text-[10px]">{gateway.id}</p>
+                                <p className="text-[10px] text-[#94A3B8] font-mono mt-0.5">Ref Notes: {gateway.notes?.bookingRef || 'Direct/Online'}</p>
+                                <p className="text-[9px] text-[#94A3B8] mt-0.5">Method: {gateway.method?.toUpperCase()} | Status: {gateway.status?.toUpperCase()}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-[#00ABAB]">₹{(gateway.amount / 100).toLocaleString('en-IN')}</p>
+                                <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold mt-1 ${localMatch ? 'bg-emerald-500/10 text-emerald-400' : isRefunded ? 'bg-purple-500/10 text-purple-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                                  {localMatch ? 'Matching' : isRefunded ? 'Refunded' : 'Missing in Local'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       })()}
 
-      {/* ── PAYMENT SETTINGS TAB ── */}
       {activeTab === 'pay_settings' && (
         <div className="space-y-6">
           <div className="glass-panel p-6 rounded-2xl border border-[#00ABAB]/30">
             <h3 className="font-bold text-xl text-white flex items-center gap-2 mb-2"><Settings className="w-5 h-5 text-[#00ABAB]" /> Payment Configuration</h3>
-            <p className="text-[#94A3B8] text-sm mb-6">Configure payment methods for counter staff. Secret keys are never displayed to staff users.</p>
+            <p className="text-[#94A3B8] text-sm mb-6">Manage transaction credentials, terminal integrations, and active collection methods for counter operations.</p>
 
-            {/* Counter UPI ID */}
-            <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-4 mb-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Smartphone className="w-4 h-4 text-violet-400" />
-                <h4 className="font-bold text-white">Counter UPI ID</h4>
-              </div>
-              <p className="text-[#94A3B8] text-xs">This UPI ID is shown to customers at the counter as a QR code for scanning and payment.</p>
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  value={upiIdInput}
-                  onChange={e => setUpiIdInput(e.target.value)}
-                  placeholder="e.g. yourbusiness@upi"
-                  className="flex-1 bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl px-4 py-2.5 text-white outline-none font-mono"
-                />
-                <button onClick={handleSaveUpiId} className="px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 bg-[#00ABAB] text-black hover:bg-[#00ABAB]/80 transition-colors">
-                  {upiSaved ? <><Check className="w-4 h-4" /> Saved!</> : 'Save'}
-                </button>
-              </div>
-              {counterUpiId && (
-                <p className="text-xs text-emerald-400">✅ Active UPI ID: <span className="font-mono">{counterUpiId}</span></p>
-              )}
-            </div>
-
-            {/* Razorpay Config Info */}
-            <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-3">
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-[#00ABAB]" />
-                <h4 className="font-bold text-white">Razorpay (Online Payments)</h4>
-              </div>
-              <p className="text-[#94A3B8] text-xs">Razorpay keys are configured as environment variables on the server. They are never exposed in the browser.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                <div className="bg-[#1C1C1C] p-3 rounded-xl">
-                  <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-widest mb-1">Key ID (Public)</p>
-                  <p className="font-mono text-xs text-[#00ABAB]">{import.meta.env.VITE_RAZORPAY_KEY_ID || 'Not configured (VITE_RAZORPAY_KEY_ID)'}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* Left Column: API Gateways */}
+              <div className="space-y-6">
+                
+                {/* Razorpay API Config */}
+                <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-4">
+                  <div className="flex items-center gap-2 border-b border-[#1c1c1c] pb-3">
+                    <CreditCard className="w-5 h-5 text-[#00ABAB]" />
+                    <h4 className="font-bold text-white">Razorpay API Gateway</h4>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-[#94A3B8] mb-1 font-mono uppercase tracking-wider">Key ID (Public)</label>
+                      <input 
+                        type="text"
+                        value={razorpayKeyIdInput}
+                        onChange={e => setRazorpayKeyIdInput(e.target.value)}
+                        placeholder="rzp_test_..."
+                        className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl px-4 py-2.5 text-white outline-none font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#94A3B8] mb-1 font-mono uppercase tracking-wider">Key Secret (Obscured)</label>
+                      <input 
+                        type="password"
+                        value={razorpayKeySecretInput}
+                        onChange={e => setRazorpayKeySecretInput(e.target.value)}
+                        placeholder="••••••••••••••••"
+                        className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl px-4 py-2.5 text-white outline-none font-mono text-xs"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-[#1C1C1C] p-3 rounded-xl">
-                  <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-widest mb-1">Key Secret (Server-side)</p>
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-3 h-3 text-red-400" />
-                    <p className="font-mono text-xs text-red-400">Hidden — stored in server env vars only</p>
+
+                {/* Counter UPI Details */}
+                <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-4">
+                  <div className="flex items-center gap-2 border-b border-[#1c1c1c] pb-3">
+                    <Smartphone className="w-5 h-5 text-violet-400" />
+                    <h4 className="font-bold text-white">UPI QR Code Settings</h4>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-[#94A3B8] mb-1 font-mono uppercase tracking-wider">Counter UPI ID</label>
+                      <input 
+                        type="text"
+                        value={upiIdInput}
+                        onChange={e => setUpiIdInput(e.target.value)}
+                        placeholder="business@upi"
+                        className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl px-4 py-2.5 text-white outline-none font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#94A3B8] mb-1 font-mono uppercase tracking-wider">Display Business Name</label>
+                      <input 
+                        type="text"
+                        value={businessNameInput}
+                        onChange={e => setBusinessNameInput(e.target.value)}
+                        placeholder="Deuce Park"
+                        className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl px-4 py-2.5 text-white outline-none text-xs font-bold"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl mt-2">
-                <p className="text-amber-400 text-xs font-bold">⚠ To update Razorpay keys, go to your Vercel dashboard → Environment Variables and set RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_WEBHOOK_SECRET.</p>
+
+              {/* Right Column: POS Terminal & Methods */}
+              <div className="space-y-6">
+                
+                {/* Physical Card POS Terminal */}
+                <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-4">
+                  <div className="flex items-center gap-2 border-b border-[#1c1c1c] pb-3">
+                    <Terminal className="w-5 h-5 text-amber-400" />
+                    <h4 className="font-bold text-white">Physical POS Card Terminal</h4>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-[#94A3B8] mb-1 font-mono uppercase tracking-wider">POS Driver/Provider</label>
+                        <select 
+                          value={posProviderInput}
+                          onChange={e => setPosProviderInput(e.target.value)}
+                          className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl px-3 py-2.5 text-white outline-none text-xs"
+                        >
+                          <option value="mock_pos">Mock POS Emulator</option>
+                          <option value="razorpay_pos">Razorpay SmartPOS</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[#94A3B8] mb-1 font-mono uppercase tracking-wider">Terminal ID</label>
+                        <input 
+                          type="text"
+                          value={posTerminalIdInput}
+                          onChange={e => setPosTerminalIdInput(e.target.value)}
+                          placeholder="POS-TERM-001"
+                          className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl px-4 py-2.5 text-white outline-none font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#94A3B8] mb-1 font-mono uppercase tracking-wider">Terminal Custom Name</label>
+                      <input 
+                        type="text"
+                        value={posTerminalNameInput}
+                        onChange={e => setPosTerminalNameInput(e.target.value)}
+                        placeholder="Deuce Counter Terminal 1"
+                        className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl px-4 py-2.5 text-white outline-none text-xs"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-2 pt-2">
+                      <button 
+                        type="button" 
+                        onClick={handleTestPosConnection}
+                        disabled={isTestingPos}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-[#1C1C1C] hover:bg-[#2C2C2C] text-[#94A3B8] hover:text-white border border-white/5 transition-all flex items-center justify-center gap-1.5 self-start"
+                      >
+                        {isTestingPos ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
+                        Test POS Terminal Connection
+                      </button>
+                      {posTestResult && (
+                        <p className="text-xs font-mono p-2.5 bg-[#1C1C1C] border border-white/5 rounded-xl text-left text-white mt-1">{posTestResult}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Enabled Collection Methods */}
+                <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-3">
+                  <div className="flex items-center gap-2 border-b border-[#1c1c1c] pb-2">
+                    <Globe className="w-5 h-5 text-emerald-400" />
+                    <h4 className="font-bold text-white">Active Payment Channels</h4>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 py-2 text-xs">
+                    {[
+                      { key: 'CASH', label: 'Cash Payment' },
+                      { key: 'UPI', label: 'UPI Collect Requests' },
+                      { key: 'QR_CODE', label: 'Scan dynamic QR' },
+                      { key: 'CARD', label: 'Counter Cards (POS)' }
+                    ].map(method => {
+                      const isActive = enabledMethodsInput.includes(method.key);
+                      return (
+                        <label key={method.key} className="flex items-center gap-2.5 p-2 bg-[#1C1C1C]/40 border border-white/5 rounded-xl hover:bg-[#1C1C1C]/80 cursor-pointer transition-colors text-[#94A3B8] hover:text-white">
+                          <input 
+                            type="checkbox"
+                            checked={isActive}
+                            onChange={() => {
+                              if (isActive) {
+                                setEnabledMethodsInput(prev => prev.filter(x => x !== method.key));
+                              } else {
+                                setEnabledMethodsInput(prev => [...prev, method.key]);
+                              }
+                            }}
+                            className="w-4 h-4 accent-[#00ABAB] rounded cursor-pointer"
+                          />
+                          <span className="font-medium text-xs">{method.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Currency & Business */}
-            <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-3 mt-4">
-              <div className="flex items-center gap-2">
-                <IndianRupee className="w-4 h-4 text-[#00ABAB]" />
-                <h4 className="font-bold text-white">Business Settings</h4>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-xs text-[#94A3B8]">
-                <div className="bg-[#1C1C1C] p-3 rounded-xl">
-                  <p className="uppercase tracking-widest font-mono mb-1">Currency</p>
-                  <p className="text-white font-bold">INR (₹ Indian Rupee)</p>
-                </div>
-                <div className="bg-[#1C1C1C] p-3 rounded-xl">
-                  <p className="uppercase tracking-widest font-mono mb-1">Business Name</p>
-                  <p className="text-white font-bold">Deuce Adventure Park</p>
-                </div>
-              </div>
+            {/* Bottom Actions */}
+            <div className="border-t border-[#1C1C1C] pt-6 mt-6 flex justify-end gap-3">
+              <button 
+                type="button"
+                onClick={handleSavePaymentConfig}
+                className="btn-glow px-8 py-3 rounded-xl font-bold flex items-center gap-2"
+              >
+                {saveSuccess ? <><Check className="w-4 h-4" /> Configuration Saved!</> : 'Save Configuration'}
+              </button>
             </div>
           </div>
         </div>
@@ -1732,6 +2122,9 @@ export const AdminDashboard: React.FC = () => {
                   <option value="customer">Guest / Customer</option>
                   <option value="food_vendor">Food Vendor</option>
                   <option value="activity_staff">Activity Staff</option>
+                  <option value="ticket_counter_staff">Ticket Counter Staff</option>
+                  <option value="go_karting_manager">Go Karting Manager</option>
+                  <option value="go_karting_staff">Go Karting Staff</option>
                   <option value="super_admin">Super Admin</option>
                 </select>
               </div>

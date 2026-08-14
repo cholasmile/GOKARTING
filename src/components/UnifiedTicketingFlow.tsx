@@ -6,6 +6,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { QrCode, CreditCard, CheckCircle, User, Loader2, Calendar, Banknote, Smartphone, ArrowRight, AlertCircle, Printer, Check } from 'lucide-react';
 import TicketPass from './TicketPass';
 import { printTicket } from '../lib/printTicket';
+import { generateOfflineId } from '../lib/deviceSetup';
 
 interface Props {
   activities: Activity[];
@@ -23,11 +24,19 @@ const TIME_SLOTS = [
   '05:00 PM - 06:00 PM'
 ];
 
-type PaymentMethod = 'razorpay' | 'upi' | 'card' | 'cash';
+type PaymentMethod = 'cash' | 'upi' | 'qrcode' | 'card_tap' | 'card_insert' | 'card_swipe';
 type CounterStep = 'idle' | 'confirming' | 'confirmed';
 
 export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) => {
-  const { createBooking, markPaymentConfirmed, counterUpiId, currentUser } = useAppContext();
+  const { createBooking, markPaymentConfirmed, counterUpiId, posTerminalId, currentUser, payments, posProvider } = useAppContext();
+
+  const getPaymentDetails = (bookingId: string) => {
+    const p = payments?.find(pay => pay.bookingId === bookingId);
+    return {
+      paymentMethod: p?.method || p?.payment_method,
+      transactionId: p?.transactionId || p?.gateway_payment_id || p?.pos_transaction_id || p?.referenceNumber
+    };
+  };
 
   const [step, setStep] = useState(1);
   const [adultCount, setAdultCount] = useState(1);
@@ -35,12 +44,23 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [timeSlot, setTimeSlot] = useState(TIME_SLOTS[0]);
 
+  // Per-activity selected package: { [activityId]: packageId }
+  const [selectedPackages, setSelectedPackages] = useState<Record<string, string>>(() => {
+    const defaults: Record<string, string> = {};
+    activities.forEach(act => {
+      if (act.packages && act.packages.length > 0) {
+        defaults[act.id] = act.packages[0].id;
+      }
+    });
+    return defaults;
+  });
+
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [waiverSigned, setWaiverSigned] = useState(false);
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('razorpay');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(null);
   const [confirmedTicket, setConfirmedTicket] = useState<Ticket | null>(null);
@@ -51,10 +71,43 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
   const [amountReceived, setAmountReceived] = useState('');
   const [counterError, setCounterError] = useState<string | null>(null);
 
+  // New state variables for POS & verification
+  const [posStatus, setPosStatus] = useState<'Connected' | 'Disconnected' | 'Processing' | 'Payment Completed' | 'Payment Failed'>('Disconnected');
+  const [isPollingQRPayment, setIsPollingQRPayment] = useState(false);
+  const [tempBooking, setTempBooking] = useState<Booking | null>(null);
+  const [hasPrinted, setHasPrinted] = useState(false);
+
+  // Helper: get selected package object for an activity
+  const getSelectedPackage = (actId: string) => {
+    const act = activities.find(a => a.id === actId);
+    if (!act?.packages?.length) return null;
+    return act.packages.find(p => p.id === selectedPackages[actId]) || act.packages[0];
+  };
+
+  // Compute total from packages (if activity has packages) or adult/child pricing
+  const totalAmount = activities.reduce((sum, act) => {
+    const pkg = getSelectedPackage(act.id);
+    if (pkg) {
+      // Package is per-person, multiply by total guests
+      return sum + pkg.price * (adultCount + childCount);
+    }
+    return sum + (act.adultPrice || 0) * adultCount + (act.childPrice || 0) * childCount;
+  }, 0);
+
+  const totalQuantity = adultCount + childCount;
+
+  // Human-readable details string that includes package names
+  const buildDetailsString = () => {
+    const parts = activities.map(act => {
+      const pkg = getSelectedPackage(act.id);
+      if (pkg) return `${act.name}: ${pkg.name}`;
+      return `${act.name}: ${adultCount}x Adult${childCount > 0 ? `, ${childCount}x Child` : ''}`;
+    });
+    return parts.join(' | ');
+  };
+
   const totalAdultPrice = activities.reduce((sum, act) => sum + (act.adultPrice || 0), 0);
   const totalChildPrice = activities.reduce((sum, act) => sum + (act.childPrice || 0), 0);
-  const totalAmount = (adultCount * totalAdultPrice) + (childCount * totalChildPrice);
-  const totalQuantity = adultCount + childCount;
 
   const combinedActivityIds = activities.map(a => a.id).join(',');
   const combinedActivityNames = activities.map(a => a.name).join(' + ');
@@ -63,8 +116,89 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
   // UPI payment deep-link (standard UPI URI scheme)
   const upiLink = counterUpiId
-    ? `upi://pay?pa=${encodeURIComponent(counterUpiId)}&pn=${encodeURIComponent('Deuce Adventure Park')}&am=${totalAmount}&cu=INR&tn=${encodeURIComponent('Booking-' + combinedActivityNames)}`
+    ? `upi://pay?pa=${encodeURIComponent(counterUpiId)}&pn=${encodeURIComponent('Deuce Park')}&am=${totalAmount}&cu=INR&tn=${encodeURIComponent('Booking-' + combinedActivityNames)}`
     : '';
+
+  // ── Check POS Status on mount & interval
+  useEffect(() => {
+    const checkPosStatus = () => {
+      fetch('/api/pos/status')
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'Connected') {
+            setPosStatus('Connected');
+          } else {
+            setPosStatus('Disconnected');
+          }
+        })
+        .catch(() => setPosStatus('Disconnected'));
+    };
+
+    checkPosStatus();
+    const interval = setInterval(checkPosStatus, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Poll for UPI QR Payment status when QR displayed
+  useEffect(() => {
+    if (!isPollingQRPayment || !tempBooking) return;
+
+    let isSubscribed = true;
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/razorpay/check-payment/${tempBooking.id}`);
+        const data = await response.json();
+        
+        if (isSubscribed && data.status === 'Paid') {
+          clearInterval(interval);
+          setIsPollingQRPayment(false);
+          
+          const confirmResult = markPaymentConfirmed({
+            bookingId: tempBooking.id,
+            method: 'upi',
+            staffId: currentUser?.id,
+            razorpayOrderId: data.razorpayOrderId,
+            razorpayPaymentId: data.razorpayPaymentId,
+            bookingData: tempBooking
+          });
+
+          if (confirmResult.success) {
+            setConfirmedBooking(tempBooking);
+            setConfirmedTicket(confirmResult.ticket || null);
+            setCounterStep('confirmed');
+            setStep(4);
+
+            // Auto-print receipt
+            if (!hasPrinted) {
+              setHasPrinted(true);
+              setTimeout(() => {
+                printTicket({
+                  receiptId: `TKT-${tempBooking.id}`,
+                  activityName: combinedActivityNames,
+                  customerName: tempBooking.customerName,
+                  date: tempBooking.date,
+                  slot: tempBooking.timeSlot,
+                  items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+                  totalAmount: tempBooking.totalAmount,
+                  paymentStatus: 'paid',
+                  quantity: totalQuantity,
+                  paymentMethod: 'upi',
+                  transactionId: data.razorpayPaymentId
+                });
+              }, 500);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('QR status check failed', err);
+      }
+    }, 3000);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [isPollingQRPayment, tempBooking]);
 
   // ── STEP 3: Payment method reset when switching
   useEffect(() => {
@@ -72,110 +206,153 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
     setCardRef('');
     setAmountReceived('');
     setCounterError(null);
+    setIsPollingQRPayment(false);
+    setTempBooking(null);
+    setHasPrinted(false);
   }, [paymentMethod]);
 
-  // ── ONLINE RAZORPAY FLOW
-  const handleOnlinePayment = async () => {
+  // ── CASH PAYMENT FLOW
+  const handleCashPayment = async () => {
+    if (!guestName || !guestPhone) return alert('Please fill in guest name and phone number.');
     setIsProcessing(true);
-    try {
-      // 1. Create initial pending booking
-      const bookingResult = createBooking({
-        customerName: guestName,
-        customerEmail: guestEmail,
-        customerPhone: guestPhone,
-        activityId: combinedActivityIds,
-        activityName: combinedActivityNames,
-        date,
-        timeSlot,
-        ticketType: 'standard',
-        details: `${adultCount}x Adult, ${childCount}x Child`,
-        quantity: totalQuantity,
-        totalAmount,
-        paymentMethod: 'upi' // temp, will be updated after Razorpay
-      });
+    setCounterError(null);
 
-      if (typeof bookingResult === 'string') {
-        alert(bookingResult);
-        setIsProcessing(false);
-        return;
-      }
-
-      // 2. Create Razorpay order on backend
-      const orderRes = await fetch('/api/razorpay/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: totalAmount,
-          receipt: `rcpt_${bookingResult.booking.id}`,
-          bookingRef: bookingResult.booking.id
-        })
-      });
-
-      const orderData = await orderRes.json();
-      if (!orderRes.ok) throw new Error('Could not create Razorpay order');
-
-      // 3. Open Razorpay checkout
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: 'Deuce Adventure Park',
-        description: `Booking for ${combinedActivityNames}`,
-        order_id: orderData.id,
-        handler: async (response: any) => {
-          // 4. Verify payment on backend
-          const verifyRes = await fetch('/api/razorpay/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature
-            })
-          });
-
-          if (verifyRes.ok) {
-            // 5. Mark booking as paid with Razorpay IDs
-            markPaymentConfirmed({
-              bookingId: bookingResult.booking.id,
-              method: 'razorpay',
-              staffId: currentUser?.id,
-              razorpayOrderId: response.razorpay_order_id,
-              razorpayPaymentId: response.razorpay_payment_id
-            });
-
-            setConfirmedBooking({ ...bookingResult.booking, paymentStatus: 'paid', status: 'confirmed' });
-            setConfirmedTicket(bookingResult.ticket);
-            setStep(4);
-          } else {
-            alert('Payment verification failed. Please contact staff.');
-          }
-          setIsProcessing(false);
-        },
-        prefill: { name: guestName, email: guestEmail, contact: guestPhone },
-        theme: { color: '#00ABAB' },
-        modal: {
-          ondismiss: () => setIsProcessing(false)
-        }
-      };
-
-      const rzp = new (window as any).Razorpay(options);
-      rzp.on('payment.failed', (r: any) => {
-        alert(`Payment Failed: ${r.error.description}`);
-        setIsProcessing(false);
-      });
-      rzp.open();
-
-    } catch (err: any) {
-      console.error(err);
-      alert('Error initiating payment. Please try again.');
+    const received = parseFloat(amountReceived);
+    if (isNaN(received) || received < totalAmount) {
+      setCounterError(`Amount received (₹${received || 0}) is less than total due (₹${totalAmount}).`);
       setIsProcessing(false);
+      return;
     }
+
+    // 1. Create Booking as pending
+    const bookingResult = createBooking({
+      customerName: guestName,
+      customerEmail: guestEmail,
+      customerPhone: guestPhone,
+      activityId: combinedActivityIds,
+      activityName: combinedActivityNames,
+      date,
+      timeSlot,
+      ticketType: 'standard',
+      details: buildDetailsString(),
+      quantity: totalQuantity,
+      totalAmount,
+      paymentMethod: 'cash'
+    });
+
+    if (typeof bookingResult === 'string') {
+      setCounterError(bookingResult);
+      setIsProcessing(false);
+      return;
+    }
+
+    // 2. Mark as PAID in DB
+    const confirmResult = markPaymentConfirmed({
+      bookingId: bookingResult.booking.id,
+      method: 'cash',
+      staffId: currentUser?.id,
+      amountReceived: received,
+      bookingData: bookingResult.booking
+    });
+
+    if (confirmResult.success) {
+      setConfirmedBooking(bookingResult.booking);
+      setConfirmedTicket(confirmResult.ticket || null);
+      setCounterStep('confirmed');
+      setStep(4);
+
+      if (!hasPrinted) {
+        setHasPrinted(true);
+        setTimeout(() => {
+          printTicket({
+            receiptId: `TKT-${bookingResult.booking.id}`,
+            activityName: combinedActivityNames,
+            customerName: bookingResult.booking.customerName,
+            date: bookingResult.booking.date,
+            slot: bookingResult.booking.timeSlot,
+            items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+            totalAmount: bookingResult.booking.totalAmount,
+            paymentStatus: 'paid',
+            quantity: totalQuantity,
+            paymentMethod: 'cash'
+          });
+        }, 500);
+      }
+    } else {
+      setCounterError(confirmResult.message);
+    }
+    setIsProcessing(false);
   };
 
-  // ── COUNTER: Create pending booking then show confirmation UI
-  const handleCounterBooking = () => {
-    if (!guestName || !guestEmail) return alert('Please fill in guest name and email.');
+  // ── UPI MANUAL CONFIRM FLOW
+  const handleUpiCollectPayment = () => {
+    if (!guestName || !guestPhone) return alert('Please fill in guest name and phone number.');
+    setIsProcessing(true);
+    setCounterError(null);
+
+    // 1. Create booking (created as pending)
+    const bookingResult = createBooking({
+      customerName: guestName,
+      customerEmail: guestEmail,
+      customerPhone: guestPhone,
+      activityId: combinedActivityIds,
+      activityName: combinedActivityNames,
+      date,
+      timeSlot,
+      ticketType: 'standard',
+      details: buildDetailsString(),
+      quantity: totalQuantity,
+      totalAmount,
+      paymentMethod: 'upi'
+    });
+
+    if (typeof bookingResult === 'string') {
+      setCounterError(bookingResult);
+      setIsProcessing(false);
+      return;
+    }
+
+    // 2. Mark paid immediately upon staff confirm click
+    const confirmResult = markPaymentConfirmed({
+      bookingId: bookingResult.booking.id,
+      method: 'upi',
+      staffId: currentUser?.id,
+      bookingData: bookingResult.booking
+    });
+
+    if (confirmResult.success) {
+      setConfirmedBooking(bookingResult.booking);
+      setConfirmedTicket(confirmResult.ticket || null);
+      setCounterStep('confirmed');
+      setStep(4);
+
+      if (!hasPrinted) {
+        setHasPrinted(true);
+        setTimeout(() => {
+          printTicket({
+            receiptId: `TKT-${bookingResult.booking.id}`,
+            activityName: combinedActivityNames,
+            customerName: bookingResult.booking.customerName,
+            date: bookingResult.booking.date,
+            slot: bookingResult.booking.timeSlot,
+            items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+            totalAmount: bookingResult.booking.totalAmount,
+            paymentStatus: 'paid',
+            quantity: totalQuantity,
+            paymentMethod: 'upi'
+          });
+        }, 500);
+      }
+    } else {
+      setCounterError(confirmResult.message);
+    }
+    setIsProcessing(false);
+  };
+
+  // ── DYNAMIC QR CODE DISPLAY TRIGGER
+  const handleGenerateQR = () => {
+    if (!guestName || !guestPhone) return alert('Please fill in guest name and phone number.');
+    setIsProcessing(true);
     setCounterError(null);
 
     const bookingResult = createBooking({
@@ -187,78 +364,135 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
       date,
       timeSlot,
       ticketType: 'standard',
-      details: `${adultCount}x Adult, ${childCount}x Child`,
+      details: buildDetailsString(),
       quantity: totalQuantity,
       totalAmount,
-      paymentMethod: 'cash' // always starts as pending
+      paymentMethod: 'upi'
     });
 
     if (typeof bookingResult === 'string') {
       setCounterError(bookingResult);
+      setIsProcessing(false);
       return;
     }
 
-    setConfirmedBooking(bookingResult.booking);
-    setConfirmedTicket(bookingResult.ticket);
-    setCounterStep('confirming');
+    setTempBooking(bookingResult.booking);
+    setCounterStep('confirming'); // Render QR screen
+    setIsPollingQRPayment(true);
+    setIsProcessing(false);
   };
 
-  // ── COUNTER: Confirm payment after physical collection
-  const handleConfirmCounterPayment = () => {
-    if (!confirmedBooking) return;
-    setCounterError(null);
-
-    if (paymentMethod === 'cash') {
-      const received = parseFloat(amountReceived);
-      if (isNaN(received) || received < totalAmount) {
-        setCounterError(`Amount received (₹${received || 0}) is less than total due (₹${totalAmount}).`);
-        return;
-      }
-    }
-
-    if (paymentMethod === 'card' && !cardRef.trim()) {
-      setCounterError('Please enter the card transaction reference number.');
+  // ── CARD POS FLOW (TAP / INSERT / SWIPE)
+  const handleCardPayment = async (option: 'tap' | 'insert' | 'swipe') => {
+    if (!guestName || !guestPhone) return alert('Please fill in guest name and phone number.');
+    if (posStatus === 'Disconnected') {
+      alert('Card Terminal is disconnected. Please check POS settings.');
       return;
     }
 
-    const result = markPaymentConfirmed({
-      bookingId: confirmedBooking.id,
-      method: paymentMethod as 'upi' | 'card' | 'cash',
-      staffId: currentUser?.id,
-      referenceNumber: cardRef || undefined,
-      amountReceived: paymentMethod === 'cash' ? parseFloat(amountReceived) : undefined
-    });
+    setIsProcessing(true);
+    setCounterError(null);
+    setPosStatus('Processing');
 
-    if (result.success) {
-      setCounterStep('confirmed');
-      setConfirmedBooking(prev => prev ? { ...prev, paymentStatus: 'paid', status: 'confirmed' } : prev);
-      // Auto-print after a short delay
-      setTimeout(() => {
-        if (confirmedTicket && confirmedBooking) {
-          printTicket({
-            receiptId: `TKT-${confirmedBooking.id}`,
-            activityName: combinedActivityNames,
-            customerName: confirmedBooking.customerName,
-            date: confirmedBooking.date,
-            slot: confirmedBooking.timeSlot,
-            items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult, ₹${a.childPrice || 0}/Child` })),
-            totalAmount: confirmedBooking.totalAmount,
-            paymentStatus: 'paid',
-            quantity: totalQuantity
-          });
+    const refId = generateOfflineId('ref');
+
+    try {
+      const response = await fetch('/api/pos/charge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: totalAmount,
+          referenceId: refId,
+          terminalId: 'POS-TERM-001',
+          paymentOption: option
+        })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.status === 'Paid') {
+        setPosStatus('Payment Completed');
+
+        // Create booking
+        const bookingResult = createBooking({
+          customerName: guestName,
+          customerEmail: guestEmail,
+          customerPhone: guestPhone,
+          activityId: combinedActivityIds,
+          activityName: combinedActivityNames,
+          date,
+          timeSlot,
+          ticketType: 'standard',
+          details: buildDetailsString(),
+          quantity: totalQuantity,
+          totalAmount,
+          paymentMethod: 'card'
+        });
+
+        if (typeof bookingResult === 'string') {
+          setCounterError(bookingResult);
+          setPosStatus('Payment Failed');
+          setIsProcessing(false);
+          return;
         }
-      }, 600);
-    } else {
-      setCounterError(result.message);
+
+        // Confirm payment
+        const confirmResult = markPaymentConfirmed({
+          bookingId: bookingResult.booking.id,
+          method: 'card',
+          staffId: currentUser?.id,
+          referenceNumber: data.transactionId,
+          posTransactionId: data.transactionId,
+          terminalId: 'POS-TERM-001',
+          bookingData: bookingResult.booking
+        });
+
+        if (confirmResult.success) {
+          setConfirmedBooking(bookingResult.booking);
+          setConfirmedTicket(confirmResult.ticket || null);
+          setCounterStep('confirmed');
+          setStep(4);
+
+          if (!hasPrinted) {
+            setHasPrinted(true);
+            setTimeout(() => {
+              printTicket({
+                receiptId: `TKT-${bookingResult.booking.id}`,
+                activityName: combinedActivityNames,
+                customerName: bookingResult.booking.customerName,
+                date: bookingResult.booking.date,
+                slot: bookingResult.booking.timeSlot,
+                items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+                totalAmount: bookingResult.booking.totalAmount,
+                paymentStatus: 'paid',
+                quantity: totalQuantity,
+                paymentMethod: 'card',
+                transactionId: data.transactionId
+              });
+            }, 500);
+          }
+        } else {
+          setCounterError(confirmResult.message);
+        }
+      } else {
+        setPosStatus('Payment Failed');
+        setCounterError(data.failureReason || 'POS Card Payment was declined by bank.');
+      }
+    } catch (err) {
+      console.error(err);
+      setPosStatus('Payment Failed');
+      setCounterError('POS Terminal communication interrupted. Check local connection.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   // ── METHOD ICON
   const methodIcon = (m: PaymentMethod) => {
-    if (m === 'razorpay') return <CreditCard className="w-5 h-5" />;
-    if (m === 'upi') return <Smartphone className="w-5 h-5" />;
-    if (m === 'card') return <CreditCard className="w-5 h-5" />;
-    return <Banknote className="w-5 h-5" />;
+    if (m === 'qrcode') return <QrCode className="w-5 h-5 text-violet-400" />;
+    if (m === 'upi') return <Smartphone className="w-5 h-5 text-violet-400" />;
+    if (m.startsWith('card')) return <CreditCard className="w-5 h-5 text-[#00ABAB]" />;
+    return <Banknote className="w-5 h-5 text-emerald-400" />;
   };
 
   return (
@@ -295,30 +529,76 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                     {TIME_SLOTS.map(slot => <option key={slot} value={slot}>{slot}</option>)}
                   </select>
                 </div>
+
+                {/* Guest Count */}
+                <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                  <p className="text-[#94A3B8] font-mono text-sm mb-3">Guest Count</p>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm">Adults</span>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => setAdultCount(Math.max(1, adultCount - 1))} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">-</button>
+                      <span className="font-bold w-6 text-center">{adultCount}</span>
+                      <button onClick={() => setAdultCount(adultCount + 1)} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">+</button>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Children</span>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => setChildCount(Math.max(0, childCount - 1))} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">-</button>
+                      <span className="font-bold w-6 text-center">{childCount}</span>
+                      <button onClick={() => setChildCount(childCount + 1)} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">+</button>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-6">
-                <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] hover:border-[#00ABAB]/50 transition-colors">
-                  <div className="flex justify-between items-center mb-2">
-                    <span>Adult (₹{totalAdultPrice})</span>
-                    <div className="flex items-center gap-4">
-                      <button onClick={() => setAdultCount(Math.max(1, adultCount - 1))} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors">-</button>
-                      <span className="font-bold w-4 text-center">{adultCount}</span>
-                      <button onClick={() => setAdultCount(adultCount + 1)} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors">+</button>
+
+              {/* Right column: Package selection per activity + total */}
+              <div className="space-y-4">
+                <p className="text-[#94A3B8] font-mono text-sm uppercase tracking-widest">Activity Packages</p>
+                {activities.map(act => {
+                  const hasPkgs = act.packages && act.packages.length > 0;
+                  const selPkg = getSelectedPackage(act.id);
+                  return (
+                    <div key={act.id} className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] hover:border-[#00ABAB]/40 transition-colors">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-2 h-2 rounded-full bg-[#00ABAB]" />
+                        <span className="font-semibold text-sm text-white">{act.name}</span>
+                      </div>
+                      {hasPkgs ? (
+                        <>
+                          <label className="block text-[#94A3B8] text-xs mb-1 font-mono">Select Package</label>
+                          <select
+                            value={selectedPackages[act.id] || ''}
+                            onChange={e => setSelectedPackages(prev => ({ ...prev, [act.id]: e.target.value }))}
+                            className="w-full bg-[#111] border border-[#2C2C2C] rounded-lg p-2 text-sm focus:border-[#00ABAB] outline-none mb-2"
+                          >
+                            {act.packages!.map(pkg => (
+                              <option key={pkg.id} value={pkg.id}>
+                                {pkg.name} — ₹{pkg.price}/person
+                              </option>
+                            ))}
+                          </select>
+                          {selPkg && (
+                            <p className="text-xs text-[#94A3B8] italic">{selPkg.description}</p>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex justify-between text-sm text-[#94A3B8]">
+                          <span>Adult: ₹{act.adultPrice} · Child: ₹{act.childPrice}</span>
+                          <span>×{totalQuantity}</span>
+                        </div>
+                      )}
                     </div>
+                  );
+                })}
+
+                <div className="bg-[#00ABAB]/10 border border-[#00ABAB]/30 rounded-xl p-4">
+                  <div className="flex justify-between items-center text-sm text-[#94A3B8] mb-1">
+                    <span>Guests</span><span>{adultCount} Adult{adultCount !== 1 ? 's' : ''}{childCount > 0 ? ` + ${childCount} Child${childCount !== 1 ? 'ren' : ''}` : ''}</span>
                   </div>
-                </div>
-                <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] hover:border-[#00ABAB]/50 transition-colors">
-                  <div className="flex justify-between items-center mb-2">
-                    <span>Child (₹{totalChildPrice})</span>
-                    <div className="flex items-center gap-4">
-                      <button onClick={() => setChildCount(Math.max(0, childCount - 1))} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors">-</button>
-                      <span className="font-bold w-4 text-center">{childCount}</span>
-                      <button onClick={() => setChildCount(childCount + 1)} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors">+</button>
-                    </div>
+                  <div className="flex justify-between items-center text-xl font-bold text-[#00ABAB]">
+                    <span>Total</span><span>₹{totalAmount}</span>
                   </div>
-                </div>
-                <div className="text-xl font-bold text-right text-[#00ABAB] pt-4 border-t border-[#1C1C1C]">
-                  Total: ₹{totalAmount}
                 </div>
               </div>
             </div>
@@ -347,8 +627,8 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                 <input type="email" value={guestEmail} onChange={e => setGuestEmail(e.target.value)} placeholder="john@example.com" className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl p-3 focus:border-[#00ABAB] outline-none transition-colors" required />
               </div>
               <div className="col-span-2">
-                <label className="block text-[#94A3B8] mb-2 font-mono text-sm">Phone Number (Optional)</label>
-                <input type="tel" value={guestPhone} onChange={e => setGuestPhone(e.target.value)} placeholder="+91 98765 43210" className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl p-3 focus:border-[#00ABAB] outline-none transition-colors" />
+                <label className="block text-[#94A3B8] mb-2 font-mono text-sm">Phone Number *</label>
+                <input type="tel" value={guestPhone} onChange={e => setGuestPhone(e.target.value)} placeholder="+91 98765 43210" className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl p-3 focus:border-[#00ABAB] outline-none transition-colors" required />
               </div>
             </div>
 
@@ -363,7 +643,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
             <div className="flex justify-between items-center">
               <button onClick={() => setStep(1)} className="px-6 py-2 rounded-xl text-[#94A3B8] hover:text-white transition-colors bg-[#1C1C1C] hover:bg-[#2C2C2C]">Back</button>
-              <button onClick={() => setStep(3)} disabled={!guestName || !guestEmail || !waiverSigned} className="btn-glow px-8 py-2 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed">Proceed to Payment</button>
+              <button onClick={() => setStep(3)} disabled={!guestName || !guestPhone || !waiverSigned} className="btn-glow px-8 py-2 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed">Proceed to Payment</button>
             </div>
           </motion.div>
         )}
@@ -390,25 +670,65 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
             </div>
 
             {/* Payment Method Selector */}
-            <div>
-              <p className="text-xs text-[#94A3B8] font-mono uppercase tracking-widest mb-3">Payment Method</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {([
-                  { key: 'razorpay', label: 'Online (Razorpay)', desc: 'UPI / Card / Net Banking' },
-                  { key: 'upi', label: 'Counter UPI', desc: 'Scan & Pay QR' },
-                  { key: 'card', label: 'Counter Card', desc: 'POS Machine' },
-                  { key: 'cash', label: 'Cash', desc: 'Cash at counter' }
-                ] as { key: PaymentMethod; label: string; desc: string }[]).map(m => (
-                  <button
-                    key={m.key}
-                    onClick={() => setPaymentMethod(m.key)}
-                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-center ${paymentMethod === m.key ? 'bg-[#00ABAB]/10 border-[#00ABAB] text-[#00ABAB] shadow-[0_0_15px_rgba(0,171,171,0.2)]' : 'bg-[#0A0A0A] border-[#1C1C1C] text-[#94A3B8] hover:border-white/30 hover:text-white'}`}
-                  >
-                    {methodIcon(m.key)}
-                    <span className="font-bold text-[10px] uppercase tracking-wide leading-tight">{m.label}</span>
-                    <span className="text-[9px] opacity-70">{m.desc}</span>
-                  </button>
-                ))}
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs text-[#94A3B8] font-mono uppercase tracking-widest mb-3">Counter Payment Methods</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { key: 'cash', label: 'Cash', desc: 'Cash collection' },
+                    { key: 'upi', label: 'UPI Collect', desc: 'Manual request' },
+                    { key: 'qrcode', label: 'QR Code', desc: 'Scan dynamic QR' }
+                  ] as { key: PaymentMethod; label: string; desc: string }[]).map(m => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setPaymentMethod(m.key)}
+                      className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-center ${paymentMethod === m.key ? 'bg-[#00ABAB]/10 border-[#00ABAB] text-[#00ABAB] shadow-[0_0_15px_rgba(0,171,171,0.2)]' : 'bg-[#0A0A0A] border-[#1C1C1C] text-[#94A3B8] hover:border-white/30 hover:text-white'}`}
+                    >
+                      {methodIcon(m.key)}
+                      <span className="font-bold text-[10px] uppercase tracking-wide leading-tight mt-1">{m.label}</span>
+                      <span className="text-[9px] opacity-70 mt-0.5">{m.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs text-[#94A3B8] font-mono uppercase tracking-widest mb-3">Physical Card POS Integration</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { key: 'card_tap', label: 'Card – Tap', desc: 'NFC Contactless' },
+                    { key: 'card_insert', label: 'Card – Insert/Chip', desc: 'Chip insertion' },
+                    { key: 'card_swipe', label: 'Card – Swipe', desc: 'Magnetic stripe' }
+                  ] as { key: PaymentMethod; label: string; desc: string }[]).map(m => {
+                    const isSwipe = m.key === 'card_swipe';
+                    const isSwipeSupported = posProvider !== 'razorpay_pos'; // Only supported on mock_pos emulator
+                    const isDisabled = isSwipe && !isSwipeSupported;
+
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => setPaymentMethod(m.key)}
+                        className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-center relative ${isDisabled ? 'opacity-40 cursor-not-allowed bg-[#0A0A0A]/50 border-[#1c1c1c]' : paymentMethod === m.key ? 'bg-[#00ABAB]/10 border-[#00ABAB] text-[#00ABAB] shadow-[0_0_15px_rgba(0,171,171,0.2)]' : 'bg-[#0A0A0A] border-[#1C1C1C] text-[#94A3B8] hover:border-white/30 hover:text-white'}`}
+                      >
+                        {methodIcon(m.key)}
+                        <span className="font-bold text-[10px] uppercase tracking-wide leading-tight mt-1">{m.label}</span>
+                        <span className="text-[9px] opacity-70 mt-0.5">{isSwipe && !isSwipeSupported ? 'Not supported' : m.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs px-2 pt-2 border-t border-[#1c1c1c]">
+                <span className="text-[#94A3B8] font-mono">Terminal ID: {posTerminalId || 'POS-TERM-001'}</span>
+                <span className="flex items-center gap-1.5">
+                  POS Status: 
+                  <span className={`w-2.5 h-2.5 rounded-full inline-block ${posStatus === 'Connected' || posStatus === 'Payment Completed' ? 'bg-emerald-500 shadow-[0_0_8px_#10B981]' : posStatus === 'Processing' ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`}></span>
+                  <span className={`font-bold ${posStatus === 'Connected' || posStatus === 'Payment Completed' ? 'text-emerald-400' : posStatus === 'Processing' ? 'text-amber-400' : 'text-red-400'}`}>{posStatus}</span>
+                </span>
               </div>
             </div>
 
@@ -420,168 +740,195 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
               </div>
             )}
 
-            {/* ── RAZORPAY FLOW ── */}
-            {paymentMethod === 'razorpay' && counterStep === 'idle' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center space-y-4">
-                <p className="text-[#94A3B8] text-sm">Customer will be redirected to Razorpay to complete payment via UPI, Card, or Net Banking.</p>
-                <div className="flex justify-between mt-6">
+            {/* ── CASH FLOW ── */}
+            {paymentMethod === 'cash' && counterStep === 'idle' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-4">
+                  <div className="flex justify-between items-center text-sm text-[#94A3B8]">
+                    <span>Amount Due</span>
+                    <span className="text-white font-bold">₹{totalAmount}</span>
+                  </div>
+                  <div>
+                    <label className="block text-[#94A3B8] mb-2 font-mono text-xs uppercase tracking-widest">Amount Received (₹)</label>
+                    <input
+                      type="number"
+                      value={amountReceived}
+                      onChange={e => setAmountReceived(e.target.value)}
+                      min={totalAmount}
+                      step="1"
+                      placeholder={String(totalAmount)}
+                      className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl p-3 outline-none text-white text-lg font-bold"
+                    />
+                  </div>
+                  {amountReceived && parseFloat(amountReceived) >= totalAmount && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-between items-center p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                      <span className="text-emerald-400 font-mono text-sm">Change to Give</span>
+                      <span className="text-emerald-400 font-black text-xl">₹{change.toFixed(2)}</span>
+                    </motion.div>
+                  )}
+                </div>
+                <div className="flex justify-between">
                   <button onClick={() => setStep(2)} className="px-6 py-2 rounded-xl text-[#94A3B8] bg-[#1C1C1C] hover:bg-[#2C2C2C]">Back</button>
-                  <button onClick={handleOnlinePayment} disabled={isProcessing} className="btn-glow px-8 py-3 rounded-xl font-bold flex items-center gap-2">
-                    {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <QrCode className="w-5 h-5" />}
-                    {isProcessing ? 'Processing...' : `Pay ₹${totalAmount} with Razorpay`}
+                  <button 
+                    onClick={handleCashPayment} 
+                    disabled={isProcessing || !amountReceived || parseFloat(amountReceived) < totalAmount} 
+                    className="btn-glow px-8 py-3 rounded-xl font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Banknote className="w-4 h-4" />}
+                    Confirm Cash Received
                   </button>
                 </div>
               </motion.div>
             )}
 
-            {/* ── COUNTER UPI FLOW ── */}
-            {paymentMethod === 'upi' && (
+            {/* ── UPI COLLECT FLOW ── */}
+            {paymentMethod === 'upi' && counterStep === 'idle' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] text-center space-y-2">
+                  <Smartphone className="w-10 h-10 text-[#00ABAB] mx-auto" />
+                  <p className="text-[#94A3B8] text-sm">Collect Payment of <span className="text-white font-bold">₹{totalAmount}</span> via customer's UPI mobile collect request or static QR code.</p>
+                </div>
+                <div className="flex justify-between">
+                  <button onClick={() => setStep(2)} className="px-6 py-2 rounded-xl text-[#94A3B8] bg-[#1C1C1C] hover:bg-[#2C2C2C]">Back</button>
+                  <button onClick={handleUpiCollectPayment} disabled={isProcessing} className="btn-glow px-8 py-3 rounded-xl font-bold flex items-center gap-2">
+                    {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    Confirm Payment Received
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── DYNAMIC QR CODE SCAN & POLL FLOW ── */}
+            {paymentMethod === 'qrcode' && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
                 {counterStep === 'idle' && (
-                  <>
-                    <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-2xl">
-                      {counterUpiId ? (
-                        <>
-                          <QRCodeSVG value={upiLink} size={200} level="H" includeMargin={true} />
-                          <p className="text-black text-sm font-bold text-center">UPI ID: <span className="text-[#007B8B] font-mono">{counterUpiId}</span></p>
-                          <p className="text-black text-2xl font-black">₹{totalAmount}</p>
-                          <p className="text-gray-500 text-xs text-center">Ask customer to scan with any UPI app</p>
-                        </>
-                      ) : (
-                        <div className="text-center py-4">
-                          <AlertCircle className="w-10 h-10 text-amber-500 mx-auto mb-2" />
-                          <p className="text-black font-bold">UPI ID not configured</p>
-                          <p className="text-gray-500 text-sm mt-1">Admin must set the Counter UPI ID in Payment Settings.</p>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex justify-between">
-                      <button onClick={() => setStep(2)} className="px-6 py-2 rounded-xl text-[#94A3B8] bg-[#1C1C1C] hover:bg-[#2C2C2C]">Back</button>
-                      <button onClick={handleCounterBooking} className="btn-glow px-8 py-3 rounded-xl font-bold flex items-center gap-2">
-                        <Smartphone className="w-4 h-4" /> Customer Has Paid — Confirm
-                      </button>
-                    </div>
-                  </>
+                  <div className="text-center space-y-4 py-4">
+                    <p className="text-[#94A3B8] text-sm">Generate a dynamic UPI scan-and-pay QR code for exactly ₹{totalAmount}.</p>
+                    <button onClick={handleGenerateQR} disabled={isProcessing || !counterUpiId} className="btn-glow px-8 py-3 rounded-xl font-bold flex items-center gap-2 mx-auto">
+                      {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
+                      Generate QR Code
+                    </button>
+                    {!counterUpiId && (
+                      <p className="text-red-400 text-xs">⚠️ Admin must configure Counter UPI ID first in payment settings.</p>
+                    )}
+                  </div>
                 )}
-                {counterStep === 'confirming' && (
-                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center space-y-4 p-6 bg-[#0A0A0A] rounded-2xl border border-[#00ABAB]/30">
-                    <Smartphone className="w-12 h-12 text-[#00ABAB] mx-auto" />
-                    <p className="text-white font-bold text-lg">Confirm UPI Payment Received</p>
-                    <p className="text-[#94A3B8] text-sm">Verify the payment in your UPI app / bank account before confirming.</p>
-                    <div className="flex gap-3 justify-center">
-                      <button onClick={() => setCounterStep('idle')} className="px-6 py-2 rounded-xl bg-[#1C1C1C] text-[#94A3B8] hover:bg-[#2C2C2C]">Cancel</button>
-                      <button onClick={handleConfirmCounterPayment} className="btn-glow px-8 py-3 rounded-xl font-bold flex items-center gap-2">
-                        <Check className="w-4 h-4" /> Confirm Payment Received
+                
+                {counterStep === 'confirming' && tempBooking && (
+                  <div className="space-y-6">
+                    <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-2xl max-w-sm mx-auto shadow-2xl">
+                      <QRCodeSVG value={upiLink} size={200} level="H" includeMargin={true} />
+                      <p className="text-black text-sm font-bold text-center">UPI ID: <span className="text-[#007B8B] font-mono">{counterUpiId}</span></p>
+                      <p className="text-black text-2xl font-black">₹{totalAmount}</p>
+                      <div className="flex items-center gap-2 text-gray-500 text-xs font-bold animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00ABAB]" />
+                        Waiting for payment confirmation...
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center max-w-sm mx-auto">
+                      <button 
+                        onClick={() => {
+                          setIsPollingQRPayment(false);
+                          setCounterStep('idle');
+                        }} 
+                        className="px-5 py-2 rounded-xl bg-[#1c1c1c] text-[#94a3b8] text-sm hover:bg-[#2c2c2c] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setIsPollingQRPayment(false);
+                          const confirmResult = markPaymentConfirmed({
+                            bookingId: tempBooking.id,
+                            method: 'upi',
+                            staffId: currentUser?.id,
+                            bookingData: tempBooking
+                          });
+
+                          if (confirmResult.success) {
+                            setConfirmedBooking(tempBooking);
+                            setConfirmedTicket(confirmResult.ticket || null);
+                            setCounterStep('confirmed');
+                            setStep(4);
+
+                            if (!hasPrinted) {
+                              setHasPrinted(true);
+                              setTimeout(() => {
+                                printTicket({
+                                  receiptId: `TKT-${tempBooking.id}`,
+                                  activityName: combinedActivityNames,
+                                  customerName: tempBooking.customerName,
+                                  date: tempBooking.date,
+                                  slot: tempBooking.timeSlot,
+                                  items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+                                  totalAmount: tempBooking.totalAmount,
+                                  paymentStatus: 'paid',
+                                  quantity: totalQuantity,
+                                  paymentMethod: 'upi'
+                                });
+                              }, 500);
+                            }
+                          } else {
+                            setCounterError(confirmResult.message);
+                          }
+                        }} 
+                        className="bg-emerald-500 hover:bg-emerald-400 text-black px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                      >
+                        <Check className="w-4 h-4" /> Payment Received (Override)
                       </button>
                     </div>
-                  </motion.div>
+                  </div>
                 )}
               </motion.div>
             )}
 
-            {/* ── COUNTER CARD FLOW ── */}
-            {paymentMethod === 'card' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-                {counterStep === 'idle' && (
-                  <>
-                    <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-4">
-                      <div className="flex justify-between items-center text-lg font-bold">
-                        <span className="text-[#94A3B8]">Amount Due</span>
-                        <span className="text-[#00ABAB]">₹{totalAmount}</span>
-                      </div>
-                      <div>
-                        <label className="block text-[#94A3B8] mb-2 font-mono text-xs uppercase tracking-widest">Transaction Reference # (optional)</label>
-                        <input
-                          type="text"
-                          value={cardRef}
-                          onChange={e => setCardRef(e.target.value)}
-                          placeholder="e.g. TXN123456789"
-                          className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl p-3 outline-none text-white"
-                        />
-                      </div>
-                      <p className="text-[#94A3B8] text-xs">⚠ Do NOT enter card number, CVV, or PIN. Reference number only.</p>
-                    </div>
-                    <div className="flex justify-between">
-                      <button onClick={() => setStep(2)} className="px-6 py-2 rounded-xl text-[#94A3B8] bg-[#1C1C1C] hover:bg-[#2C2C2C]">Back</button>
-                      <button onClick={handleCounterBooking} className="btn-glow px-8 py-3 rounded-xl font-bold flex items-center gap-2">
-                        <CreditCard className="w-4 h-4" /> Card Payment Done — Confirm
-                      </button>
-                    </div>
-                  </>
-                )}
-                {counterStep === 'confirming' && (
-                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center space-y-4 p-6 bg-[#0A0A0A] rounded-2xl border border-[#00ABAB]/30">
-                    <CreditCard className="w-12 h-12 text-[#00ABAB] mx-auto" />
-                    <p className="text-white font-bold text-lg">Confirm Card Payment</p>
-                    {cardRef && <p className="text-[#00ABAB] font-mono text-sm">Ref: {cardRef}</p>}
-                    <p className="text-[#94A3B8] text-sm">Has the card payment of <strong className="text-white">₹{totalAmount}</strong> been approved on the POS terminal?</p>
-                    <div className="flex gap-3 justify-center">
-                      <button onClick={() => setCounterStep('idle')} className="px-6 py-2 rounded-xl bg-[#1C1C1C] text-[#94A3B8] hover:bg-[#2C2C2C]">Back</button>
-                      <button onClick={handleConfirmCounterPayment} className="btn-glow px-8 py-3 rounded-xl font-bold flex items-center gap-2">
-                        <Check className="w-4 h-4" /> Yes, Payment Confirmed
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </motion.div>
-            )}
+            {/* ── CARD POS FLOW ── */}
+            {paymentMethod.startsWith('card') && counterStep === 'idle' && (() => {
+              const selectedOption = paymentMethod === 'card_tap' ? 'tap'
+                                   : paymentMethod === 'card_insert' ? 'insert'
+                                   : 'swipe';
+              const modeLabel = selectedOption === 'tap' ? 'Card – Tap (NFC Contactless)'
+                              : selectedOption === 'insert' ? 'Card – Insert/Chip'
+                              : 'Card – Swipe (Magnetic Stripe)';
 
-            {/* ── COUNTER CASH FLOW ── */}
-            {paymentMethod === 'cash' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-                {counterStep === 'idle' && (
-                  <>
-                    <div className="bg-[#0A0A0A] p-5 rounded-xl border border-[#1C1C1C] space-y-4">
-                      <div className="flex justify-between items-center text-xl font-bold">
-                        <span className="text-[#94A3B8]">Amount Due</span>
-                        <span className="text-[#00ABAB]">₹{totalAmount}</span>
-                      </div>
+              return (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  {posStatus === 'Processing' ? (
+                    <div className="bg-[#0A0A0A] p-8 rounded-xl border border-amber-500/30 text-center space-y-4 animate-pulse">
+                      <Loader2 className="w-12 h-12 text-amber-500 animate-spin mx-auto" />
+                      <p className="text-amber-400 text-lg font-black tracking-wider uppercase animate-bounce">Awaiting Card Action on POS</p>
+                      <p className="text-[#94A3B8] text-xs">Please {selectedOption === 'tap' ? 'Tap NFC Card' : selectedOption === 'insert' ? 'Insert Chip Card' : 'Swipe Magnetic Card'} on terminal...</p>
+                    </div>
+                  ) : (
+                    <div className="bg-[#0A0A0A] p-6 rounded-xl border border-[#1C1C1C] text-center space-y-4">
+                      <CreditCard className="w-12 h-12 text-[#00ABAB] mx-auto" />
                       <div>
-                        <label className="block text-[#94A3B8] mb-2 font-mono text-xs uppercase tracking-widest">Amount Received (₹)</label>
-                        <input
-                          type="number"
-                          value={amountReceived}
-                          onChange={e => setAmountReceived(e.target.value)}
-                          min={totalAmount}
-                          step="1"
-                          placeholder={String(totalAmount)}
-                          className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl p-3 outline-none text-white text-lg font-bold"
-                        />
+                        <p className="text-sm font-bold text-white uppercase">{modeLabel}</p>
+                        <p className="text-[#94A3B8] text-xs mt-1">Ready to charge ₹{totalAmount} on POS terminal</p>
                       </div>
-                      {amountReceived && parseFloat(amountReceived) >= totalAmount && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-between items-center p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
-                          <span className="text-emerald-400 font-mono text-sm">Balance / Change</span>
-                          <span className="text-emerald-400 font-black text-xl">₹{change.toFixed(2)}</span>
-                        </motion.div>
+
+                      <button 
+                        onClick={() => handleCardPayment(selectedOption)}
+                        disabled={isProcessing || posStatus === 'Disconnected'}
+                        className="w-full py-3.5 bg-[#00ABAB] hover:bg-[#00ABAB]/80 text-[#0A0A0A] rounded-xl font-bold text-sm uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(0,171,171,0.15)]"
+                      >
+                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                        Process POS Charge
+                      </button>
+
+                      {posStatus === 'Disconnected' && (
+                        <p className="text-red-400 text-xs">⚠️ Terminal disconnected. Connect POS or select another payment method.</p>
                       )}
                     </div>
-                    <div className="flex justify-between">
-                      <button onClick={() => setStep(2)} className="px-6 py-2 rounded-xl text-[#94A3B8] bg-[#1C1C1C] hover:bg-[#2C2C2C]">Back</button>
-                      <button onClick={handleCounterBooking} disabled={!amountReceived || parseFloat(amountReceived) < totalAmount} className="btn-glow px-8 py-3 rounded-xl font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <Banknote className="w-4 h-4" /> Confirm Cash Received
-                      </button>
-                    </div>
-                  </>
-                )}
-                {counterStep === 'confirming' && (
-                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center space-y-4 p-6 bg-[#0A0A0A] rounded-2xl border border-emerald-500/30">
-                    <Banknote className="w-12 h-12 text-emerald-400 mx-auto" />
-                    <p className="text-white font-bold text-lg">Confirm Cash Collection</p>
-                    <div className="text-left space-y-2 max-w-xs mx-auto">
-                      <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Amount Due</span><span className="font-bold">₹{totalAmount}</span></div>
-                      <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Amount Received</span><span className="font-bold text-emerald-400">₹{parseFloat(amountReceived).toFixed(2)}</span></div>
-                      <div className="flex justify-between text-sm border-t border-white/10 pt-2"><span className="text-[#94A3B8]">Change to Give</span><span className="font-black text-[#00ABAB]">₹{change.toFixed(2)}</span></div>
-                    </div>
-                    <div className="flex gap-3 justify-center">
-                      <button onClick={() => setCounterStep('idle')} className="px-6 py-2 rounded-xl bg-[#1C1C1C] text-[#94A3B8] hover:bg-[#2C2C2C]">Back</button>
-                      <button onClick={handleConfirmCounterPayment} className="bg-emerald-500 hover:bg-emerald-400 text-black px-8 py-3 rounded-xl font-black flex items-center gap-2">
-                        <Check className="w-4 h-4" /> Cash Collected — Generate Ticket
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </motion.div>
-            )}
+                  )}
+                  
+                  <div className="flex justify-between">
+                    <button onClick={() => setStep(2)} disabled={posStatus === 'Processing'} className="px-6 py-2 rounded-xl text-[#94A3B8] bg-[#1C1C1C] hover:bg-[#2C2C2C] disabled:opacity-50">Back</button>
+                  </div>
+                </motion.div>
+              );
+            })()}
 
             {/* ── POST-CONFIRM SUCCESS (counter) ── */}
             {counterStep === 'confirmed' && confirmedBooking && confirmedTicket && (
@@ -593,17 +940,22 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   <TicketPass ticket={confirmedTicket} booking={confirmedBooking} />
                 </div>
                 <div className="flex gap-3 justify-center flex-wrap">
-                  <button onClick={() => printTicket({
-                    receiptId: `TKT-${confirmedBooking.id}`,
-                    activityName: combinedActivityNames,
-                    customerName: confirmedBooking.customerName,
-                    date: confirmedBooking.date,
-                    slot: confirmedBooking.timeSlot,
-                    items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
-                    totalAmount: confirmedBooking.totalAmount,
-                    paymentStatus: 'paid',
-                    quantity: totalQuantity
-                  })} className="btn-glow px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+                  <button onClick={() => {
+                    const pd = getPaymentDetails(confirmedBooking.id);
+                    printTicket({
+                      receiptId: `TKT-${confirmedBooking.id}`,
+                      activityName: combinedActivityNames,
+                      customerName: confirmedBooking.customerName,
+                      date: confirmedBooking.date,
+                      slot: confirmedBooking.timeSlot,
+                      items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+                      totalAmount: confirmedBooking.totalAmount,
+                      paymentStatus: 'paid',
+                      quantity: totalQuantity,
+                      paymentMethod: pd.paymentMethod,
+                      transactionId: pd.transactionId
+                    });
+                  }} className="btn-glow px-6 py-3 rounded-xl font-bold flex items-center gap-2">
                     <Printer className="w-4 h-4" /> Print Ticket
                   </button>
                   <button onClick={onCancel} className="bg-[#1C1C1C] hover:bg-[#2C2C2C] text-white px-6 py-3 rounded-xl font-bold">
@@ -615,29 +967,48 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
           </motion.div>
         )}
 
-        {/* ── STEP 4: Online Payment Success ── */}
-        {step === 4 && confirmedBooking && confirmedTicket && (
+        {/* ── STEP 4: Payment Success (QR auto-poll or online success) ── */}
+        {step === 4 && confirmedBooking && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel p-8 rounded-2xl text-center border border-[#00ABAB]/30 shadow-[0_0_30px_rgba(0,171,171,0.2)]">
             <CheckCircle className="w-16 h-16 text-emerald-400 mx-auto mb-6 drop-shadow-[0_0_15px_rgba(52,211,153,0.5)]" />
-            <h3 className="text-3xl font-black mb-2 text-emerald-400 tracking-tight">Payment Successful!</h3>
-            <p className="text-[#94A3B8] mb-8 text-lg"><span className="text-[#00ABAB] text-lg font-bold">{combinedActivityNames}</span> confirmed. Ticket sent to {guestEmail}.</p>
+            <h3 className="text-3xl font-black mb-2 text-emerald-400 tracking-tight">Booking Confirmed!</h3>
+            <p className="text-[#94A3B8] mb-2 text-lg"><span className="text-[#00ABAB] text-lg font-bold">{confirmedBooking.activityName}</span> — Payment Received ✓</p>
+            {guestEmail && <p className="text-[#94A3B8] text-sm mb-6">Confirmation sent to {guestEmail}.</p>}
 
-            <div className="max-w-md mx-auto mb-8 text-left">
-              <TicketPass ticket={confirmedTicket} booking={confirmedBooking} />
+            {/* Booking summary card */}
+            <div className="max-w-md mx-auto mb-6 text-left bg-[#0A0A0A] border border-[#1C1C1C] rounded-2xl p-5 space-y-2">
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Booking ID</span><span className="font-mono text-[#00ABAB]">#{confirmedBooking.id.slice(-8).toUpperCase()}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Guest</span><span className="font-bold text-white">{confirmedBooking.customerName}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Activity</span><span className="text-white">{confirmedBooking.activityName}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Date</span><span className="text-white">{confirmedBooking.date}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Time Slot</span><span className="text-white">{confirmedBooking.timeSlot}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Package / Details</span><span className="text-white text-right max-w-[60%]">{confirmedBooking.details}</span></div>
+              <div className="flex justify-between text-sm border-t border-[#1C1C1C] pt-2 mt-2"><span className="text-[#94A3B8]">Total Paid</span><span className="text-emerald-400 font-black text-lg">₹{confirmedBooking.totalAmount}</span></div>
             </div>
 
+            {confirmedTicket && (
+              <div className="max-w-md mx-auto mb-8 text-left">
+                <TicketPass ticket={confirmedTicket} booking={confirmedBooking} />
+              </div>
+            )}
+
             <div className="flex gap-3 justify-center flex-wrap">
-              <button onClick={() => printTicket({
-                receiptId: `TKT-${confirmedBooking.id}`,
-                activityName: combinedActivityNames,
-                customerName: confirmedBooking.customerName,
-                date: confirmedBooking.date,
-                slot: confirmedBooking.timeSlot,
-                items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
-                totalAmount: confirmedBooking.totalAmount,
-                paymentStatus: 'paid',
-                quantity: totalQuantity
-              })} className="btn-glow px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+              <button onClick={() => {
+                const pd = getPaymentDetails(confirmedBooking.id);
+                printTicket({
+                  receiptId: `TKT-${confirmedBooking.id}`,
+                  activityName: combinedActivityNames,
+                  customerName: confirmedBooking.customerName,
+                  date: confirmedBooking.date,
+                  slot: confirmedBooking.timeSlot,
+                  items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+                  totalAmount: confirmedBooking.totalAmount,
+                  paymentStatus: 'paid',
+                  quantity: totalQuantity,
+                  paymentMethod: pd.paymentMethod,
+                  transactionId: pd.transactionId
+                });
+              }} className="btn-glow px-6 py-3 rounded-xl font-bold flex items-center gap-2">
                 <Printer className="w-4 h-4" /> Print Ticket
               </button>
               <button onClick={onCancel} className="bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black text-white px-8 py-3 rounded-xl font-bold transition-all duration-300">
@@ -646,6 +1017,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
             </div>
           </motion.div>
         )}
+
       </AnimatePresence>
     </div>
   );

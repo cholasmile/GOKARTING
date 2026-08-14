@@ -22,12 +22,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
     } else if (order) {
       subtotal = order.totalAmount;
     }
-    const tax = subtotal * 0.12; // 12% GST/Adventure tax
-    const total = subtotal + tax;
-    return { subtotal, tax, total };
+    const sgst = subtotal * 0.09;
+    const cgst = subtotal * 0.09;
+    const total = subtotal + sgst + cgst;
+    return { subtotal, sgst, cgst, total };
   };
 
-  const { subtotal, tax, total } = getSubtotalAndTax();
+  const { subtotal, sgst, cgst, total } = getSubtotalAndTax();
 
   const handlePrint = () => {
     window.print();
@@ -67,9 +68,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
           {/* Park Branding */}
           <div className="flex justify-between items-start border-b border-[#00ABAB]/30 pb-4">
             <div>
-              <h4 className="font-extrabold text-base text-teal-950 font-sans tracking-tight">DEUCE ADVENTURE PARK</h4>
+              <h4 className="font-extrabold text-base text-teal-950 font-sans tracking-tight">DEUCE PARK</h4>
               <p className="text-[10px] text-[#9CA3AF] font-mono mt-0.5">1 Adventure Way, Food Street Wing</p>
-              <p className="text-[10px] text-[#9CA3AF] font-mono">GSTIN: 29AAAAA1111A1Z1</p>
+              <p className="text-[10px] text-[#9CA3AF] font-mono">GSTIN: 33INYPK7449Q1ZL</p>
             </div>
             <div className="text-right">
               <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Invoice ID</span>
@@ -163,8 +164,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
               <span className="text-[#FFFFFF]">${subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[#9CA3AF]">Adventure Tax / GST (12%):</span>
-              <span className="text-[#FFFFFF]">${tax.toFixed(2)}</span>
+              <span className="text-[#9CA3AF]">State GST / SGST (9%):</span>
+              <span className="text-[#FFFFFF]">₹{sgst.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#9CA3AF]">Central GST / CGST (9%):</span>
+              <span className="text-[#FFFFFF]">₹{cgst.toFixed(2)}</span>
             </div>
             <div className="flex justify-between border-t border-[#00ABAB]/30 pt-2 font-bold text-sm">
               <span className="text-[#FFFFFF] font-sans">Total Charged:</span>

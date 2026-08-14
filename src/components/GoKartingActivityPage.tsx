@@ -123,6 +123,11 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
     setErrorMessage(null);
     setSuccessBooking(null);
 
+    if (!customerName.trim() || !customerPhone.trim()) {
+      setErrorMessage('Full Name and Phone Number are required.');
+      return;
+    }
+
     if (bookingTotal <= 0) {
       setErrorMessage('Please select a valid tournament package.');
       return;
@@ -165,7 +170,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
       const orderResponse = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: bookingTotal, currency: 'USD' })
+        body: JSON.stringify({ amount: bookingTotal, currency: 'INR' })
       });
       const order = await orderResponse.json();
 
@@ -680,7 +685,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                 <div className="space-y-2">
                   <div className="space-y-2">
                     <label className="text-[#9CA3AF] font-black text-[9px] uppercase tracking-widest font-mono block text-center">Payment Gateway</label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <button type="button" onClick={() => setPaymentMethod('upi')} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'upi' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
                         <span className="font-black text-[10px] font-mono uppercase tracking-wider">UPI</span>
                       </button>
@@ -690,20 +695,17 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                       <button type="button" onClick={() => setPaymentMethod('net_banking')} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'net_banking' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
                         <span className="font-black text-[10px] font-mono uppercase tracking-wider">Bank</span>
                       </button>
-                      <button type="button" onClick={() => setPaymentMethod('cash')} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'cash' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
-                        <span className="font-black text-[10px] font-mono uppercase tracking-wider text-center">Cash at Counter</span>
-                      </button>
                     </div>
                   </div>
                 </div>
 
                 <div className="p-4 bg-[#050816] rounded-xl border border-white/10 flex justify-between items-center mt-5">
                   <span className="text-[#9CA3AF] font-black text-[10px] uppercase tracking-widest font-mono">Total</span>
-                  <span className="text-2xl font-black font-mono text-[#14F1D9] tracking-tighter">${bookingTotal.toFixed(2)}</span>
+                  <span className="text-2xl font-black font-mono text-[#14F1D9] tracking-tighter">₹{bookingTotal.toFixed(2)}</span>
                 </div>
 
                 <button type="submit" className="w-full py-4 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-[0_0_20px_rgba(20,241,217,0.3)] mt-4">
-                  {(paymentMethod === 'upi' || paymentMethod === 'card' || paymentMethod === 'net_banking') ? 'Pay with Razorpay' : 'Confirm Booking'}
+                  Pay with Razorpay
                 </button>
               </form>
             )}

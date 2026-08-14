@@ -91,7 +91,7 @@ export const ProtectedLayout: React.FC = () => {
       <NotificationToast />
 
       <footer className="border-t border-[#00ABAB]/30 bg-[#0A0A0A]/80 py-6 mt-12 text-center text-[10px] text-[#40E0D0] font-mono tracking-wider">
-        Deuce Racing & Adventure Park • Management Systems Platform
+        Deuce Racing & Deuce Park • Management Systems Platform
       </footer>
     </div>
   );

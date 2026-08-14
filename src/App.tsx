@@ -201,7 +201,7 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       </main>
       <NotificationToast />
       <footer className="border-t border-[#00ABAB]/30 bg-[#0A0A0A]/80 py-6 text-center text-[10px] text-[#40E0D0] font-mono tracking-wider">
-        Deuce Racing & Adventure Park • Premium Destination
+        Deuce Racing & Deuce Park • Premium Destination
       </footer>
     </div>
   );

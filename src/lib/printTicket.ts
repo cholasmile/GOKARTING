@@ -8,9 +8,14 @@ export interface PrintTicketOptions {
   totalAmount: number;
   paymentStatus: 'paid' | 'pending';
   quantity: number;
+  paymentMethod?: string;
+  transactionId?: string;
 }
 
 export function printTicket(opts: PrintTicketOptions) {
+  const sgst = opts.totalAmount * 0.09;
+  const cgst = opts.totalAmount * 0.09;
+  const grandTotal = opts.totalAmount + sgst + cgst;
   const {
     receiptId,
     activityName,
@@ -21,6 +26,8 @@ export function printTicket(opts: PrintTicketOptions) {
     totalAmount,
     paymentStatus,
     quantity,
+    paymentMethod,
+    transactionId,
   } = opts;
 
   const now = new Date().toLocaleString('en-IN');
@@ -160,8 +167,8 @@ export function printTicket(opts: PrintTicketOptions) {
 </head>
 <body>
   <div class="header">
-    <h1>DEUCE ADVENTURE PARK</h1>
-    <p>GSTIN: 22AAAAA0000A1Z5 &nbsp;&bull;&nbsp; Offline Billing Receipt</p>
+    <h1>DEUCE PARK</h1>
+    <p>GSTIN: 33INYPK7449Q1ZL &nbsp;&bull;&nbsp; Offline Billing Receipt</p>
   </div>
 
   <div class="meta">
@@ -174,16 +181,21 @@ export function printTicket(opts: PrintTicketOptions) {
     <tr><td class="td-label">Activity</td><td class="td-val">${activityName}</td></tr>
     ${itemRows}
     <tr><td class="td-label">Session</td><td class="td-val">${visitDate} @ ${slot}</td></tr>
-    <tr><td class="td-label">Payment</td><td class="td-val">${paymentStatus === 'pending' ? '⚠ Cash at Counter' : '✓ Paid'}</td></tr>
+    <tr><td class="td-label">Invoice ID</td><td class="td-val">${receiptId}</td></tr>
+    <tr><td class="td-label">Payment Status</td><td class="td-val" style="font-weight:900;text-transform:uppercase;">${paymentStatus === 'pending' ? 'PENDING' : 'PAID'}</td></tr>
+    ${paymentMethod ? `<tr><td class="td-label">Payment Method</td><td class="td-val" style="text-transform:uppercase;">${paymentMethod}</td></tr>` : ''}
+    ${transactionId ? `<tr><td class="td-label">Transaction Ref</td><td class="td-val font-mono" style="font-size:10px;">${transactionId}</td></tr>` : ''}
+    <tr><td class="td-label">State GST / SGST (9%)</td><td class="td-val">₹${sgst.toFixed(2)}</td></tr>
+    <tr><td class="td-label">Central GST / CGST (9%)</td><td class="td-val">₹${cgst.toFixed(2)}</td></tr>
   </table>
 
   <div class="total-row">
     <span>TOTAL</span>
-    <span>₹${totalAmount.toFixed(2)}${paymentStatus === 'pending' ? ' (Due)' : ''}</span>
+    <span>₹${grandTotal.toFixed(2)}${paymentStatus === 'pending' ? ' (Due)' : ''}</span>
   </div>
 
   <div class="receipt-footer">
-    Thank you for visiting Deuce Adventure Park! &nbsp;•&nbsp; Please keep this receipt.
+    Thank you for visiting Deuce Park! &nbsp;•&nbsp; Please keep this receipt.
     <br/>System generated offline receipt &nbsp;•&nbsp; ${now}
   </div>
 

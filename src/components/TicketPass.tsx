@@ -24,7 +24,7 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
         
         {/* Header */}
         <div className="text-center mb-6 border-b-2 border-dashed border-gray-300 pb-4">
-          <h1 className="text-2xl font-black uppercase tracking-tight text-black">Adventure Park</h1>
+          <h1 className="text-2xl font-black uppercase tracking-tight text-black">Deuce Park</h1>
           <p className="text-gray-500 text-sm font-mono mt-1">Official Entry Pass</p>
         </div>
 

@@ -126,7 +126,7 @@ export interface Payment {
   bookingId?: string;
   amount: number;
   method: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay';
-  status: 'success' | 'failed' | 'pending' | 'cancelled' | 'refunded';
+  status: 'success' | 'failed' | 'pending' | 'processing' | 'paid' | 'cancelled' | 'refunded';
   transactionId: string;
   timestamp: string;
   // Razorpay-specific
@@ -138,6 +138,29 @@ export interface Payment {
   changeGiven?: number;     // Cash change
   staffId?: string;         // Staff who confirmed the payment
   confirmedAt?: string;     // When payment was confirmed
+
+  // New fields from the DEUCE Billing request
+  invoice_id?: string;
+  customer_id?: string;
+  currency?: string;
+  payment_method?: string;
+  payment_status?: string;
+  gateway?: string;
+  gateway_order_id?: string;
+  gateway_payment_id?: string;
+  gateway_reference_id?: string;
+  pos_transaction_id?: string;
+  terminal_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  paid_at?: string;
+  failure_reason?: string;
+  refund_status?: string;
+  ticketId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  activityName?: string;
+  counterId?: string;
 }
 
 export interface NotificationLog {

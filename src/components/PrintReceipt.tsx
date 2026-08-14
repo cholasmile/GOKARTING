@@ -8,6 +8,8 @@ interface PrintReceiptProps {
   customerName: string;
   totalAmount: number;
   items: { name: string; qty: number; price: number }[];
+  paymentMethod?: string;
+  transactionId?: string;
 }
 
 export const PrintReceipt: React.FC<PrintReceiptProps> = ({ 
@@ -16,13 +18,15 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
   date, 
   customerName, 
   totalAmount, 
-  items 
+  items,
+  paymentMethod,
+  transactionId
 }) => {
   return (
     <div id={`print-receipt-${receiptId}`} className="hidden print:block w-full text-black bg-white p-4 font-mono text-sm">
       <div className="text-center border-b-2 border-black pb-2 mb-4">
-        <h2 className="text-xl font-black">DEUCE ADVENTURE PARK</h2>
-        <p className="text-xs">GSTIN: 22AAAAA0000A1Z5</p>
+        <h2 className="text-xl font-black">DEUCE PARK</h2>
+        <p className="text-xs">GSTIN: 33INYPK7449Q1ZL</p>
         <p className="text-xs">Offline Billing Receipt</p>
       </div>
 
@@ -48,7 +52,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
             <tr key={idx}>
               <td className="py-1">{item.name}</td>
               <td className="text-center py-1">{item.qty}</td>
-              <td className="text-right py-1">${item.price.toFixed(2)}</td>
+              <td className="text-right py-1">₹{item.price.toFixed(2)}</td>
             </tr>
           ))}
         </tbody>
@@ -56,8 +60,27 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
 
       <div className="border-t-2 border-black pt-2 flex justify-between font-bold text-sm">
         <span>TOTAL:</span>
-        <span>${totalAmount.toFixed(2)}</span>
+        <span>₹{totalAmount.toFixed(2)}</span>
       </div>
+      <div className="flex justify-between text-xs mt-1">
+        <span>State GST / SGST (9%):</span>
+        <span>₹{(totalAmount * 0.09).toFixed(2)}</span>
+      </div>
+      <div className="flex justify-between text-xs mt-0.5">
+        <span>Central GST / CGST (9%):</span>
+        <span>₹{(totalAmount * 0.09).toFixed(2)}</span>
+      </div>
+      <div className="border-t-2 border-black pt-2 mt-1 flex justify-between font-black text-sm">
+        <span>GRAND TOTAL:</span>
+        <span>₹{(totalAmount * 1.18).toFixed(2)}</span>
+      </div>
+
+      {(paymentMethod || transactionId) && (
+        <div className="border-t border-black/50 border-dotted mt-2 pt-2 text-[11px] space-y-0.5">
+          {paymentMethod && <p>PAYMENT METHOD: <span style={{ textTransform: 'uppercase' }}>{paymentMethod}</span></p>}
+          {transactionId && <p>TRANSACTION REF: {transactionId}</p>}
+        </div>
+      )}
       
       <div className="text-center mt-6">
         <p className="text-[10px]">Thank you for visiting!</p>

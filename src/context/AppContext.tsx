@@ -73,10 +73,15 @@ interface AppContextProps {
     details: string;
     quantity: number;
     totalAmount: number;
-    paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash';
-  }) => { booking: Booking; ticket: Ticket; payment: Payment } | string;
+    paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay';
+    paymentStatus?: 'pending' | 'processing' | 'paid' | 'failed' | 'cancelled' | 'refunded';
+    status?: 'confirmed' | 'reserved';
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+    gateway?: string;
+  }) => { booking: Booking; ticket?: Ticket; payment: Payment } | string;
 
-  markBookingAsPaid: (bookingId: string, staffName: string) => { success: boolean; message: string };
+  markBookingAsPaid: (bookingId: string, staffName: string) => { success: boolean; message: string; ticket?: Ticket };
 
   markPaymentConfirmed: (params: {
     bookingId: string;
@@ -86,11 +91,28 @@ interface AppContextProps {
     amountReceived?: number;
     razorpayOrderId?: string;
     razorpayPaymentId?: string;
-  }) => { success: boolean; message: string };
+    gateway?: string;
+    posTransactionId?: string;
+    terminalId?: string;
+    failureReason?: string;
+    paymentStatus?: 'paid' | 'failed' | 'cancelled' | 'refunded';
+  }) => { success: boolean; message: string; ticket?: Ticket };
 
-  // Counter UPI ID setting
+  // Payment settings & gateway details
   counterUpiId: string;
   setCounterUpiId: (id: string) => void;
+  razorpayKeyId: string;
+  posProvider: string;
+  posTerminalName: string;
+  posTerminalId: string;
+  enabledMethods: string;
+  setPosConfig: (config: {
+    posProvider?: string;
+    posTerminalName?: string;
+    posTerminalId?: string;
+    enabledMethods?: string;
+    razorpayKeyId?: string;
+  }) => void;
 
   scanTicket: (qrValue: string, staffName: string) => { success: boolean; message: string; ticket?: Ticket; isPendingPayment?: boolean; bookingId?: string };
 
@@ -209,7 +231,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   // Load standard states with localStorage persistence synchronously to prevent empty first-render crashes
-  const [users, setUsers] = useState<User[]>(() => localLoadHelper('ap_users', INITIAL_USERS));
+  const [users, setUsers] = useState<User[]>(() => {
+    const loaded = localLoadHelper('ap_users', INITIAL_USERS);
+    const merged = [...loaded];
+    INITIAL_USERS.forEach(initUser => {
+      if (!merged.some(u => u.email.toLowerCase() === initUser.email.toLowerCase())) {
+        merged.push(initUser);
+      }
+    });
+    return merged;
+  });
   const [activities, setActivities] = useState<Activity[]>(() => localLoadHelper('ap_activities', INITIAL_ACTIVITIES));
   const [vendors, setVendors] = useState<FoodVendor[]>(() => localLoadHelper('ap_vendors', INITIAL_FOOD_VENDORS));
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => localLoadHelper('ap_menu_items', INITIAL_MENU_ITEMS));
@@ -236,6 +267,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setCounterUpiIdState(id);
     localStorage.setItem('ap_counter_upi_id', id);
   };
+
+  const [razorpayKeyId, setRazorpayKeyId] = useState<string>('rzp_test_TI7eXiGfnUXpao');
+  const [posProvider, setPosProviderState] = useState<string>('mock_pos');
+  const [posTerminalName, setPosTerminalNameState] = useState<string>('Deuce POS Terminal 1');
+  const [posTerminalId, setPosTerminalIdState] = useState<string>('POS-TERM-001');
+  const [enabledMethods, setEnabledMethodsState] = useState<string>('CASH,UPI,QR_CODE,CARD');
+
+  const setPosConfig = (configData: {
+    posProvider?: string;
+    posTerminalName?: string;
+    posTerminalId?: string;
+    enabledMethods?: string;
+    razorpayKeyId?: string;
+  }) => {
+    if (configData.posProvider !== undefined) setPosProviderState(configData.posProvider);
+    if (configData.posTerminalName !== undefined) setPosTerminalNameState(configData.posTerminalName);
+    if (configData.posTerminalId !== undefined) setPosTerminalIdState(configData.posTerminalId);
+    if (configData.enabledMethods !== undefined) setEnabledMethodsState(configData.enabledMethods);
+    if (configData.razorpayKeyId !== undefined) setRazorpayKeyId(configData.razorpayKeyId);
+  };
+
+  useEffect(() => {
+    fetch('/api/config/payment')
+      .then(res => res.json())
+      .then(data => {
+        if (data.counterUpiId) setCounterUpiIdState(data.counterUpiId);
+        if (data.razorpayKeyId) setRazorpayKeyId(data.razorpayKeyId);
+        if (data.posProvider) setPosProviderState(data.posProvider);
+        if (data.posTerminalName) setPosTerminalNameState(data.posTerminalName);
+        if (data.posTerminalId) setPosTerminalIdState(data.posTerminalId);
+        if (data.enabledMethods) setEnabledMethodsState(data.enabledMethods);
+      })
+      .catch(err => console.error('[frontend] Failed to fetch payment config:', err));
+  }, []);
 
   // -----------------------------------------------------------------
   // SUPABASE INITIAL LOAD & AUTOMATIC SYNC
@@ -432,28 +497,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     details: string;
     quantity: number;
     totalAmount: number;
-    paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash';
+    paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay';
+    paymentStatus?: 'pending' | 'processing' | 'paid' | 'failed' | 'cancelled' | 'refunded';
+    status?: 'confirmed' | 'reserved';
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+    gateway?: string;
   }) => {
+    // Duplicate Protection: check if this Razorpay Order ID was already processed
+    if (data.razorpayOrderId) {
+      const existingPay = payments.find(p => p.razorpayOrderId === data.razorpayOrderId || p.gateway_order_id === data.razorpayOrderId);
+      if (existingPay) {
+        const existingBk = bookings.find(b => b.id === existingPay.bookingId);
+        const existingTkt = tickets.find(t => t.bookingId === existingPay.bookingId);
+        return { booking: existingBk!, ticket: existingTkt, payment: existingPay };
+      }
+    }
+
     // 1. Validation: Capacity checks
-    const targetActivity = activities.find(a => a.id === data.activityId);
+    // activityId may be a comma-separated list of IDs (counter multi-activity bookings)
+    const activityIds = data.activityId.split(',').map(id => id.trim()).filter(Boolean);
+    const primaryActivityId = activityIds[0];
+    const targetActivity = activities.find(a => a.id === primaryActivityId);
     if (!targetActivity) return 'Activity not found';
 
-    // Count existing bookings for this date and time slot
-    const existingBookedCount = bookings
-      .filter(b => b.activityId === data.activityId && b.date === data.date && b.timeSlot === data.timeSlot)
+    // Count existing confirmed/reserved bookings for this date only (daily limit, not per-slot)
+    const existingDailyCount = bookings
+      .filter(b => {
+        const bIds = b.activityId.split(',').map(id => id.trim());
+        return bIds.some(id => activityIds.includes(id)) &&
+               b.date === data.date &&
+               b.paymentStatus !== 'cancelled' &&
+               b.paymentStatus !== 'failed';
+      })
       .reduce((sum, b) => sum + b.quantity, 0);
 
-    // Limit check
-    const perSlotCapacity = Math.ceil(targetActivity.dailyLimit / TIME_SLOTS.length);
-    if (existingBookedCount + data.quantity > perSlotCapacity) {
-      return `Booking limit exceeded for this slot. Only ${perSlotCapacity - existingBookedCount} spots remaining.`;
+    // Use full daily limit — counter staff manage their own slot-by-slot flow
+    const dailyCapacity = targetActivity.dailyLimit;
+    if (existingDailyCount + data.quantity > dailyCapacity) {
+      const remaining = Math.max(0, dailyCapacity - existingDailyCount);
+      return `Daily capacity reached for ${targetActivity.name}. Only ${remaining} spot${remaining !== 1 ? 's' : ''} left today.`;
     }
 
     const bookingId = generateOfflineId('bk');
     const txId = generateOfflineId('tx');
     const timestamp = new Date().toISOString();
 
-    const isCash = data.paymentMethod === 'cash';
+    const isPending = data.paymentStatus === 'pending' || 
+                      (data.paymentStatus === undefined && (data.paymentMethod === 'cash' || data.paymentMethod === 'upi'));
+
+    const statusVal = data.status || (isPending ? 'reserved' : 'confirmed');
+    const paymentStatusVal = data.paymentStatus === 'processing' ? 'pending' : (data.paymentStatus || (isPending ? 'pending' : 'paid'));
 
     // 2. Create Booking
     const newBooking: Booking = {
@@ -469,65 +563,81 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       details: data.details,
       quantity: data.quantity,
       totalAmount: data.totalAmount,
-      paymentStatus: isCash ? 'pending' : 'paid',
-      status: isCash ? 'reserved' : 'confirmed',
+      paymentStatus: paymentStatusVal,
+      status: statusVal,
       bookingDate: timestamp
     };
 
-    // 3. Create Ticket
-    const newTicket: Ticket = {
-      id: `tkt-${bookingId}`,
-      bookingId: bookingId,
-      customerName: data.customerName,
-      customerEmail: data.customerEmail,
-      customerPhone: data.customerPhone,
-      activityId: data.activityId,
-      activityName: data.activityName,
-      date: data.date,
-      timeSlot: data.timeSlot,
-      ticketType: data.details,
-      quantity: data.quantity,
-      qrCodeValue: `adventure-park-ticket-${bookingId}`,
-      status: 'valid'
-    };
+    // 3. Create Ticket (Only if NOT pending!)
+    let newTicket: Ticket | undefined = undefined;
+    if (!isPending) {
+      newTicket = {
+        id: `tkt-${bookingId}`,
+        bookingId: bookingId,
+        customerName: data.customerName,
+        customerEmail: data.customerEmail,
+        customerPhone: data.customerPhone,
+        activityId: data.activityId,
+        activityName: data.activityName,
+        date: data.date,
+        timeSlot: data.timeSlot,
+        ticketType: data.details,
+        quantity: data.quantity,
+        qrCodeValue: `adventure-park-ticket-${bookingId}`,
+        status: 'valid'
+      };
+    }
 
     // 4. Create Payment
     const newPayment: Payment = {
       id: `pay-${Date.now()}`,
       bookingId: bookingId,
       amount: data.totalAmount,
-      method: data.paymentMethod,
-      status: isCash ? 'pending' : 'success',
+      method: data.paymentMethod === 'razorpay' ? 'razorpay' : data.paymentMethod,
+      status: isPending ? 'pending' : 'paid',
       transactionId: txId,
-      timestamp: timestamp
+      timestamp: timestamp,
+      // DEUCE specific fields
+      invoice_id: `INV-B-${bookingId}`,
+      customer_id: data.customerEmail,
+      currency: 'INR',
+      payment_method: data.paymentMethod.toUpperCase(),
+      payment_status: paymentStatusVal.toUpperCase(),
+      gateway: data.gateway || (data.paymentMethod === 'razorpay' ? 'Razorpay' : 'None'),
+      gateway_order_id: data.razorpayOrderId,
+      gateway_payment_id: data.razorpayPaymentId,
+      created_at: timestamp,
+      paid_at: isPending ? undefined : timestamp,
+      ticketId: `tkt-${bookingId}`,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      activityName: data.activityName,
+      counterId: currentUser && currentUser.role !== 'customer' ? 'counter_1' : 'online',
+      staffId: currentUser?.role !== 'customer' ? currentUser?.id : undefined
     };
 
     setBookings(prev => [newBooking, ...prev]);
-    setTickets(prev => [newTicket, ...prev]);
+    if (newTicket) {
+      setTickets(prev => [newTicket!, ...prev]);
+    }
     setPayments(prev => [newPayment, ...prev]);
 
     if (isSupabaseConfigured) {
       writeToLocalAndSync('bookings', 'insert', newBooking);
-    writeToLocalAndSync('tickets', 'insert', newTicket);
-    writeToLocalAndSync('payments', 'insert', newPayment);
+      if (newTicket) {
+        writeToLocalAndSync('tickets', 'insert', newTicket);
+      }
+      writeToLocalAndSync('payments', 'insert', newPayment);
     }
 
-    // 5. Trigger Notifications on multiple channels!
-    if (isCash) {
+    // 5. Trigger Notifications
+    if (isPending) {
       sendMockNotification(
         data.customerEmail,
         'Adventure Park Reservation Confirmed (Payment Pending)',
-        `Hi ${data.customerName}, your reservation for ${data.activityName} on ${data.date} (${data.timeSlot}) is reserved! Ticket ID: tkt-${bookingId}. Please arrive 30 minutes early to complete your payment of ₹${data.totalAmount} at the ticket counter.`,
+        `Hi ${data.customerName}, your reservation for ${data.activityName} on ${data.date} (${data.timeSlot}) is reserved! Ticket ID: tkt-${bookingId}. Please complete payment of ₹${data.totalAmount} at the ticket counter.`,
         'email'
       );
-      if (data.customerPhone) {
-        sendMockNotification(
-          data.customerPhone,
-          'Reservation Copy',
-          `Hi ${data.customerName}, your reservation for ${data.activityName} is saved! Ticket ID: tkt-${bookingId}. Payment of ₹${data.totalAmount} is pending at counter.`,
-          'sms'
-        );
-      }
     } else {
       sendMockNotification(
         data.customerEmail,
@@ -542,19 +652,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           `Hi ${data.customerName}, your ticket copy for ${data.activityName} is confirmed! Ticket ID: tkt-${bookingId}. Customer Name: ${data.customerName} | Mobile: ${data.customerPhone}. QR Code: adventure-park-ticket-${bookingId}. Show this at the counter.`,
           'sms'
         );
-        sendMockNotification(
-          data.customerPhone,
-          'Your QR Ticket is Ready',
-          `Hey ${data.customerName}! Get ready for adventure. Bring your ticket tkt-${bookingId} QR code to the entrance. Customer: ${data.customerName}, Mobile: ${data.customerPhone}.`,
-          'whatsapp'
-        );
       }
-      sendMockNotification(
-        data.customerEmail,
-        'Ticket Receipt',
-        `UPI/Card Payment of ₹${data.totalAmount} was processed successfully. Txn Ref: ${txId}.`,
-        'sms'
-      );
     }
 
     return { booking: newBooking, ticket: newTicket, payment: newPayment };
@@ -575,11 +673,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setBookings(prev => prev.map(b => b.id === bookingId ? updatedBooking : b));
 
+    let newTicket = tickets.find(t => t.bookingId === bookingId);
+    if (!newTicket) {
+      newTicket = {
+        id: `tkt-${bookingId}`,
+        bookingId: bookingId,
+        customerName: booking.customerName,
+        customerEmail: booking.customerEmail,
+        customerPhone: booking.customerPhone,
+        activityId: booking.activityId,
+        activityName: booking.activityName,
+        date: booking.date,
+        timeSlot: booking.timeSlot,
+        ticketType: booking.details,
+        quantity: booking.quantity,
+        qrCodeValue: `adventure-park-ticket-${bookingId}`,
+        status: 'valid'
+      };
+      setTickets(prev => [newTicket!, ...prev]);
+      if (isSupabaseConfigured) {
+        writeToLocalAndSync('tickets', 'insert', newTicket);
+      }
+    }
+
     if (payment) {
       const updatedPayment: Payment = {
         ...payment,
-        status: 'success',
-        timestamp: new Date().toISOString()
+        status: 'paid',
+        timestamp: new Date().toISOString(),
+        payment_status: 'PAID',
+        paid_at: new Date().toISOString()
       };
       setPayments(prev => prev.map(p => p.id === payment.id ? updatedPayment : p));
       
@@ -599,7 +722,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       'email'
     );
 
-    return { success: true, message: 'Payment successfully recorded.' };
+    return { success: true, message: 'Payment successfully recorded.', ticket: newTicket };
   };
 
   // Confirm counter payment (UPI / CARD / CASH) and mark booking as PAID
@@ -611,27 +734,98 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     amountReceived?: number;
     razorpayOrderId?: string;
     razorpayPaymentId?: string;
+    gateway?: string;
+    posTransactionId?: string;
+    terminalId?: string;
+    failureReason?: string;
+    paymentStatus?: 'paid' | 'failed' | 'cancelled' | 'refunded';
+    // Pass the freshly-created booking directly to avoid stale React state closure
+    bookingData?: Booking;
   }) => {
-    const booking = bookings.find(b => b.id === params.bookingId);
+    // Use passed-in bookingData first (avoids stale state when called immediately after createBooking)
+    const booking = params.bookingData || bookings.find(b => b.id === params.bookingId);
     if (!booking) return { success: false, message: 'Booking not found.' };
-    if (booking.paymentStatus === 'paid') return { success: true, message: 'Already paid.' };
 
     const now = new Date().toISOString();
+    const finalStatus = params.paymentStatus || 'paid';
 
     const updatedBooking: Booking = {
       ...booking,
-      paymentStatus: 'paid',
-      status: 'confirmed'
+      paymentStatus: finalStatus,
+      status: finalStatus === 'paid' ? 'confirmed' : 'reserved'
     };
     setBookings(prev => prev.map(b => b.id === params.bookingId ? updatedBooking : b));
 
-    // Update existing pending payment record
-    const existingPayment = payments.find(p => p.bookingId === params.bookingId && p.status === 'pending');
+    // Generate ticket if paid
+    let newTicket = tickets.find(t => t.bookingId === params.bookingId);
+    if (finalStatus === 'paid' && !newTicket) {
+      newTicket = {
+        id: `tkt-${params.bookingId}`,
+        bookingId: params.bookingId,
+        customerName: booking.customerName,
+        customerEmail: booking.customerEmail,
+        customerPhone: booking.customerPhone,
+        activityId: booking.activityId,
+        activityName: booking.activityName,
+        date: booking.date,
+        timeSlot: booking.timeSlot,
+        ticketType: booking.details,
+        quantity: booking.quantity,
+        qrCodeValue: `adventure-park-ticket-${params.bookingId}`,
+        status: 'valid'
+      };
+      setTickets(prev => [newTicket!, ...prev]);
+      if (isSupabaseConfigured) {
+        writeToLocalAndSync('tickets', 'insert', newTicket);
+      }
+    }
+
+    // Update existing payment record or insert a new one
+    const existingPayment = payments.find(p => p.bookingId === params.bookingId);
+    const methodVal = params.method === 'razorpay' ? 'razorpay' : params.method;
+
     if (existingPayment) {
       const updatedPayment: Payment = {
         ...existingPayment,
-        method: params.method,
-        status: 'success',
+        method: methodVal,
+        status: finalStatus === 'paid' ? 'paid' : (finalStatus as any),
+        timestamp: now,
+        referenceNumber: params.referenceNumber || existingPayment.referenceNumber,
+        amountReceived: params.amountReceived || existingPayment.amountReceived,
+        changeGiven: params.amountReceived != null ? Math.max(0, params.amountReceived - booking.totalAmount) : existingPayment.changeGiven,
+        staffId: params.staffId || existingPayment.staffId,
+        confirmedAt: now,
+        razorpayOrderId: params.razorpayOrderId || existingPayment.razorpayOrderId,
+        razorpayPaymentId: params.razorpayPaymentId || existingPayment.razorpayPaymentId,
+        
+        // DEUCE specific fields
+        payment_method: params.method.toUpperCase(),
+        payment_status: finalStatus.toUpperCase(),
+        gateway: params.gateway || existingPayment.gateway || (params.method === 'razorpay' ? 'Razorpay' : 'None'),
+        gateway_order_id: params.razorpayOrderId || existingPayment.gateway_order_id,
+        gateway_payment_id: params.razorpayPaymentId || existingPayment.gateway_payment_id,
+        gateway_reference_id: params.referenceNumber || existingPayment.gateway_reference_id,
+        pos_transaction_id: params.posTransactionId || existingPayment.pos_transaction_id,
+        terminal_id: params.terminalId || existingPayment.terminal_id,
+        updated_at: now,
+        paid_at: finalStatus === 'paid' ? now : undefined,
+        failure_reason: params.failureReason,
+        ticketId: `tkt-${params.bookingId}`,
+        customerName: booking.customerName,
+        customerPhone: booking.customerPhone,
+        activityName: booking.activityName,
+        counterId: (params.staffId || params.terminalId || params.posTransactionId || params.method === 'cash') ? 'counter_1' : 'online'
+      };
+      setPayments(prev => prev.map(p => p.id === existingPayment.id ? updatedPayment : p));
+      if (isSupabaseConfigured) writeToLocalAndSync('payments', 'update', updatedPayment);
+    } else {
+      const newPayment: Payment = {
+        id: `pay-${Date.now()}`,
+        bookingId: params.bookingId,
+        amount: booking.totalAmount,
+        method: methodVal,
+        status: finalStatus === 'paid' ? 'paid' : (finalStatus as any),
+        transactionId: params.referenceNumber || generateOfflineId('tx'),
         timestamp: now,
         referenceNumber: params.referenceNumber,
         amountReceived: params.amountReceived,
@@ -639,22 +833,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         staffId: params.staffId,
         confirmedAt: now,
         razorpayOrderId: params.razorpayOrderId,
-        razorpayPaymentId: params.razorpayPaymentId
+        razorpayPaymentId: params.razorpayPaymentId,
+        
+        // DEUCE specific fields
+        invoice_id: `INV-B-${params.bookingId}`,
+        customer_id: booking.customerEmail,
+        currency: 'INR',
+        payment_method: params.method.toUpperCase(),
+        payment_status: finalStatus.toUpperCase(),
+        gateway: params.gateway || (params.method === 'razorpay' ? 'Razorpay' : 'None'),
+        gateway_order_id: params.razorpayOrderId,
+        gateway_payment_id: params.razorpayPaymentId,
+        gateway_reference_id: params.referenceNumber,
+        pos_transaction_id: params.posTransactionId,
+        terminal_id: params.terminalId,
+        created_at: now,
+        updated_at: now,
+        paid_at: finalStatus === 'paid' ? now : undefined,
+        failure_reason: params.failureReason,
+        ticketId: `tkt-${params.bookingId}`,
+        customerName: booking.customerName,
+        customerPhone: booking.customerPhone,
+        activityName: booking.activityName,
+        counterId: (params.staffId || params.terminalId || params.posTransactionId || params.method === 'cash') ? 'counter_1' : 'online'
       };
-      setPayments(prev => prev.map(p => p.id === existingPayment.id ? updatedPayment : p));
-      if (isSupabaseConfigured) writeToLocalAndSync('payments', 'update', updatedPayment);
+      setPayments(prev => [newPayment, ...prev]);
+      if (isSupabaseConfigured) writeToLocalAndSync('payments', 'insert', newPayment);
     }
 
     if (isSupabaseConfigured) writeToLocalAndSync('bookings', 'update', updatedBooking);
 
-    sendMockNotification(
-      booking.customerEmail,
-      '✅ Payment Confirmed – Deuce Adventure Park',
-      `Hi ${booking.customerName}, your ${params.method.toUpperCase()} payment of ₹${booking.totalAmount} is confirmed. Booking ID: ${booking.id}. Enjoy your adventure!`,
-      'email'
-    );
+    if (finalStatus === 'paid') {
+      sendMockNotification(
+        booking.customerEmail,
+        '✅ Payment Confirmed – Deuce Adventure Park',
+        `Hi ${booking.customerName}, your ${params.method.toUpperCase()} payment of ₹${booking.totalAmount} is confirmed. Booking ID: ${booking.id}. Enjoy your adventure!`,
+        'email'
+      );
+    }
 
-    return { success: true, message: 'Payment confirmed successfully.' };
+    return { success: true, message: 'Payment confirmed successfully.', ticket: newTicket };
   };
 
   // Ticket Scanning Check-In
@@ -1053,6 +1271,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       counterUpiId,
       setCounterUpiId,
+      razorpayKeyId,
+      posProvider,
+      posTerminalName,
+      posTerminalId,
+      enabledMethods,
+      setPosConfig,
 
       addVendor,
       updateVendor,
