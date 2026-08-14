@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -195,7 +195,7 @@ export const FoodVendorDashboard: React.FC = () => {
       <div className="grid grid-cols-3 gap-4">
         <div className="p-4 glass-panel border border-[#00ABAB]/30 rounded-2xl  space-y-1">
           <span className="text-[10px] text-[#9CA3AF] font-bold uppercase tracking-wider font-mono block">Gross Stall Sales</span>
-          <div className="text-xl font-extrabold text-[#FFFFFF] font-mono">${sales.toFixed(2)}</div>
+          <div className="text-xl font-extrabold text-[#FFFFFF] font-mono">₹{sales.toFixed(2)}</div>
         </div>
         <div className="p-4 glass-panel border border-[#00ABAB]/30 rounded-2xl  space-y-1">
           <span className="text-[10px] text-[#9CA3AF] font-bold uppercase tracking-wider font-mono block">Order Volume</span>
@@ -301,7 +301,7 @@ export const FoodVendorDashboard: React.FC = () => {
                       </div>
                       <div className="text-right text-xs">
                         <span className="text-[10px] font-mono text-[#9CA3AF] block uppercase">Stall Share</span>
-                        <span className="font-bold text-[#FFFFFF] font-mono">${orderTotalForThisStall.toFixed(2)}</span>
+                        <span className="font-bold text-[#FFFFFF] font-mono">₹{orderTotalForThisStall.toFixed(2)}</span>
                       </div>
                     </div>
 
@@ -311,7 +311,7 @@ export const FoodVendorDashboard: React.FC = () => {
                       {stallItems.map((item, idx) => (
                         <div key={idx} className="flex justify-between text-xs font-semibold text-[#FFFFFF]">
                           <span>{item.quantity}x {item.name}</span>
-                          <span className="font-mono text-[#9CA3AF]">${(item.price * item.quantity).toFixed(2)}</span>
+                          <span className="font-mono text-[#9CA3AF]">₹{(item.price * item.quantity).toFixed(2)}</span>
                         </div>
                       ))}
 
@@ -427,7 +427,7 @@ export const FoodVendorDashboard: React.FC = () => {
                   </div>
 
                   <div className="flex items-center justify-between border-t border-[#00ABAB]/30 pt-3">
-                    <span className="font-bold text-sm font-mono text-[#FFFFFF]">${item.price.toFixed(2)}</span>
+                    <span className="font-bold text-sm font-mono text-[#FFFFFF]">₹{item.price.toFixed(2)}</span>
                     
                     <div className="flex items-center gap-2">
                       {/* Availability Switch */}

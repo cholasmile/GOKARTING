@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Activity, Ticket, Booking } from '../types';
+import { Activity, Ticket, Booking, Payment } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { QrCode, CreditCard, CheckCircle, User, Loader2, Calendar, Banknote, Smartphone, ArrowRight, AlertCircle, Printer, Check } from 'lucide-react';
 import TicketPass from './TicketPass';
+import { InvoiceModal } from './InvoiceModal';
 import { printTicket } from '../lib/printTicket';
 import { generateOfflineId } from '../lib/deviceSetup';
 
@@ -24,6 +25,39 @@ const TIME_SLOTS = [
   '05:00 PM - 06:00 PM'
 ];
 
+// Helper function to get available time slots based on selected date
+const getAvailableTimeSlots = (selectedDate: string): string[] => {
+  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  // If selected date is today, filter out past time slots
+  if (selectedDate === today) {
+    return TIME_SLOTS.filter(slot => {
+      const slotHour = parseInt(slot.split(':')[0]);
+      const isPM = slot.includes('PM') && !slot.includes('12:');
+      const isNoon = slot.includes('12:');
+      
+      let hour24 = slotHour;
+      if (isPM) hour24 = slotHour + 12;
+      if (isNoon && !slot.includes('12:00 PM')) hour24 = 12;
+      
+      return hour24 > currentHour;
+    });
+  }
+  
+  // For future dates, all slots are available
+  return TIME_SLOTS;
+};
+
+const isPastDateSelection = (selectedDate: string): boolean => {
+  if (!selectedDate) return true;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const selected = new Date(`${selectedDate}T00:00:00`);
+  return selected < today;
+};
+
 type PaymentMethod = 'cash' | 'upi' | 'qrcode' | 'card_tap' | 'card_insert' | 'card_swipe';
 type CounterStep = 'idle' | 'confirming' | 'confirmed';
 
@@ -42,7 +76,25 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
   const [adultCount, setAdultCount] = useState(1);
   const [childCount, setChildCount] = useState(0);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [timeSlot, setTimeSlot] = useState(TIME_SLOTS[0]);
+  const availableSlots = getAvailableTimeSlots(date);
+  const [timeSlot, setTimeSlot] = useState(availableSlots.length > 0 ? availableSlots[0] : '');
+
+  useEffect(() => {
+    if (!date || isPastDateSelection(date)) {
+      setTimeSlot('');
+      return;
+    }
+
+    const nextSlots = getAvailableTimeSlots(date);
+    if (nextSlots.length === 0) {
+      setTimeSlot('');
+      return;
+    }
+
+    if (!nextSlots.includes(timeSlot)) {
+      setTimeSlot(nextSlots[0]);
+    }
+  }, [date, timeSlot]);
 
   // Per-activity selected package: { [activityId]: packageId }
   const [selectedPackages, setSelectedPackages] = useState<Record<string, string>>(() => {
@@ -75,7 +127,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
   const [posStatus, setPosStatus] = useState<'Connected' | 'Disconnected' | 'Processing' | 'Payment Completed' | 'Payment Failed'>('Disconnected');
   const [isPollingQRPayment, setIsPollingQRPayment] = useState(false);
   const [tempBooking, setTempBooking] = useState<Booking | null>(null);
-  const [hasPrinted, setHasPrinted] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
   // Helper: get selected package object for an activity
   const getSelectedPackage = (actId: string) => {
@@ -163,30 +215,11 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
           });
 
           if (confirmResult.success) {
-            setConfirmedBooking(tempBooking);
+            setConfirmedBooking(confirmResult.booking || tempBooking);
             setConfirmedTicket(confirmResult.ticket || null);
             setCounterStep('confirmed');
+            setShowInvoiceModal(true);
             setStep(4);
-
-            // Auto-print receipt
-            if (!hasPrinted) {
-              setHasPrinted(true);
-              setTimeout(() => {
-                printTicket({
-                  receiptId: `TKT-${tempBooking.id}`,
-                  activityName: combinedActivityNames,
-                  customerName: tempBooking.customerName,
-                  date: tempBooking.date,
-                  slot: tempBooking.timeSlot,
-                  items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
-                  totalAmount: tempBooking.totalAmount,
-                  paymentStatus: 'paid',
-                  quantity: totalQuantity,
-                  paymentMethod: 'upi',
-                  transactionId: data.razorpayPaymentId
-                });
-              }, 500);
-            }
           }
         }
       } catch (err) {
@@ -208,7 +241,6 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
     setCounterError(null);
     setIsPollingQRPayment(false);
     setTempBooking(null);
-    setHasPrinted(false);
   }, [paymentMethod]);
 
   // ── CASH PAYMENT FLOW
@@ -256,28 +288,11 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
     });
 
     if (confirmResult.success) {
-      setConfirmedBooking(bookingResult.booking);
+      setConfirmedBooking(confirmResult.booking || bookingResult.booking);
       setConfirmedTicket(confirmResult.ticket || null);
       setCounterStep('confirmed');
       setStep(4);
-
-      if (!hasPrinted) {
-        setHasPrinted(true);
-        setTimeout(() => {
-          printTicket({
-            receiptId: `TKT-${bookingResult.booking.id}`,
-            activityName: combinedActivityNames,
-            customerName: bookingResult.booking.customerName,
-            date: bookingResult.booking.date,
-            slot: bookingResult.booking.timeSlot,
-            items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
-            totalAmount: bookingResult.booking.totalAmount,
-            paymentStatus: 'paid',
-            quantity: totalQuantity,
-            paymentMethod: 'cash'
-          });
-        }, 500);
-      }
+      setShowInvoiceModal(true);
     } else {
       setCounterError(confirmResult.message);
     }
@@ -321,28 +336,11 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
     });
 
     if (confirmResult.success) {
-      setConfirmedBooking(bookingResult.booking);
+      setConfirmedBooking(confirmResult.booking || bookingResult.booking);
       setConfirmedTicket(confirmResult.ticket || null);
       setCounterStep('confirmed');
       setStep(4);
-
-      if (!hasPrinted) {
-        setHasPrinted(true);
-        setTimeout(() => {
-          printTicket({
-            receiptId: `TKT-${bookingResult.booking.id}`,
-            activityName: combinedActivityNames,
-            customerName: bookingResult.booking.customerName,
-            date: bookingResult.booking.date,
-            slot: bookingResult.booking.timeSlot,
-            items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
-            totalAmount: bookingResult.booking.totalAmount,
-            paymentStatus: 'paid',
-            quantity: totalQuantity,
-            paymentMethod: 'upi'
-          });
-        }, 500);
-      }
+      setShowInvoiceModal(true);
     } else {
       setCounterError(confirmResult.message);
     }
@@ -448,29 +446,11 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
         });
 
         if (confirmResult.success) {
-          setConfirmedBooking(bookingResult.booking);
+          setConfirmedBooking(confirmResult.booking || bookingResult.booking);
           setConfirmedTicket(confirmResult.ticket || null);
           setCounterStep('confirmed');
           setStep(4);
-
-          if (!hasPrinted) {
-            setHasPrinted(true);
-            setTimeout(() => {
-              printTicket({
-                receiptId: `TKT-${bookingResult.booking.id}`,
-                activityName: combinedActivityNames,
-                customerName: bookingResult.booking.customerName,
-                date: bookingResult.booking.date,
-                slot: bookingResult.booking.timeSlot,
-                items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
-                totalAmount: bookingResult.booking.totalAmount,
-                paymentStatus: 'paid',
-                quantity: totalQuantity,
-                paymentMethod: 'card',
-                transactionId: data.transactionId
-              });
-            }, 500);
-          }
+          setShowInvoiceModal(true);
         } else {
           setCounterError(confirmResult.message);
         }
@@ -517,17 +497,33 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }} className="glass-panel p-8 rounded-2xl border border-[#00ABAB]/30 shadow-[0_0_30px_rgba(0,171,171,0.1)]">
             <h3 className="text-2xl font-bold mb-6 border-b border-[#1C1C1C] pb-4 text-[#00ABAB]">Activity Details</h3>
 
-            <div className="grid grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
               <div className="space-y-6">
                 <div>
                   <label className="block text-[#94A3B8] mb-2 font-mono text-sm">Select Date</label>
-                  <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl p-3 focus:border-[#00ABAB] outline-none" min={new Date().toISOString().split('T')[0]} />
+                  <input type="date" value={date} onChange={e => {
+                    const nextDate = e.target.value;
+                    if (isPastDateSelection(nextDate)) {
+                      setDate(nextDate);
+                      setTimeSlot('');
+                      return;
+                    }
+
+                    setDate(nextDate);
+                    const slots = getAvailableTimeSlots(nextDate);
+                    setTimeSlot(slots.length > 0 ? slots[0] : '');
+                  }} className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl p-3 focus:border-[#00ABAB] outline-none" min={new Date().toISOString().split('T')[0]} />
                 </div>
                 <div>
                   <label className="block text-[#94A3B8] mb-2 font-mono text-sm">Select Time Slot</label>
                   <select value={timeSlot} onChange={e => setTimeSlot(e.target.value)} className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl p-3 focus:border-[#00ABAB] outline-none">
-                    {TIME_SLOTS.map(slot => <option key={slot} value={slot}>{slot}</option>)}
+                    {availableSlots.length > 0 ? (
+                      availableSlots.map(slot => <option key={slot} value={slot}>{slot}</option>)
+                    ) : (
+                      <option value="">No slots available</option>
+                    )}
                   </select>
+                  {availableSlots.length === 0 && <p className="text-red-400 text-xs mt-1">No available slots for today. Please select a future date.</p>}
                 </div>
 
                 {/* Guest Count */}
@@ -605,7 +601,18 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
             <div className="flex justify-end gap-4 mt-8">
               <button onClick={onCancel} className="px-6 py-2 rounded-xl text-[#94A3B8] hover:text-white hover:bg-rose-500/10 transition-colors">Cancel</button>
-              <button onClick={() => setStep(2)} className="btn-glow px-8 py-2 rounded-xl font-bold">Continue</button>
+              <button
+                onClick={() => {
+                  if (isPastDateSelection(date) || !timeSlot || !availableSlots.includes(timeSlot)) {
+                    alert('Please select a valid future date and available time slot.');
+                    return;
+                  }
+                  setStep(2);
+                }}
+                className="btn-glow px-8 py-2 rounded-xl font-bold"
+              >
+                Continue
+              </button>
             </div>
           </motion.div>
         )}
@@ -617,14 +624,14 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
               <User className="w-6 h-6" /> Guest Details
             </h3>
 
-            <div className="grid grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6">
               <div>
                 <label className="block text-[#94A3B8] mb-2 font-mono text-sm">Full Name *</label>
                 <input type="text" value={guestName} onChange={e => setGuestName(e.target.value)} placeholder="John Doe" className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl p-3 focus:border-[#00ABAB] outline-none transition-colors" required />
               </div>
               <div>
-                <label className="block text-[#94A3B8] mb-2 font-mono text-sm">Email Address *</label>
-                <input type="email" value={guestEmail} onChange={e => setGuestEmail(e.target.value)} placeholder="john@example.com" className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl p-3 focus:border-[#00ABAB] outline-none transition-colors" required />
+                <label className="block text-[#94A3B8] mb-2 font-mono text-sm">Email Address</label>
+                <input type="email" value={guestEmail} onChange={e => setGuestEmail(e.target.value)} placeholder="john@example.com" className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl p-3 focus:border-[#00ABAB] outline-none transition-colors" />
               </div>
               <div className="col-span-2">
                 <label className="block text-[#94A3B8] mb-2 font-mono text-sm">Phone Number *</label>
@@ -851,24 +858,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                             setConfirmedTicket(confirmResult.ticket || null);
                             setCounterStep('confirmed');
                             setStep(4);
-
-                            if (!hasPrinted) {
-                              setHasPrinted(true);
-                              setTimeout(() => {
-                                printTicket({
-                                  receiptId: `TKT-${tempBooking.id}`,
-                                  activityName: combinedActivityNames,
-                                  customerName: tempBooking.customerName,
-                                  date: tempBooking.date,
-                                  slot: tempBooking.timeSlot,
-                                  items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
-                                  totalAmount: tempBooking.totalAmount,
-                                  paymentStatus: 'paid',
-                                  quantity: totalQuantity,
-                                  paymentMethod: 'upi'
-                                });
-                              }, 500);
-                            }
+                            setShowInvoiceModal(true);
                           } else {
                             setCounterError(confirmResult.message);
                           }
@@ -1019,6 +1009,14 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
         )}
 
       </AnimatePresence>
+
+      {/* Invoice Modal for confirmed bookings */}
+      {showInvoiceModal && confirmedBooking && (
+        <InvoiceModal
+          booking={confirmedBooking}
+          onClose={() => setShowInvoiceModal(false)}
+        />
+      )}
     </div>
   );
 };

@@ -103,6 +103,18 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleActivityImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      setActivityForm(prev => ({ ...prev, image: result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Payment report filters
   const [payFilter, setPayFilter] = useState<string>('all');
   const [paySearch, setPaySearch] = useState('');
@@ -266,7 +278,9 @@ export const AdminDashboard: React.FC = () => {
       .map(s => s.trim())
       .filter(s => s.length > 0);
 
-    const defaultImage = activityForm.image || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80';
+    const defaultImage = activityForm.image && activityForm.image.trim().length > 0
+      ? activityForm.image.trim()
+      : 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80';
 
     if (editingActivity) {
       updateActivity({
@@ -428,7 +442,7 @@ export const AdminDashboard: React.FC = () => {
                 <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Today's Revenue</span>
                 <span className="p-1.5 bg-[#0A0A0A] text-teal-700 rounded-lg"><TrendingUp className="h-4 w-4" /></span>
               </div>
-              <div className="text-xl font-extrabold text-[#40E0D0] font-mono">${totalRevenue.toFixed(2)}</div>
+              <div className="text-xl font-extrabold text-[#40E0D0] font-mono">₹{totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <p className="text-[10px] text-[#9CA3AF] font-mono">100% simulated live</p>
             </div>
 
@@ -446,7 +460,7 @@ export const AdminDashboard: React.FC = () => {
                 <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Activities share</span>
                 <span className="p-1.5 bg-[#0A0A0A] text-teal-700 rounded-lg"><Ticket className="h-4 w-4" /></span>
               </div>
-              <div className="text-xl font-extrabold text-[#FFFFFF] font-mono">${totalActivityRevenue.toFixed(2)}</div>
+              <div className="text-xl font-extrabold text-[#FFFFFF] font-mono">₹{totalActivityRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <p className="text-[10px] text-[#9CA3AF] font-mono">
                 {((totalActivityRevenue / (totalRevenue || 1)) * 100).toFixed(0)}% contribution
               </p>
@@ -457,7 +471,7 @@ export const AdminDashboard: React.FC = () => {
                 <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Food Street sales</span>
                 <span className="p-1.5 bg-[#0A0A0A] text-teal-700 rounded-lg"><Utensils className="h-4 w-4" /></span>
               </div>
-              <div className="text-xl font-extrabold text-[#FFFFFF] font-mono">${totalFoodRevenue.toFixed(2)}</div>
+              <div className="text-xl font-extrabold text-[#FFFFFF] font-mono">₹{totalFoodRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <p className="text-[10px] text-[#9CA3AF] font-mono">
                 {((totalFoodRevenue / (totalRevenue || 1)) * 100).toFixed(0)}% contribution
               </p>
@@ -547,7 +561,7 @@ export const AdminDashboard: React.FC = () => {
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(v) => `?${v}`} />
+                        <Tooltip formatter={(v) => `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
                       </PieChart>
                     </ResponsiveContainer>
                   )}
@@ -557,7 +571,7 @@ export const AdminDashboard: React.FC = () => {
                     <div key={idx} className="flex items-center gap-2 text-xs font-sans text-[#9CA3AF]">
                       <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                       <span className="truncate max-w-[120px] font-semibold">{item.name}</span>
-                      <span className="font-bold text-[#FFFFFF] font-mono">${item.value.toFixed(2)}</span>
+                      <span className="font-bold text-[#FFFFFF] font-mono">₹{item.value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   ))}
                 </div>
@@ -577,7 +591,7 @@ export const AdminDashboard: React.FC = () => {
                       <span className="font-semibold text-[#FFFFFF]">{b.customerName}</span> booked <span className="font-semibold text-[#FFFFFF]">{b.activityName}</span>
                       <div className="text-[#9CA3AF] font-mono text-[9px] mt-0.5">{b.details} â€¢ Slot: {b.timeSlot}</div>
                     </div>
-                    <span className="font-bold text-[#FFFFFF] font-mono">${b.totalAmount}</span>
+                    <span className="font-bold text-[#FFFFFF] font-mono">₹{b.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 ))}
                 {orders.slice(0, 2).map(o => (
@@ -586,7 +600,7 @@ export const AdminDashboard: React.FC = () => {
                       <span className="font-semibold text-[#FFFFFF]">{o.customerName}</span> ordered food <span className="text-[#9CA3AF]">({o.items.length} items)</span>
                       <div className="text-[#9CA3AF] font-mono text-[9px] mt-0.5">Status: <span className="text-[#40E0D0] font-bold capitalize">{o.status}</span></div>
                     </div>
-                    <span className="font-bold text-[#40E0D0] font-mono">${o.totalAmount}</span>
+                    <span className="font-bold text-[#40E0D0] font-mono">₹{o.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 ))}
               </div>
@@ -656,11 +670,11 @@ export const AdminDashboard: React.FC = () => {
                   <div className="space-y-2 border-t border-[#00ABAB]/30 pt-3">
                     <div className="flex justify-between text-xs text-[#9CA3AF] font-mono">
                       <span>Adult Ticket:</span>
-                      <span className="font-bold text-[#FFFFFF]">${act.adultPrice || 'N/A'}</span>
+                      <span className="font-bold text-[#FFFFFF]">₹{act.adultPrice ? act.adultPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</span>
                     </div>
                     <div className="flex justify-between text-xs text-[#9CA3AF] font-mono">
                       <span>Child Ticket:</span>
-                      <span className="font-bold text-[#FFFFFF]">${act.childPrice || 'N/A'}</span>
+                      <span className="font-bold text-[#FFFFFF]">₹{act.childPrice ? act.childPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</span>
                     </div>
                     <div className="flex justify-between text-xs text-[#9CA3AF] font-mono">
                       <span>Daily Limit:</span>
@@ -893,17 +907,17 @@ export const AdminDashboard: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="p-4 glass-panel border border-[#00ABAB]/30 rounded-2xl  space-y-1">
               <div className="text-[10px] text-[#9CA3AF] uppercase font-bold font-mono">Gross Earnings</div>
-              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">${totalRevenue.toFixed(2)}</div>
+              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">₹{totalRevenue.toFixed(2)}</div>
               <div className="text-[10px] text-slate-400">Activities + Food Street total</div>
             </div>
             <div className="p-4 glass-panel border border-[#00ABAB]/30 rounded-2xl  space-y-1">
               <div className="text-[10px] text-[#9CA3AF] uppercase font-bold font-mono">Simulated GST Liability</div>
-              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">${(totalRevenue * 0.12).toFixed(2)}</div>
+              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">₹{(totalRevenue * 0.12).toFixed(2)}</div>
               <div className="text-[10px] text-teal-700 font-semibold">Calculated at standard 12% GST</div>
             </div>
             <div className="p-4 glass-panel border border-[#00ABAB]/30 rounded-2xl  space-y-1">
               <div className="text-[10px] text-[#9CA3AF] uppercase font-bold font-mono">Net Retained Yield</div>
-              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">${(totalRevenue * 0.88).toFixed(2)}</div>
+              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">₹{(totalRevenue * 0.88).toFixed(2)}</div>
               <div className="text-[10px] text-slate-400">Post simulated tax reserve</div>
             </div>
           </div>
@@ -940,7 +954,7 @@ export const AdminDashboard: React.FC = () => {
                           <div className="text-[9px] text-[#9CA3AF] mt-0.5">{b.activityName}</div>
                         </td>
                       <td className="p-3 font-mono text-[#9CA3AF]">{b.date}</td>
-                      <td className="p-3 text-right font-mono font-bold text-[#FFFFFF]">${b.totalAmount.toFixed(2)}</td>
+                      <td className="p-3 text-right font-mono font-bold text-[#FFFFFF]">₹{b.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
                   {orders.map(o => (
@@ -956,7 +970,7 @@ export const AdminDashboard: React.FC = () => {
                         <div className="text-[9px] text-[#9CA3AF]">{o.items.length} items</div>
                       </td>
                       <td className="p-3 font-mono text-[#9CA3AF]">{o.createdAt.split('T')[0]}</td>
-                      <td className="p-3 text-right font-mono font-bold text-[#FFFFFF]">${o.totalAmount.toFixed(2)}</td>
+                      <td className="p-3 text-right font-mono font-bold text-[#FFFFFF]">₹{o.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1776,12 +1790,14 @@ export const AdminDashboard: React.FC = () => {
       {/* ----------------------------------------------------------------- */}
       {isActivityModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <form onSubmit={handleSaveActivity} className="glass-panel border border-[#00ABAB]/30 p-6 rounded-2xl shadow-2xl max-w-md w-full space-y-4">
-            <h3 className="font-bold text-lg text-[#FFFFFF] font-sans">
-              {editingActivity ? 'Modify Activity Config' : 'Configure New Adventure Activity'}
-            </h3>
+          <form onSubmit={handleSaveActivity} className="glass-panel border border-[#00ABAB]/30 rounded-2xl shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-[#00ABAB]/30">
+              <h3 className="font-bold text-lg text-[#FFFFFF] font-sans">
+                {editingActivity ? 'Modify Activity Config' : 'Configure New Adventure Activity'}
+              </h3>
+            </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="flex-1 overflow-y-auto p-6 space-y-3 text-xs custom-scrollbar">
               <div>
                 <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Activity Name</label>
                 <input
@@ -1835,7 +1851,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Daily Cap (Riders)</label>
                   <input
@@ -1849,16 +1865,26 @@ export const AdminDashboard: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Image URL</label>
+                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Upload Photo</label>
                   <input
-                    type="url"
-                    id="input-activity-image"
-                    value={activityForm.image}
-                    onChange={e => setActivityForm({...activityForm, image: e.target.value})}
-                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-[#3E8EDE] glass-panel text-[#FFFFFF] focus:ring-1 focus:ring-[#7DF9FF]"
-                    placeholder="https://images.unsplash.com..."
+                    type="file"
+                    accept="image/*"
+                    onChange={handleActivityImageUpload}
+                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-[#3E8EDE] glass-panel text-[#FFFFFF] focus:ring-1 focus:ring-[#7DF9FF] file:mr-3 file:rounded file:border-0 file:bg-[#00ABAB] file:px-3 file:py-1 file:text-black file:font-bold"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Image URL</label>
+                <input
+                  type="url"
+                  id="input-activity-image"
+                  value={activityForm.image}
+                  onChange={e => setActivityForm({...activityForm, image: e.target.value})}
+                  className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-[#3E8EDE] glass-panel text-[#FFFFFF] focus:ring-1 focus:ring-[#7DF9FF]"
+                  placeholder="https://images.unsplash.com..."
+                />
               </div>
 
               <div>
@@ -1897,67 +1923,83 @@ export const AdminDashboard: React.FC = () => {
                     No packages configured. Uses default Adult/Child pricing.
                   </div>
                 ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-                    {activityForm.packages.map((pkg, idx) => (
-                      <div key={pkg.id} className="p-2 bg-[#0A0A0A] border border-[#00ABAB]/20 rounded flex gap-2 items-start">
-                        <div className="flex-1 space-y-2">
-                          <input
-                            type="text"
-                            value={pkg.name}
-                            onChange={(e) => {
-                              const newPkgs = [...activityForm.packages];
-                              newPkgs[idx].name = e.target.value;
-                              setActivityForm({ ...activityForm, packages: newPkgs });
-                            }}
-                            placeholder="Package Name"
-                            className="w-full px-2 py-1 bg-transparent border-b border-[#00ABAB]/30 text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs"
-                            required
-                          />
-                          <div className="flex gap-2">
-                            <input
-                              type="number"
-                              value={pkg.price}
-                              onChange={(e) => {
-                                const newPkgs = [...activityForm.packages];
-                                newPkgs[idx].price = Number(e.target.value);
-                                setActivityForm({ ...activityForm, packages: newPkgs });
-                              }}
-                              placeholder="Price"
-                              className="w-1/3 px-2 py-1 bg-transparent border-b border-[#00ABAB]/30 text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs"
-                              min={0}
-                              required
-                            />
-                            <input
-                              type="text"
-                              value={pkg.description}
-                              onChange={(e) => {
-                                const newPkgs = [...activityForm.packages];
-                                newPkgs[idx].description = e.target.value;
-                                setActivityForm({ ...activityForm, packages: newPkgs });
-                              }}
-                              placeholder="Short description..."
-                              className="flex-1 px-2 py-1 bg-transparent border-b border-[#00ABAB]/30 text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs"
-                            />
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newPkgs = activityForm.packages.filter((_, i) => i !== idx);
-                            setActivityForm({ ...activityForm, packages: newPkgs });
-                          }}
-                          className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
+                  <div className="overflow-x-auto pr-1 custom-scrollbar">
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-[#0A0A0A]/50 border-b border-[#00ABAB]/30">
+                          <th className="text-left px-2 py-1.5 text-[#9CA3AF] font-bold">Package Name</th>
+                          <th className="text-left px-2 py-1.5 text-[#9CA3AF] font-bold">Price (₹)</th>
+                          <th className="text-left px-2 py-1.5 text-[#9CA3AF] font-bold">Description</th>
+                          <th className="text-center px-2 py-1.5 text-[#9CA3AF] font-bold">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activityForm.packages.map((pkg, idx) => (
+                          <tr key={pkg.id} className="border-b border-[#00ABAB]/20 hover:bg-[#0A0A0A]/50">
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="text"
+                                value={pkg.name}
+                                onChange={(e) => {
+                                  const newPkgs = [...activityForm.packages];
+                                  newPkgs[idx].name = e.target.value;
+                                  setActivityForm({ ...activityForm, packages: newPkgs });
+                                }}
+                                placeholder="Package Name"
+                                className="w-full px-2 py-1 bg-transparent border border-[#00ABAB]/30 rounded text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs"
+                                required
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="number"
+                                value={pkg.price}
+                                onChange={(e) => {
+                                  const newPkgs = [...activityForm.packages];
+                                  newPkgs[idx].price = Number(e.target.value);
+                                  setActivityForm({ ...activityForm, packages: newPkgs });
+                                }}
+                                placeholder="Price"
+                                className="w-24 px-2 py-1 bg-transparent border border-[#00ABAB]/30 rounded text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs"
+                                min={0}
+                                required
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="text"
+                                value={pkg.description}
+                                onChange={(e) => {
+                                  const newPkgs = [...activityForm.packages];
+                                  newPkgs[idx].description = e.target.value;
+                                  setActivityForm({ ...activityForm, packages: newPkgs });
+                                }}
+                                placeholder="Short description..."
+                                className="w-full px-2 py-1 bg-transparent border border-[#00ABAB]/30 rounded text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newPkgs = activityForm.packages.filter((_, i) => i !== idx);
+                                  setActivityForm({ ...activityForm, packages: newPkgs });
+                                }}
+                                className="p-1 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded inline-flex"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="flex gap-3 justify-end border-t border-slate-100 pt-4">
+            <div className="flex gap-3 justify-end border-t border-[#00ABAB]/30 p-6 bg-[#0A0A0A]/50">
               <button
                 type="button"
                 id="btn-cancel-activity"

@@ -6,6 +6,7 @@
 import React from 'react';
 import { Booking, FoodOrder, Payment } from '../types';
 import { Printer, X, CheckCircle2, CreditCard, ShieldCheck } from 'lucide-react';
+import { printTicket } from '../lib/printTicket';
 
 interface InvoiceModalProps {
   booking?: Booking;
@@ -31,11 +32,38 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
   const { subtotal, sgst, cgst, total } = getSubtotalAndTax();
 
   const handlePrint = () => {
-    window.print();
+    const receiptId = booking ? booking.id : order?.id || 'INV';
+    const activityName = booking ? booking.activityName : order?.items?.[0]?.name || 'Deuce Park';
+    const customerName = booking ? booking.customerName : order?.customerName || 'Guest';
+    const printDate = booking ? booking.date : new Date().toISOString().split('T')[0];
+    const slot = booking ? booking.timeSlot : 'N/A';
+    const quantity = booking ? booking.quantity : order?.items.reduce((sum, item) => sum + item.quantity, 0) || 1;
+    const itemList = booking
+      ? [{ label: booking.activityName, value: `₹${booking.totalAmount.toFixed(2)}` }]
+      : order?.items.map(item => ({
+          label: item.name,
+          value: `₹${(item.price * item.quantity).toFixed(2)}`
+        })) || [{ label: 'Food Order', value: `₹${subtotal.toFixed(2)}` }];
+
+    printTicket({
+      receiptId: `TKT-${receiptId}`,
+      activityName,
+      customerName,
+      date: printDate,
+      slot,
+      items: itemList,
+      totalAmount: subtotal,
+      paymentStatus: isPaid ? 'paid' : 'pending',
+      quantity,
+      paymentMethod,
+      transactionId
+    });
   };
 
   const transactionId = payment?.transactionId || `tx-${Math.floor(10000000 + Math.random() * 90000000)}`;
-  const paymentMethod = payment?.method || 'card';
+  const paymentMethod = payment?.method || 'cash';
+  const paymentStatus = booking?.paymentStatus || order?.paymentStatus || 'pending';
+  const isPaid = paymentStatus === 'paid';
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -69,7 +97,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
           <div className="flex justify-between items-start border-b border-[#00ABAB]/30 pb-4">
             <div>
               <h4 className="font-extrabold text-base text-teal-950 font-sans tracking-tight">DEUCE PARK</h4>
-              <p className="text-[10px] text-[#9CA3AF] font-mono mt-0.5">1 Adventure Way, Food Street Wing</p>
+              <p className="text-[10px] text-[#9CA3AF] font-mono mt-0.5">Deuce Park, Yelagiri</p>
               <p className="text-[10px] text-[#9CA3AF] font-mono">GSTIN: 33INYPK7449Q1ZL</p>
             </div>
             <div className="text-right">
@@ -106,6 +134,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
               <div className="text-[#9CA3AF] truncate text-[10px] mt-0.5">
                 Ref: {transactionId}
               </div>
+              {isPaid && (
+                <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 mt-2 uppercase tracking-wide">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Paid
+                </div>
+              )}
             </div>
           </div>
 
@@ -132,10 +166,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
                     </td>
                     <td className="py-2.5 text-center font-mono text-[#9CA3AF]">{booking.quantity}</td>
                     <td className="py-2.5 text-right font-mono text-[#9CA3AF]">
-                      ${(booking.totalAmount / booking.quantity).toFixed(2)}
+                      ₹{(booking.totalAmount / booking.quantity).toFixed(2)}
                     </td>
                     <td className="py-2.5 text-right font-mono text-[#40E0D0] font-bold">
-                      ${booking.totalAmount.toFixed(2)}
+                      ₹{booking.totalAmount.toFixed(2)}
                     </td>
                   </tr>
                 ) : (
@@ -146,9 +180,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
                         <div className="text-[10px] text-[#9CA3AF] mt-0.5">{item.vendorName}</div>
                       </td>
                       <td className="py-2.5 text-center font-mono text-[#9CA3AF]">{item.quantity}</td>
-                      <td className="py-2.5 text-right font-mono text-[#9CA3AF]">${item.price.toFixed(2)}</td>
+                      <td className="py-2.5 text-right font-mono text-[#9CA3AF]">₹{item.price.toFixed(2)}</td>
                       <td className="py-2.5 text-right font-mono text-[#40E0D0] font-bold">
-                        ${(item.price * item.quantity).toFixed(2)}
+                        ₹{(item.price * item.quantity).toFixed(2)}
                       </td>
                     </tr>
                   ))
@@ -160,20 +194,20 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
           {/* Pricing Summary */}
           <div className="border-t border-[#00ABAB]/30 pt-4 space-y-1.5 text-xs text-right font-mono text-[#9CA3AF]">
             <div className="flex justify-between">
-              <span className="text-[#9CA3AF]">Subtotal:</span>
-              <span className="text-[#FFFFFF]">${subtotal.toFixed(2)}</span>
+              <span className="text-[#9CA3AF]">Package Amount:</span>
+              <span className="text-[#FFFFFF]">₹{subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[#9CA3AF]">State GST / SGST (9%):</span>
+              <span className="text-[#9CA3AF]">State GST (9%):</span>
               <span className="text-[#FFFFFF]">₹{sgst.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[#9CA3AF]">Central GST / CGST (9%):</span>
+              <span className="text-[#9CA3AF]">Central GST (9%):</span>
               <span className="text-[#FFFFFF]">₹{cgst.toFixed(2)}</span>
             </div>
             <div className="flex justify-between border-t border-[#00ABAB]/30 pt-2 font-bold text-sm">
-              <span className="text-[#FFFFFF] font-sans">Total Charged:</span>
-              <span className="text-[#40E0D0] font-sans text-base font-extrabold">${total.toFixed(2)}</span>
+              <span className="text-[#FFFFFF] font-sans">Total Payable:</span>
+              <span className="text-[#40E0D0] font-sans text-base font-extrabold">₹{total.toFixed(2)}</span>
             </div>
           </div>
 

@@ -26,6 +26,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
     <div id={`print-receipt-${receiptId}`} className="hidden print:block w-full text-black bg-white p-4 font-mono text-sm">
       <div className="text-center border-b-2 border-black pb-2 mb-4">
         <h2 className="text-xl font-black">DEUCE PARK</h2>
+        <p className="text-xs">Deuce Park, Yelagiri</p>
         <p className="text-xs">GSTIN: 33INYPK7449Q1ZL</p>
         <p className="text-xs">Offline Billing Receipt</p>
       </div>
@@ -73,6 +74,11 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
       <div className="border-t-2 border-black pt-2 mt-1 flex justify-between font-black text-sm">
         <span>GRAND TOTAL:</span>
         <span>₹{(totalAmount * 1.18).toFixed(2)}</span>
+      </div>
+
+      <div className="border-t-2 border-black pt-2 mt-1 flex justify-between font-bold text-sm">
+        <span>PAYMENT STATUS:</span>
+        <span>PAID</span>
       </div>
 
       {(paymentMethod || transactionId) && (

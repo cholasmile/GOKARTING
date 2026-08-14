@@ -415,11 +415,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Utility to push notifications
   const sendMockNotification = (recipient: string, title: string, body: string, channel: 'email' | 'sms' | 'whatsapp') => {
+    const emailBody = channel === 'email' ? `${body}\n\nFrom: deucesports22@gmail.com` : body;
     const newLog: NotificationLog = {
       id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       recipient,
       title,
-      body,
+      body: emailBody,
       channel,
       sentAt: new Date().toISOString()
     };
@@ -443,7 +444,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     sendMockNotification(
-      'admin@adventurepark.com',
+      'admin@deucepark.com',
       'New Activity Configured',
       `Activity "${newAct.name}" has been successfully added to the park dynamic list.`,
       'email'
@@ -872,7 +873,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       );
     }
 
-    return { success: true, message: 'Payment confirmed successfully.', ticket: newTicket };
+    return { success: true, message: 'Payment confirmed successfully.', ticket: newTicket, booking: updatedBooking };
   };
 
   // Ticket Scanning Check-In

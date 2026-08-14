@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { X, User, Phone, Calendar, Clock, Users, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { GoKartingBooking } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
@@ -167,7 +167,7 @@ const GoKartingBookingModal: React.FC<GoKartingBookingModalProps> = ({ onClose, 
                 <div className="p-4 bg-[#0A0A0A]/80 border border-[#00ABAB]/20 rounded-xl mt-4">
                   <div className="flex justify-between items-center text-white">
                     <span className="font-mono text-sm text-[#94A3B8]">Total Amount</span>
-                    <span className="text-2xl font-black text-[#40E0D0]">${formData.numberOfRiders * (formData.sessionDuration === 10 ? 800 : 1500)}</span>
+                    <span className="text-2xl font-black text-[#40E0D0]">₹{formData.numberOfRiders * (formData.sessionDuration === 10 ? 800 : 1500)}</span>
                   </div>
                 </div>
               </div>

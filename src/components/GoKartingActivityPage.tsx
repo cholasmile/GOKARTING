@@ -30,7 +30,8 @@ interface ActivityPageProps {
 }
 
 export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClose }) => {
-  const { createBooking, timeSlots } = useAppContext();
+  const { createBooking, timeSlots, activities } = useAppContext();
+  const kartingActivity = activities.find(a => a.id === 'act-go-karting');
 
   const karts: KartType[] = [
     { id: 'kart-gt', name: 'GT Pro 200cc', engine: 'Honda GX200 Gasoline', topSpeed: 75, accel: 4.5, desc: 'Classic high-torque gasoline engine with incredible mechanical drift throttle response.', image: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=400&q=80' },
@@ -38,14 +39,24 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
     { id: 'kart-volt', name: 'Storm Volt Electric', engine: 'Dual Lithium High-Torque', topSpeed: 82, accel: 3.7, desc: 'Eco-friendly hyper-acceleration with boost buttons and computerized vectoring.', image: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=400&q=80' }
   ];
 
-  const packages: KartPackage[] = [
+  const defaultPackages: KartPackage[] = [
     { id: 'pkg-kart-single', name: 'Single Rider Experience (10 Mins)', price: 20, description: 'Classic single-seat session. Includes complete electronic lap-time reporting.' },
     { id: 'pkg-kart-double', name: 'Double Co-Pilot Ride (10 Mins)', price: 30, description: 'Twin-seater kart. Great for parent and child side-by-side racing.' },
     { id: 'pkg-kart-race', name: 'Grand Prix Tournament (30 Mins)', price: 65, description: 'Warm-up lap, 5-minute qualification round, and 12-lap medal grand finale.' }
   ];
 
+  const packages: KartPackage[] = (kartingActivity?.packages && kartingActivity.packages.length > 0)
+    ? kartingActivity.packages
+    : defaultPackages;
+
   const [selectedKart, setSelectedKart] = useState<KartType>(karts[0]);
-  const [selectedPackage, setSelectedPackage] = useState<KartPackage>(packages[0]);
+  const [selectedPackage, setSelectedPackage] = useState<KartPackage>(packages[0] || defaultPackages[0]);
+
+  React.useEffect(() => {
+    if (packages.length > 0 && (!selectedPackage || !packages.some(p => p.id === selectedPackage.id))) {
+      setSelectedPackage(packages[0]);
+    }
+  }, [packages]);
   const [bookingQuantity, setBookingQuantity] = useState<number>(1);
   const [customerName, setCustomerName] = useState<string>('');
   const [customerEmail, setCustomerEmail] = useState<string>('');
@@ -221,37 +232,6 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
   return (
     <>
       <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full print:hidden">
-      
-      {/* 1. FULL WIDTH HERO EXPERIENCE SECTION */}
-      <div className="relative rounded-2xl overflow-hidden group shadow-[0_0_30px_rgba(20,241,217,0.05)] border border-white/5 flex-shrink-0">
-        <div className="absolute inset-0 bg-[#050816]/30 z-10"></div>
-        <img 
-          src="/gokart-night.png" 
-          alt="Go Karting" 
-          className="w-full h-[160px] md:h-[200px] object-cover filter saturate-150 transform group-hover:scale-105 transition-transform duration-[2000ms]"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] via-[#0B1120]/60 to-transparent z-20"></div>
-        
-        <div className="absolute bottom-0 left-0 p-4 md:p-6 z-30 w-full">
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap gap-2 mb-2">
-            <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#14F1D9] flex items-center gap-1 shadow-sm">
-              <Flag className="w-3 h-3" /> Pro Track
-            </span>
-            <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#00B4FF] flex items-center gap-1 shadow-sm">
-              <Zap className="w-3 h-3" /> Fast Karts
-            </span>
-            <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#FFB703] flex items-center gap-1 shadow-sm">
-              <Shield className="w-3 h-3" /> Safe
-            </span>
-          </motion.div>
-          <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-2xl md:text-3xl font-black text-white mb-1 tracking-tighter leading-none">
-            Go Karting <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#14F1D9] to-[#00B4FF]">Experience</span>
-          </motion.h1>
-          <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-xs text-[#CBD5E1] max-w-xl font-medium">
-            Race on our professional track with precise electronic telemetry.
-          </motion.p>
-        </div>
-      </div>
 
       {/* 50:50 COLUMNS */}
       <div className="flex-1 flex flex-col lg:flex-row gap-5 min-h-0">
@@ -500,7 +480,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                   )}
                   <div className="flex justify-between items-start mb-1 relative z-10">
                     <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
-                    <span className="font-black font-mono text-sm text-white">${pkg.price}</span>
+                    <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
                   </div>
                   <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1">{pkg.description}</p>
                 </button>
@@ -568,7 +548,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
               <div className="pt-4 mt-4 border-t border-white/10">
                 <div className="flex justify-between items-end mb-4">
                   <span className="text-[#9CA3AF] font-bold text-[10px] uppercase tracking-widest">Total</span>
-                  <span className="text-2xl font-black font-mono text-white tracking-tighter">${bookingTotal.toFixed(2)}</span>
+                  <span className="text-2xl font-black font-mono text-white tracking-tighter">₹{bookingTotal.toFixed(2)}</span>
                 </div>
                 
                 <button

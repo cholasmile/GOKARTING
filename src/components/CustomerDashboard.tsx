@@ -272,96 +272,77 @@ export const CustomerDashboard: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 perspective-1000">
-            {[
-              {
-                id: 'act-go-karting',
-                name: 'Pro Go-Karting',
-                image: '/gokart-night.png',
+          <div className="flex flex-wrap justify-center items-center gap-6 perspective-1000">
+            {activities.map((act, idx) => {
+              let color = 'from-[#14F1D9]/80 to-[#00B4FF]/80';
+              if (idx % 3 === 1) color = 'from-[#FFB703]/80 to-[#F59E0B]/80';
+              if (idx % 3 === 2) color = 'from-purple-500/80 to-pink-500/80';
+              const item = {
+                id: act.id,
+                name: act.name,
+                image: act.image || '/gokart-night.png',
                 icon: '🏎️',
-                color: 'from-[#14F1D9]/80 to-[#00B4FF]/80'
-              },
-              {
-                id: 'act-horse-riding',
-                name: 'Royal Trails',
-                image: 'https://www.huntleyequestrian.com/cdn/shop/articles/Is-Horse-Riding-a-Sport-Huntley-Equestrian-110301396.jpg?crop=center&height=1200&v=1743859147&width=1200',
-                icon: '🐎',
-                color: 'from-[#FFB703]/80 to-[#F59E0B]/80'
-              },
-              {
-                id: 'act-air-gun',
-                name: 'Air Rifle',
-                image: 'https://www.gunforglory.in/wp-content/uploads/2026/04/GFG-BLOG-FEATURE-3-1.png',
-                icon: '🎯',
-                color: 'from-purple-500/80 to-pink-500/80'
-              },
-              {
-                id: 'dine',
-                name: 'Food Street',
-                image: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&q=80',
-                icon: '☕',
-                color: 'from-rose-500/80 to-orange-500/80'
-              }
-            ].map((item, index) => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, y: 50, rotateX: 10 }}
-                animate={{ opacity: 1, y: 0, rotateX: 0 }}
-                transition={{ duration: 0.6, delay: index * 0.15, ease: "easeOut" }}
-                onClick={() => {
-                  setActiveSubTab(item.id);
-                  setTimeout(() => {
-                    contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }, 100);
-                }}
-                className={`group relative h-[220px] rounded-3xl overflow-hidden cursor-pointer bg-[#0B1120]/80 backdrop-blur-xl border-2 transition-all duration-500 hover:shadow-[0_0_40px_rgba(20,241,217,0.2)] ${
-                  activeSubTab === item.id ? 'border-[#14F1D9] scale-[1.02]' : 'border-white/10 hover:border-white/30'
-                }`}
-                whileHover={{ y: -10, rotateY: 5, rotateX: -5 }}
-              >
-                {/* Parallax Background Image */}
-                <div className="absolute inset-0 w-full h-full">
-                  <div className={`absolute inset-0 bg-gradient-to-t ${item.color} mix-blend-overlay z-10 opacity-60 group-hover:opacity-40 transition-opacity duration-500`}></div>
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#050816] via-[#050816]/60 to-transparent z-10"></div>
-                  <img 
-                    src={item.image} 
-                    alt={item.name} 
-                    className="w-full h-full object-cover filter brightness-75 group-hover:scale-125 transition-transform duration-[2000ms] ease-out"
-                  />
-                </div>
+                color
+              };
 
-                {/* Floating Particles (CSS trick) */}
-                <div className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-color-dodge"></div>
-
-                {/* Content */}
-                <div className="absolute inset-0 z-20 flex flex-col justify-end p-6">
-                  <h3 className="text-xl font-black text-white group-hover:text-[#14F1D9] transition-colors drop-shadow-md">
-                    {item.name}
-                  </h3>
-                  
-                  {/* Shine Button Animation */}
-                  <div className="mt-4 relative overflow-hidden rounded-xl bg-white/10 border border-white/20 px-4 py-2 text-xs font-bold text-white text-center w-full group-hover:bg-[#14F1D9] group-hover:text-[#050816] group-hover:border-[#14F1D9] transition-all duration-300">
-                    <span className="relative z-10 flex items-center justify-center gap-2">
-                      Access Terminal <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
-                    </span>
-                    <div className="absolute inset-0 -translate-x-full bg-white/40 skew-x-12 group-hover:animate-[shine_1s_ease-out]"></div>
+              return (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, y: 50, rotateX: 10 }}
+                  animate={{ opacity: 1, y: 0, rotateX: 0 }}
+                  transition={{ duration: 0.6, delay: idx * 0.15, ease: "easeOut" }}
+                  onClick={() => {
+                    setActiveSubTab(item.id);
+                    const actObj = activities.find(a => a.id === item.id);
+                    if (actObj) {
+                      setSelectedActivity(actObj);
+                      if (actObj.packages && actObj.packages.length > 0) {
+                        setBookingType('package');
+                        setSelectedPackageId(actObj.packages[0].id);
+                      } else {
+                        setBookingType('standard');
+                      }
+                    }
+                    setTimeout(() => {
+                      contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                  }}
+                  className={`group relative h-[220px] w-full sm:w-[calc(50%-16px)] lg:w-[calc(33.333%-16px)] max-w-[360px] flex-1 min-w-[260px] rounded-3xl overflow-hidden cursor-pointer bg-[#0B1120]/80 backdrop-blur-xl border-2 transition-all duration-500 hover:shadow-[0_0_40px_rgba(20,241,217,0.2)] ${
+                    activeSubTab === item.id ? 'border-[#14F1D9] scale-[1.02]' : 'border-white/10 hover:border-white/30'
+                  }`}
+                  whileHover={{ y: -10, rotateY: 5, rotateX: -5 }}
+                >
+                  {/* Parallax Background Image */}
+                  <div className="absolute inset-0 w-full h-full">
+                    <div className={`absolute inset-0 bg-gradient-to-t ${item.color} mix-blend-overlay z-10 opacity-60 group-hover:opacity-40 transition-opacity duration-500`}></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#050816] via-[#050816]/60 to-transparent z-10"></div>
+                    <img 
+                      src={item.image} 
+                      alt={item.name} 
+                      className="w-full h-full object-cover filter brightness-75 group-hover:scale-125 transition-transform duration-[2000ms] ease-out"
+                    />
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-          
-          <div className="mt-8 text-center">
-             <button
-              onClick={() => setActiveSubTab('history')}
-              className={`inline-flex items-center gap-2 px-6 py-3 rounded-full font-extrabold text-xs transition-all cursor-pointer ${
-                activeSubTab === 'history' 
-                  ? 'bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] shadow-[0_0_20px_rgba(20,241,217,0.3)]' 
-                  : 'glass-panel border border-white/10 hover:bg-white/5 text-white hover:border-[#14F1D9]/50'
-              }`}
-            >
-              <History className="h-4 w-4" /> View Passes ({tickets.filter(t => t.customerEmail === 'watson@baker.street').length})
-            </button>
+
+                  {/* Floating Particles (CSS trick) */}
+                  <div className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-color-dodge"></div>
+
+                  {/* Content */}
+                  <div className="absolute inset-0 z-20 flex flex-col justify-end p-6">
+                    <h3 className="text-xl font-black text-white group-hover:text-[#14F1D9] transition-colors drop-shadow-md">
+                      {item.name}
+                    </h3>
+                    
+                    {/* Shine Button Animation */}
+                    <div className="mt-4 relative overflow-hidden rounded-xl bg-white/10 border border-white/20 px-4 py-2 text-xs font-bold text-white text-center w-full group-hover:bg-[#14F1D9] group-hover:text-[#050816] group-hover:border-[#14F1D9] transition-all duration-300">
+                      <span className="relative z-10 flex items-center justify-center gap-2">
+                        Access Terminal <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+                      </span>
+                      <div className="absolute inset-0 -translate-x-full bg-white/40 skew-x-12 group-hover:animate-[shine_1s_ease-out]"></div>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -373,11 +354,136 @@ export const CustomerDashboard: React.FC = () => {
       {activeSubTab === 'act-air-gun' && <ShootingActivityPage onSuccessClose={() => setActiveSubTab('history')} />}
       {activeSubTab === 'act-go-karting' && <GoKartingActivityPage onSuccessClose={() => setActiveSubTab('history')} />}
       {/* Dynamic Activities */}
-      {!['act-horse-riding', 'act-air-gun', 'act-go-karting', 'dine', 'history'].includes(activeSubTab) && (
-        <div className="p-8 text-center glass-panel border border-[#00ABAB]/30 rounded-3xl">
-          <Sparkles className="w-12 h-12 text-[#40E0D0] mx-auto mb-4" />
-          <h2 className="text-2xl font-black text-white">Select Packages & Book Tickets</h2>
-          <p className="text-[#9CA3AF] mt-2 max-w-md mx-auto">Please proceed to the admin or staff desk to book dynamic activities, or use the standard checkout app when fully integrated.</p>
+      {!['act-horse-riding', 'act-air-gun', 'act-go-karting', 'history'].includes(activeSubTab) && (
+        <div className="p-6 md:p-8 glass-panel border border-[#14F1D9]/30 rounded-3xl space-y-6">
+          {(() => {
+            const dynamicAct = activities.find(a => a.id === activeSubTab);
+            if (!dynamicAct) return null;
+            const hasPackages = dynamicAct.packages && dynamicAct.packages.length > 0;
+
+            return (
+              <div className="flex flex-col lg:flex-row gap-6">
+                <div className="flex-1 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-6 bg-[#14F1D9] rounded-full"></div>
+                    <h2 className="text-2xl md:text-3xl font-black text-white">{dynamicAct.name}</h2>
+                  </div>
+                  <p className="text-[#9CA3AF] text-sm leading-relaxed">{dynamicAct.description}</p>
+                  
+                  {hasPackages ? (
+                    <div className="space-y-3 pt-2">
+                      <h3 className="font-bold text-xs uppercase tracking-widest text-[#14F1D9]">Available Packages & Pricing</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {dynamicAct.packages!.map(pkg => (
+                          <div
+                            key={pkg.id}
+                            onClick={() => {
+                              setSelectedPackageId(pkg.id);
+                              setBookingType('package');
+                            }}
+                            className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                              selectedPackageId === pkg.id && bookingType === 'package'
+                                ? 'bg-[#14F1D9]/15 border-[#14F1D9] shadow-[0_0_20px_rgba(20,241,217,0.2)]'
+                                : 'bg-[#050816]/60 border-white/10 hover:border-white/30'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center mb-1">
+                              <h4 className="font-black text-white text-sm">{pkg.name}</h4>
+                              <span className="font-black font-mono text-[#14F1D9] text-base">₹{pkg.price}</span>
+                            </div>
+                            <p className="text-xs text-[#9CA3AF]">{pkg.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-4 p-4 rounded-2xl bg-[#050816]/60 border border-white/10">
+                      <div>
+                        <span className="text-xs text-[#9CA3AF] block font-mono">Adult Ticket</span>
+                        <span className="text-lg font-black text-white font-mono">₹{dynamicAct.adultPrice || 0}</span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-[#9CA3AF] block font-mono">Child Ticket</span>
+                        <span className="text-lg font-black text-white font-mono">₹{dynamicAct.childPrice || 0}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="w-full lg:w-96 bg-[#0B1120] p-6 rounded-2xl border border-white/10 space-y-4">
+                  <h3 className="text-lg font-black text-white">Book Experience</h3>
+                  <form onSubmit={(e) => {
+                    setSelectedActivity(dynamicAct);
+                    executeActivityBooking(e);
+                  }} className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Full Name"
+                      required
+                      value={customerName}
+                      onChange={e => setCustomerName(e.target.value)}
+                      className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-[#9CA3AF] focus:border-[#14F1D9] focus:outline-none"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="email"
+                        placeholder="Email"
+                        required
+                        value={customerEmail}
+                        onChange={e => setCustomerEmail(e.target.value)}
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-[#9CA3AF] focus:border-[#14F1D9] focus:outline-none"
+                      />
+                      <input
+                        type="tel"
+                        placeholder="Phone"
+                        required
+                        value={customerPhone}
+                        onChange={e => setCustomerPhone(e.target.value)}
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-[#9CA3AF] focus:border-[#14F1D9] focus:outline-none"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="date"
+                        value={bookingDate}
+                        onChange={e => setBookingDate(e.target.value)}
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+                      />
+                      <select
+                        value={selectedSlot}
+                        onChange={e => setSelectedSlot(e.target.value)}
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+                      >
+                        {timeSlots.map(slot => (
+                          <option key={slot} value={slot}>{slot}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="pt-2 border-t border-white/10 flex justify-between items-center">
+                      <span className="text-xs text-[#9CA3AF]">Total</span>
+                      <span className="text-xl font-black font-mono text-[#14F1D9]">
+                        ₹{(() => {
+                          if (hasPackages) {
+                            const p = dynamicAct.packages!.find(pkg => pkg.id === selectedPackageId) || dynamicAct.packages![0];
+                            return p ? p.price * packageQuantity : 0;
+                          }
+                          return (adultCount * (dynamicAct.adultPrice || 0)) + (childCount * (dynamicAct.childPrice || 0));
+                        })()}
+                      </span>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-3 bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] font-black text-xs uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-all cursor-pointer"
+                    >
+                      Confirm Booking
+                    </button>
+                  </form>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -386,33 +492,6 @@ export const CustomerDashboard: React.FC = () => {
       {/* ----------------------------------------------------------------- */}
       {activeSubTab === 'dine' && (
         <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full">
-          {/* HERO SECTION */}
-          <div className="relative rounded-2xl overflow-hidden group shadow-[0_0_30px_rgba(20,241,217,0.05)] border border-white/5 flex-shrink-0">
-            <div className="absolute inset-0 bg-[#050816]/30 z-10"></div>
-            <img 
-              src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=1200&q=80" 
-              alt="Food Street" 
-              className="w-full h-[160px] md:h-[200px] object-cover filter saturate-150 transform group-hover:scale-105 transition-transform duration-[2000ms]"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] via-[#0B1120]/60 to-transparent z-20"></div>
-            
-            <div className="absolute bottom-0 left-0 p-4 md:p-6 z-30 w-full">
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap gap-2 mb-2">
-                <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#14F1D9] flex items-center gap-1 shadow-sm">
-                  <Utensils className="w-3 h-3" /> Multi-Vendor
-                </span>
-                <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#FFB703] flex items-center gap-1 shadow-sm">
-                  <Sparkles className="w-3 h-3" /> Fresh Made
-                </span>
-              </motion.div>
-              <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-2xl md:text-3xl font-black text-white mb-1 tracking-tighter leading-none">
-                Food Street <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#14F1D9] to-[#00B4FF]">Dining</span>
-              </motion.h1>
-              <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-xs text-[#CBD5E1] max-w-xl font-medium">
-                Fuel up for your next adventure. Browse gourmet street food stalls and place multi-vendor orders instantly.
-              </motion.p>
-            </div>
-          </div>
 
           {/* 50:50 COLUMNS */}
           <div className="flex-1 flex flex-col lg:flex-row gap-5 min-h-0">
@@ -462,7 +541,7 @@ export const CustomerDashboard: React.FC = () => {
                         <div>
                           <div className="flex justify-between items-start">
                             <span className="text-[9px] uppercase font-mono font-bold text-[#14F1D9] bg-[#050816] px-1.5 py-0.5 rounded border border-white/5 line-clamp-1 truncate mr-1">{vendorName}</span>
-                            <span className="font-mono text-xs font-black text-white">${item.price.toFixed(2)}</span>
+                            <span className="font-mono text-xs font-black text-white">₹{item.price.toFixed(2)}</span>
                           </div>
                           <h4 className="font-bold text-xs text-white truncate mt-2 tracking-tight group-hover:text-[#14F1D9] transition-colors">{item.name}</h4>
                           <p className="text-[9px] text-[#9CA3AF] line-clamp-2 mt-1 leading-snug">{item.description}</p>
@@ -522,7 +601,7 @@ export const CustomerDashboard: React.FC = () => {
                           
                           <div className="flex items-center gap-3">
                             <span className="font-mono text-[#00B4FF] font-bold text-[10px]">{cartItem.quantity}x</span>
-                            <span className="font-mono font-black text-white">${(cartItem.price * cartItem.quantity).toFixed(2)}</span>
+                            <span className="font-mono font-black text-white">₹{(cartItem.price * cartItem.quantity).toFixed(2)}</span>
                             <button
                               id={`btn-cart-remove-${cartItem.menuItemId}`}
                               onClick={() => removeFromFoodCart(cartItem.menuItemId)}
@@ -542,7 +621,7 @@ export const CustomerDashboard: React.FC = () => {
                   <div className="flex justify-between items-end mb-4">
                     <span className="text-[#9CA3AF] font-bold text-[10px] uppercase tracking-widest">Total Bill</span>
                     <span className="text-2xl font-black font-mono text-white tracking-tighter">
-                      ${foodCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}
+                      ₹{foodCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}
                     </span>
                   </div>
 
@@ -681,7 +760,7 @@ export const CustomerDashboard: React.FC = () => {
                     <div className="flex items-center gap-3 self-end md:self-auto">
                       <div className="text-right">
                         <span className="text-[10px] text-[#9CA3AF] uppercase font-bold block font-mono">Total Paid</span>
-                        <span className="font-mono font-bold text-sm text-teal-950">${order.totalAmount.toFixed(2)}</span>
+                        <span className="font-mono font-bold text-sm text-teal-950">₹{order.totalAmount.toFixed(2)}</span>
                       </div>
                       <button
                         id={`btn-open-invoice-order-${order.id}`}
@@ -734,12 +813,12 @@ export const CustomerDashboard: React.FC = () => {
                 {foodCart.map((item, idx) => (
                   <div key={idx} className="flex justify-between text-xs">
                     <span className="text-[#9CA3AF]">{item.quantity}x {item.name}</span>
-                    <span className="font-bold">${(item.price * item.quantity).toFixed(2)}</span>
+                    <span className="font-bold">₹{(item.price * item.quantity).toFixed(2)}</span>
                   </div>
                 ))}
                 <div className="flex justify-between font-black text-white border-t border-white/10 pt-2 mt-2 text-sm">
                   <span className="font-sans text-xs uppercase tracking-widest text-[#9CA3AF]">Total Bill:</span>
-                  <span className="text-[#14F1D9]">${foodCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
+                  <span className="text-[#14F1D9]">₹{foodCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
                 </div>
               </div>
 

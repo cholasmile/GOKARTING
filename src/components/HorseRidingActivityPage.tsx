@@ -32,7 +32,8 @@ interface ActivityPageProps {
 }
 
 export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClose }) => {
-  const { createBooking, timeSlots } = useAppContext();
+  const { createBooking, timeSlots, activities } = useAppContext();
+  const horseActivity = activities.find(a => a.id === 'act-horse-riding');
 
   const horses: HorseBreed[] = [
     {
@@ -59,6 +60,7 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
   const [selectedRoute, setSelectedRoute] = useState<TrailRoute>(routes[0]);
   const [adultCount, setAdultCount] = useState<number>(1);
   const [childCount, setChildCount] = useState<number>(0);
+  const [selectedPkgId, setSelectedPkgId] = useState<string>(horseActivity?.packages?.[0]?.id || '');
   
   const [customerName, setCustomerName] = useState<string>('');
   const [customerEmail, setCustomerEmail] = useState<string>('');
@@ -80,9 +82,14 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successBooking, setSuccessBooking] = useState<any | null>(null);
 
-  const priceAdult = 45;
-  const priceChild = 25;
-  const bookingTotal = (adultCount * priceAdult) + (childCount * priceChild);
+  const packages = horseActivity?.packages || [];
+  const selectedPkg = packages.find(p => p.id === selectedPkgId);
+
+  const priceAdult = horseActivity?.adultPrice ?? 45;
+  const priceChild = horseActivity?.childPrice ?? 25;
+  const bookingTotal = selectedPkg 
+    ? selectedPkg.price 
+    : (adultCount * priceAdult) + (childCount * priceChild);
 
   const feedTreat = () => {
     setBondLevel(prev => Math.min(100, prev + 15));
@@ -192,37 +199,6 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
   return (
     <>
       <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full print:hidden">
-      
-      {/* 1. FULL WIDTH HERO EXPERIENCE SECTION */}
-      <div className="relative rounded-2xl overflow-hidden group shadow-[0_0_30px_rgba(20,241,217,0.05)] border border-white/5 flex-shrink-0">
-        <div className="absolute inset-0 bg-[#050816]/30 z-10"></div>
-        <img 
-          src="https://images.unsplash.com/photo-1598974357801-cbca100e6563?auto=format&fit=crop&w=1200&q=80" 
-          alt="Horse Riding" 
-          className="w-full h-[160px] md:h-[200px] object-cover filter saturate-150 transform group-hover:scale-105 transition-transform duration-[2000ms]"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] via-[#0B1120]/60 to-transparent z-20"></div>
-        
-        <div className="absolute bottom-0 left-0 p-4 md:p-6 z-30 w-full">
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap gap-2 mb-2">
-            <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#14F1D9] flex items-center gap-1 shadow-sm">
-              <Star className="w-3 h-3" /> Certified Guides
-            </span>
-            <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#00B4FF] flex items-center gap-1 shadow-sm">
-              <Map className="w-3 h-3" /> Scenic Trails
-            </span>
-            <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#FFB703] flex items-center gap-1 shadow-sm">
-              <Shield className="w-3 h-3" /> Safe
-            </span>
-          </motion.div>
-          <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-2xl md:text-3xl font-black text-white mb-1 tracking-tighter leading-none">
-            Royal Horse Riding <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#14F1D9] to-[#00B4FF]">Experience</span>
-          </motion.h1>
-          <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-xs text-[#CBD5E1] max-w-xl font-medium">
-            Escape into tranquility. Select your riding stallion or gentle mare, choose your scenic mountain trail, and secure your certified guide.
-          </motion.p>
-        </div>
-      </div>
 
       {/* 50:50 COLUMNS */}
       <div className="flex-1 flex flex-col lg:flex-row gap-5 min-h-0">
@@ -461,7 +437,7 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
               <div className="pt-4 mt-4 border-t border-white/10">
                 <div className="flex justify-between items-end mb-4">
                   <span className="text-[#9CA3AF] font-bold text-[10px] uppercase tracking-widest">Total Bill</span>
-                  <span className="text-2xl font-black font-mono text-white tracking-tighter">${bookingTotal.toFixed(2)}</span>
+                  <span className="text-2xl font-black font-mono text-white tracking-tighter">₹{bookingTotal.toFixed(2)}</span>
                 </div>
                 
                 <button
@@ -534,7 +510,7 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Riders</span> <span className="font-bold">{adultCount + childCount}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Session</span> <span className="font-bold">{bookingDate} @ {selectedSlot}</span></div>
                     {successBooking.booking.paymentStatus === 'pending' && (
-                      <div className="flex justify-between items-center border-t border-white/5 pt-2"><span className="text-[#9CA3AF] font-bold">Amount Due</span> <span className="font-black text-amber-400">${bookingTotal.toFixed(2)} (Cash)</span></div>
+                      <div className="flex justify-between items-center border-t border-white/5 pt-2"><span className="text-[#9CA3AF] font-bold">Amount Due</span> <span className="font-black text-amber-400">₹{bookingTotal.toFixed(2)} (Cash)</span></div>
                     )}
                   </div>
                   <div className="w-full md:w-32 flex flex-col justify-center items-center p-4 bg-white rounded-xl shadow-lg border-2 border-dashed border-gray-300">

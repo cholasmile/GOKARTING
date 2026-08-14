@@ -114,7 +114,7 @@ function LoginPage() {
                 <input
                   type="email"
                   required
-                  placeholder="name@adventurepark.com"
+                  placeholder="name@deucepark.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className="w-full bg-[#0A0A0A]/50 border border-[#00ABAB]/30 rounded-2xl py-3 pl-11 pr-4 text-sm text-white placeholder-[#94A3B8] focus:outline-none focus:border-[#3E8EDE] focus:ring-1 focus:ring-[#40E0D0] transition-all font-medium"

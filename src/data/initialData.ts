@@ -6,12 +6,12 @@
 import { User, Activity, FoodVendor, MenuItem, InventoryItem, Booking, FoodOrder, Ticket } from '../types';
 
 export const INITIAL_USERS: User[] = [
-  { id: 'usr-admin', name: 'Executive Director Cooper', email: 'admin@adventurepark.com', role: 'super_admin' },
-  { id: 'usr-staff', name: 'Activity Ranger Smith', email: 'staff@adventurepark.com', role: 'activity_staff' },
-  { id: 'usr-vendor', name: 'Sarah Jenkins', email: 'vendor@adventurepark.com', role: 'food_vendor', vendorId: 'vendor-forest-cafe' },
-  { id: 'usr-gkm', name: 'Karting Manager', email: 'kartingmanager@adventurepark.com', role: 'go_karting_manager' },
-  { id: 'usr-gks', name: 'Karting Staff', email: 'kartingstaff@adventurepark.com', role: 'go_karting_staff' },
-  { id: 'usr-tcs', name: 'Ticket Counter Staff', email: 'ticketing@adventurepark.com', role: 'ticket_counter_staff' }
+  { id: 'usr-admin', name: 'Executive Director Cooper', email: 'admin@deucepark.com', role: 'super_admin' },
+  { id: 'usr-staff', name: 'Activity Ranger Smith', email: 'staff@deucepark.com', role: 'activity_staff' },
+  { id: 'usr-vendor', name: 'Sarah Jenkins', email: 'vendor@deucepark.com', role: 'food_vendor', vendorId: 'vendor-forest-cafe' },
+  { id: 'usr-gkm', name: 'Karting Manager', email: 'kartingmanager@deucepark.com', role: 'go_karting_manager' },
+  { id: 'usr-gks', name: 'Karting Staff', email: 'kartingstaff@deucepark.com', role: 'go_karting_staff' },
+  { id: 'usr-tcs', name: 'Ticket Counter Staff', email: 'ticketing@deucepark.com', role: 'ticket_counter_staff' }
 ];
 
 export const INITIAL_ACTIVITIES: Activity[] = [

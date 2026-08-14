@@ -27,15 +27,26 @@ interface ActivityPageProps {
 }
 
 export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClose }) => {
-  const { createBooking, timeSlots } = useAppContext();
+  const { createBooking, timeSlots, activities } = useAppContext();
+  const shootingActivity = activities.find(a => a.id === 'act-air-gun');
 
-  const packages: ShootingPackage[] = [
+  const defaultPackages: ShootingPackage[] = [
     { id: 'pkg-shoot-1', name: 'Starter Aim (15 Shots)', price: 15, description: 'Perfect for beginners learning basic trigger control.', shots: 15 },
     { id: 'pkg-shoot-2', name: 'Sharp Shooter (30 Shots)', price: 25, description: 'Most popular. Includes electronic reactive target mode.', shots: 30 },
     { id: 'pkg-shoot-3', name: 'Marksman Elite (50 Shots)', price: 35, description: 'Advanced targets, competition grade pellets, full telemetry analysis.', shots: 50 }
   ];
 
-  const [selectedPackage, setSelectedPackage] = useState<ShootingPackage>(packages[1]);
+  const packages: ShootingPackage[] = (shootingActivity?.packages && shootingActivity.packages.length > 0)
+    ? shootingActivity.packages
+    : defaultPackages;
+
+  const [selectedPackage, setSelectedPackage] = useState<ShootingPackage>(packages[0] || defaultPackages[0]);
+
+  React.useEffect(() => {
+    if (packages.length > 0 && (!selectedPackage || !packages.some(p => p.id === selectedPackage.id))) {
+      setSelectedPackage(packages[0]);
+    }
+  }, [packages]);
   const [packageQuantity, setPackageQuantity] = useState<number>(1);
   const [customerName, setCustomerName] = useState<string>('');
   const [customerEmail, setCustomerEmail] = useState<string>('');
@@ -204,37 +215,6 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
   return (
     <>
       <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full print:hidden">
-      
-      {/* 1. FULL WIDTH HERO EXPERIENCE SECTION */}
-      <div className="relative rounded-2xl overflow-hidden group shadow-[0_0_30px_rgba(20,241,217,0.05)] border border-white/5 flex-shrink-0">
-        <div className="absolute inset-0 bg-[#050816]/30 z-10"></div>
-        <img 
-          src="https://images.unsplash.com/photo-1595590424283-b8f1784cb2c8?auto=format&fit=crop&w=1200&q=80" 
-          alt="Shooting Range" 
-          className="w-full h-[160px] md:h-[200px] object-cover filter saturate-150 transform group-hover:scale-105 transition-transform duration-[2000ms]"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] via-[#0B1120]/60 to-transparent z-20"></div>
-        
-        <div className="absolute bottom-0 left-0 p-4 md:p-6 z-30 w-full">
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap gap-2 mb-2">
-            <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#14F1D9] flex items-center gap-1 shadow-sm">
-              <Crosshair className="w-3 h-3" /> Electronic Targets
-            </span>
-            <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#00B4FF] flex items-center gap-1 shadow-sm">
-              <Target className="w-3 h-3" /> Pro Accuracy
-            </span>
-            <span className="px-2 py-0.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] uppercase tracking-widest font-bold text-[#FFB703] flex items-center gap-1 shadow-sm">
-              <Shield className="w-3 h-3" /> Safe
-            </span>
-          </motion.div>
-          <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-2xl md:text-3xl font-black text-white mb-1 tracking-tighter leading-none">
-            Precision Air Gun <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#14F1D9] to-[#00B4FF]">Shooting</span>
-          </motion.h1>
-          <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-xs text-[#CBD5E1] max-w-xl font-medium">
-            Zero in your sights. Challenge your focus in a fully supervised 10-meter indoor rifle and pistol lane featuring motorized electronic target returns.
-          </motion.p>
-        </div>
-      </div>
 
       {/* 50:50 COLUMNS */}
       <div className="flex-1 flex flex-col lg:flex-row gap-5 min-h-0">
