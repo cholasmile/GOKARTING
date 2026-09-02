@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAppContext } from '../context/AppContext';
 import { Activity, MenuItem, Booking, FoodOrder, User } from '../types';
@@ -19,6 +20,8 @@ import { HorseRidingActivityPage } from './HorseRidingActivityPage';
 import { ShootingActivityPage } from './ShootingActivityPage';
 import { GoKartingActivityPage } from './GoKartingActivityPage';
 import { AdventureHero } from './AdventureHero';
+import { ReservationCalendar } from './ReservationCalendar';
+import { getAvailableTimeSlots, getTodayDateString, isPastDate } from '../lib/slotUtils';
 
 export const CustomerDashboard: React.FC = () => {
   const { 
@@ -50,12 +53,26 @@ export const CustomerDashboard: React.FC = () => {
   // 1. ACTIVITY BOOKING FLOW STATES
   // -----------------------------------------------------------------
   const [selectedActivity, setSelectedActivity] = useState<Activity>(activities[0] || null);
-  const [bookingDate, setBookingDate] = useState<string>(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
-  });
-  const [selectedSlot, setSelectedSlot] = useState<string>(timeSlots[0]);
+  const [bookingDate, setBookingDate] = useState<string>(() => getTodayDateString());
+  
+  const availableSlots = getAvailableTimeSlots(bookingDate);
+  const [selectedSlot, setSelectedSlot] = useState<string>(() => availableSlots[0] || '');
+
+  useEffect(() => {
+    const handleOpenMemberModal = () => setIsMemberModalOpen(true);
+    window.addEventListener('open-member-modal', handleOpenMemberModal);
+    return () => window.removeEventListener('open-member-modal', handleOpenMemberModal);
+  }, []);
+
+  useEffect(() => {
+    if (availableSlots.length > 0) {
+      if (!availableSlots.includes(selectedSlot)) {
+        setSelectedSlot(availableSlots[0]);
+      }
+    } else {
+      setSelectedSlot('');
+    }
+  }, [bookingDate, availableSlots.length]);
   
   // standard vs package selections
   const [bookingType, setBookingType] = useState<'standard' | 'package'>('standard');
@@ -128,7 +145,8 @@ export const CustomerDashboard: React.FC = () => {
 
   // Booking Checkout & Payment Modal
   const [isBookingPaymentOpen, setIsBookingPaymentOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'net_banking' | 'cash'>('upi');
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'net_banking' | 'cash' | 'complimentary'>('upi');
+  const [isComplimentaryPass, setIsComplimentaryPass] = useState(false);
   const [bookingSuccessData, setBookingSuccessData] = useState<{ booking: Booking; ticket: any } | null>(null);
   const [bookingErrorMessage, setBookingErrorMessage] = useState<string | null>(null);
   const [isPaymentStage, setIsPaymentStage] = useState(false);
@@ -160,6 +178,7 @@ export const CustomerDashboard: React.FC = () => {
 
   // Calculate activity price
   const calculateBookingTotal = () => {
+    if (isComplimentaryPass) return 0;
     if (!selectedActivity) return 0;
     
     if (bookingType === 'standard') {
@@ -185,6 +204,16 @@ export const CustomerDashboard: React.FC = () => {
       return;
     }
 
+    if (isPastDate(bookingDate)) {
+      setBookingErrorMessage('Booking for past dates is not allowed. Please select today or a future date.');
+      return;
+    }
+
+    if (!selectedSlot || !availableSlots.includes(selectedSlot)) {
+      setBookingErrorMessage('Please select a valid available time slot.');
+      return;
+    }
+
     let details = '';
     let qty = 1;
 
@@ -205,11 +234,11 @@ export const CustomerDashboard: React.FC = () => {
       activityName: selectedActivity.name,
       date: bookingDate,
       timeSlot: selectedSlot,
-      ticketType: bookingType,
-      details,
+      ticketType: isComplimentaryPass ? 'Complimentary VIP Pass' : bookingType,
+      details: isComplimentaryPass ? `${details} (VIP Compliment)` : details,
       quantity: qty,
-      totalAmount: bookingTotal,
-      paymentMethod
+      totalAmount: isComplimentaryPass ? 0 : bookingTotal,
+      paymentMethod: isComplimentaryPass ? 'complimentary' : paymentMethod
     });
 
     if (typeof result === 'string') {
@@ -303,75 +332,13 @@ export const CustomerDashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 flex flex-col w-full">
+    <div className="space-y-2 flex flex-col w-full">
       <div className="w-full overflow-hidden">
         <AdventureHero onOpenMemberModal={() => setIsMemberModalOpen(true)} />
       </div>
-
-      {/* MEMBER ACCOUNT & GUEST OPTIONS BAR */}
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6">
-        {currentUser ? (
-          <div className="bg-[#0B1120]/90 border border-[#14F1D9]/30 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-lg backdrop-blur-xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#14F1D9] to-[#00B4FF] flex items-center justify-center text-[#0B1120] font-black text-lg shadow-[0_0_15px_rgba(20,241,217,0.4)]">
-                {currentUser.name ? currentUser.name[0].toUpperCase() : 'M'}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-white text-sm">{currentUser.name}</span>
-                  <span className="bg-[#14F1D9]/10 text-[#14F1D9] border border-[#14F1D9]/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase">Verified Member</span>
-                </div>
-                <span className="text-xs text-[#9CA3AF] font-mono">{currentUser.email}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-              <button
-                onClick={() => {
-                  setActiveSubTab('history');
-                  setTimeout(() => contentRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-                }}
-                className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold transition-all border border-white/10 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Ticket className="w-4 h-4 text-[#14F1D9]" /> My Saved Passes & Orders
-              </button>
-              <button
-                onClick={() => setCurrentUser(null)}
-                className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold transition-all border border-rose-500/20 flex items-center gap-1 cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" /> Sign Out
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-[#0B1120]/90 border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-lg backdrop-blur-xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[#9CA3AF]">
-                <UserIcon className="w-5 h-5 text-[#14F1D9]" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-white text-sm">Guest Mode Active</span>
-                  <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase">Instant Booking</span>
-                </div>
-                <span className="text-xs text-[#9CA3AF]">Continue as guest to book immediately, or log in to sync past passes across devices.</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <button
-                onClick={() => setIsMemberModalOpen(true)}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase tracking-wider hover:scale-[1.02] transition-all shadow-[0_0_20px_rgba(20,241,217,0.3)] cursor-pointer flex items-center justify-center gap-2"
-              >
-                <LogIn className="w-4 h-4" /> Member Login / Sign Up
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
       
       {/* PREMIUM ACTIVITY SELECTION GRID */}
-      <div id="activities-section" className="relative w-full py-8 bg-[#050816] rounded-3xl overflow-hidden border border-white/5 shadow-[0_0_50px_rgba(20,241,217,0.05)]">
+      <div id="activities-section" className="relative w-full py-6 bg-[#050816] rounded-3xl overflow-hidden border border-white/5 shadow-[0_0_50px_rgba(20,241,217,0.05)]">
         
         {/* Background Enhancements */}
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
@@ -407,7 +374,7 @@ export const CustomerDashboard: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap justify-center items-center gap-6 perspective-1000">
-            {activities.map((act, idx) => {
+            {activities.filter(act => act.isActive !== false).map((act, idx) => {
               let color = 'from-[#14F1D9]/80 to-[#00B4FF]/80';
               if (idx % 3 === 1) color = 'from-[#FFB703]/80 to-[#F59E0B]/80';
               if (idx % 3 === 2) color = 'from-purple-500/80 to-pink-500/80';
@@ -418,6 +385,12 @@ export const CustomerDashboard: React.FC = () => {
                 icon: '🏎️',
                 color
               };
+
+              // Check for an active, valid offer to display a badge
+              const todayStr = new Date().toISOString().split('T')[0];
+              const activeOffer = (act.offers || []).find(
+                o => o.isActive && o.validFrom <= todayStr && (!o.validUntil || o.validUntil >= todayStr)
+              );
 
               return (
                 <motion.div
@@ -460,14 +433,30 @@ export const CustomerDashboard: React.FC = () => {
                   {/* Floating Particles (CSS trick) */}
                   <div className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-color-dodge"></div>
 
+                  {/* Active Offer Badge Overlay — shown only when there is a live offer */}
+                  {activeOffer && (
+                    <div className="absolute top-3 left-3 z-30 flex flex-col gap-1">
+                      <div className="flex items-center gap-1 bg-gradient-to-r from-[#007B8B] to-[#00ABAB] text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-lg">
+                        🏷️ {activeOffer.discountPercentage}% OFF
+                      </div>
+                      <div className="bg-black/70 backdrop-blur-sm text-white/90 text-[9px] font-mono px-2 py-0.5 rounded-full">
+                        ₹{activeOffer.offerPrice} <span className="line-through text-white/50">₹{activeOffer.originalPrice}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Content */}
                   <div className="absolute inset-0 z-20 flex flex-col justify-end p-6">
                     <h3 className="text-xl font-black text-white group-hover:text-[#14F1D9] transition-colors drop-shadow-md">
                       {item.name}
                     </h3>
+                    {/* Show shortDescription if available, otherwise skip */}
+                    {act.shortDescription && (
+                      <p className="text-[11px] text-white/70 mt-1 line-clamp-1">{act.shortDescription}</p>
+                    )}
                     
                     {/* Shine Button Animation */}
-                    <div className="mt-4 relative overflow-hidden rounded-xl bg-white/10 border border-white/20 px-4 py-2 text-xs font-bold text-white text-center w-full group-hover:bg-[#14F1D9] group-hover:text-[#050816] group-hover:border-[#14F1D9] transition-all duration-300">
+                    <div className="mt-3 relative overflow-hidden rounded-xl bg-white/10 border border-white/20 px-4 py-2 text-xs font-bold text-white text-center w-full group-hover:bg-[#14F1D9] group-hover:text-[#050816] group-hover:border-[#14F1D9] transition-all duration-300">
                       <span className="relative z-10 flex items-center justify-center gap-2">
                         Access Terminal <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
                       </span>
@@ -495,6 +484,12 @@ export const CustomerDashboard: React.FC = () => {
             if (!dynamicAct) return null;
             const hasPackages = dynamicAct.packages && dynamicAct.packages.length > 0;
 
+            // Find active offer for this activity
+            const todayStr2 = new Date().toISOString().split('T')[0];
+            const dynamicActiveOffer = (dynamicAct.offers || []).find(
+              o => o.isActive && o.validFrom <= todayStr2 && (!o.validUntil || o.validUntil >= todayStr2)
+            );
+
             return (
               <div className="flex flex-col lg:flex-row gap-6">
                 <div className="flex-1 space-y-4">
@@ -502,7 +497,48 @@ export const CustomerDashboard: React.FC = () => {
                     <div className="w-2 h-6 bg-[#14F1D9] rounded-full"></div>
                     <h2 className="text-2xl md:text-3xl font-black text-white">{dynamicAct.name}</h2>
                   </div>
-                  <p className="text-[#9CA3AF] text-sm leading-relaxed">{dynamicAct.description}</p>
+                  <p className="text-[#9CA3AF] text-sm leading-relaxed">{dynamicAct.detailedDescription || dynamicAct.description}</p>
+
+                  {/* Activity Meta Info */}
+                  {(dynamicAct.duration || dynamicAct.ageRequirement) && (
+                    <div className="flex flex-wrap gap-3">
+                      {dynamicAct.duration && (
+                        <div className="flex items-center gap-1.5 text-xs text-white/70 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+                          ⏱️ {dynamicAct.duration}
+                        </div>
+                      )}
+                      {dynamicAct.ageRequirement && (
+                        <div className="flex items-center gap-1.5 text-xs text-white/70 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+                          👥 {dynamicAct.ageRequirement}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Active Offer Banner */}
+                  {dynamicActiveOffer && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-[#007B8B]/20 to-[#00ABAB]/20 border border-[#007B8B]/40">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-extrabold bg-[#007B8B] text-white px-2 py-0.5 rounded-full">🏷️ {dynamicActiveOffer.discountPercentage}% OFF</span>
+                            <span className="text-xs font-bold text-[#40E0D0]">{dynamicActiveOffer.name}</span>
+                          </div>
+                          <p className="text-[11px] text-[#9CA3AF]">{dynamicActiveOffer.description}</p>
+                          <p className="text-[10px] text-[#9CA3AF]/60 mt-1 font-mono">
+                            Valid: {dynamicActiveOffer.validFrom} → {dynamicActiveOffer.validUntil}
+                          </p>
+                          {dynamicActiveOffer.termsAndConditions && (
+                            <p className="text-[9px] text-[#9CA3AF]/50 mt-1">T&C: {dynamicActiveOffer.termsAndConditions}</p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[#9CA3AF] line-through text-sm font-mono">₹{dynamicActiveOffer.originalPrice}</span>
+                          <div className="text-[#40E0D0] font-black text-2xl font-mono">₹{dynamicActiveOffer.offerPrice}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   
                   {hasPackages ? (
                     <div className="space-y-3 pt-2">
@@ -542,6 +578,23 @@ export const CustomerDashboard: React.FC = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Rules & Safety */}
+                  {(dynamicAct.rules && dynamicAct.rules.length > 0) && (
+                    <div className="space-y-2">
+                      <h3 className="font-bold text-xs uppercase tracking-widest text-[#14F1D9] flex items-center gap-1.5">
+                        🛡️ Rules & Safety Instructions
+                      </h3>
+                      <ul className="space-y-1.5">
+                        {dynamicAct.rules.map((rule, i) => (
+                          <li key={i} className="flex items-start gap-2 text-[11px] text-[#9CA3AF]">
+                            <span className="text-[#14F1D9] mt-0.5 flex-shrink-0">▸</span>
+                            {rule}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
 
                 <div className="w-full lg:w-96 bg-[#0B1120] p-6 rounded-2xl border border-white/10 space-y-4">
@@ -576,42 +629,85 @@ export const CustomerDashboard: React.FC = () => {
                         className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-[#9CA3AF] focus:border-[#14F1D9] focus:outline-none"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="date"
-                        value={bookingDate}
-                        onChange={e => setBookingDate(e.target.value)}
-                        className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+
+                    {/* Interactive Reservation Calendar */}
+                    <div className="space-y-3 pt-1">
+                      <label className="text-[10px] uppercase font-mono font-bold text-[#14F1D9] block">
+                        📅 Select Reservation Date
+                      </label>
+                      <ReservationCalendar
+                        selectedDate={bookingDate}
+                        onSelectDate={dateStr => setBookingDate(dateStr)}
                       />
-                      <select
-                        value={selectedSlot}
-                        onChange={e => setSelectedSlot(e.target.value)}
-                        className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
-                      >
-                        {timeSlots.map(slot => (
-                          <option key={slot} value={slot}>{slot}</option>
-                        ))}
-                      </select>
+
+                      {/* Time Slot Selection */}
+                      <div className="space-y-1.5 pt-1">
+                        <label className="text-[10px] uppercase font-mono font-bold text-[#9CA3AF] block">
+                          ⏰ Select Time Slot
+                        </label>
+                        <select
+                          value={selectedSlot}
+                          onChange={e => setSelectedSlot(e.target.value)}
+                          disabled={availableSlots.length === 0}
+                          className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono disabled:opacity-50"
+                        >
+                          {availableSlots.length > 0 ? (
+                            availableSlots.map(slot => (
+                              <option key={slot} value={slot}>{slot}</option>
+                            ))
+                          ) : (
+                            <option value="">No slots available</option>
+                          )}
+                        </select>
+                      </div>
+
+                      {availableSlots.length === 0 && (
+                        <p className="text-red-400 text-[10px] mt-1 font-mono">No available slots for selected date. Please pick another date.</p>
+                      )}
+                    </div>
+
+                    {/* Complimentary Ticket Option */}
+                    <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-xs font-mono text-amber-400 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isComplimentaryPass}
+                          onChange={e => setIsComplimentaryPass(e.target.checked)}
+                          className="w-4 h-4 rounded accent-amber-400 cursor-pointer"
+                        />
+                        <span className="font-bold">🎁 Complimentary VIP Pass</span>
+                      </label>
+                      {isComplimentaryPass && (
+                        <span className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                          100% OFF
+                        </span>
+                      )}
                     </div>
 
                     <div className="pt-2 border-t border-white/10 flex justify-between items-center">
-                      <span className="text-xs text-[#9CA3AF]">Total</span>
-                      <span className="text-xl font-black font-mono text-[#14F1D9]">
-                        ₹{(() => {
+                      <span className="text-xs text-[#9CA3AF]">
+                        {isComplimentaryPass ? 'VIP Pricing' : 'Total'}
+                      </span>
+                      <span className={`text-xl font-black font-mono ${isComplimentaryPass ? 'text-amber-400' : 'text-[#14F1D9]'}`}>
+                        {isComplimentaryPass ? '₹0.00 (FREE)' : `₹${(() => {
                           if (hasPackages) {
                             const p = dynamicAct.packages!.find(pkg => pkg.id === selectedPackageId) || dynamicAct.packages![0];
                             return p ? p.price * packageQuantity : 0;
                           }
                           return (adultCount * (dynamicAct.adultPrice || 0)) + (childCount * (dynamicAct.childPrice || 0));
-                        })()}
+                        })()}`}
                       </span>
                     </div>
 
                     <button
                       type="submit"
-                      className="w-full py-3 bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] font-black text-xs uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-all cursor-pointer"
+                      className={`w-full py-3 font-black text-xs uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-all cursor-pointer shadow-lg ${
+                        isComplimentaryPass
+                          ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-black shadow-amber-500/20'
+                          : 'bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] shadow-[0_0_15px_rgba(20,241,217,0.3)]'
+                      }`}
                     >
-                      Confirm Booking
+                      {isComplimentaryPass ? '🎁 Issue Complimentary VIP Pass' : 'Confirm Booking'}
                     </button>
                   </form>
                 </div>
@@ -621,164 +717,7 @@ export const CustomerDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* ----------------------------------------------------------------- */}
-      {/* 2. DINE SUB-TAB (FOOD STREET) */}
-      {/* ----------------------------------------------------------------- */}
-      {activeSubTab === 'dine' && (
-        <div className="w-full flex flex-col gap-5 pb-6 font-sans text-slate-100 h-full">
 
-          {/* 50:50 COLUMNS */}
-          <div className="flex-1 flex flex-col lg:flex-row gap-5 min-h-0">
-            
-            {/* LEFT COLUMN: BROWSE & FILTER */}
-            <div className="flex-1 min-w-0 flex flex-col justify-start gap-5 h-full overflow-y-auto pr-2 custom-scrollbar">
-              
-              {/* Search and Stall Filter controls */}
-              <div className="p-4 glass-panel border border-white/10 rounded-xl flex flex-col md:flex-row gap-3 shadow-lg flex-shrink-0">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    id="input-food-search"
-                    placeholder="Search pizzas, lattes..."
-                    value={foodSearch}
-                    onChange={e => setFoodSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-[#050816] border border-white/10 rounded-lg text-xs text-white placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-[#14F1D9] transition-all"
-                  />
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-[#9CA3AF]" />
-                </div>
-                <select
-                  id="select-food-vendor"
-                  value={selectedFoodVendorId}
-                  onChange={e => setSelectedFoodVendorId(e.target.value)}
-                  className="px-3 py-2 bg-[#050816] border border-white/10 rounded-lg text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-[#14F1D9] cursor-pointer appearance-none"
-                >
-                  <option value="all">All Food Stalls</option>
-                  {vendors.map(v => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Grid of menu items */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4">
-                {filteredMenuItems.map(item => {
-                  const vendorName = vendors.find(v => v.id === item.vendorId)?.name || 'Food Stall';
-                  
-                  return (
-                    <div 
-                      key={item.id} 
-                      id={`dine-item-card-${item.id}`}
-                      className="p-3 glass-panel border border-white/5 hover:border-[#14F1D9]/50 rounded-xl flex gap-3 transition-all duration-300 group hover:shadow-[0_0_15px_rgba(20,241,217,0.15)] bg-[#0B1120]"
-                    >
-                      <img src={item.image} alt={item.name} className="w-20 h-20 rounded-lg object-cover border border-white/5" referrerPolicy="no-referrer" />
-                      <div className="flex-1 flex flex-col justify-between min-w-0">
-                        <div>
-                          <div className="flex justify-between items-start">
-                            <span className="text-[9px] uppercase font-mono font-bold text-[#14F1D9] bg-[#050816] px-1.5 py-0.5 rounded border border-white/5 line-clamp-1 truncate mr-1">{vendorName}</span>
-                            <span className="font-mono text-xs font-black text-white">₹{item.price.toFixed(2)}</span>
-                          </div>
-                          <h4 className="font-bold text-xs text-white truncate mt-2 tracking-tight group-hover:text-[#14F1D9] transition-colors">{item.name}</h4>
-                          <p className="text-[9px] text-[#9CA3AF] line-clamp-2 mt-1 leading-snug">{item.description}</p>
-                        </div>
-
-                        <button
-                          id={`btn-add-to-cart-${item.id}`}
-                          onClick={() => addToFoodCart(item, 1)}
-                          className="mt-2 self-end px-3 py-1.5 rounded bg-white/5 hover:bg-[#14F1D9] hover:text-[#0B1120] text-white font-black text-[9px] uppercase tracking-widest flex items-center gap-1 cursor-pointer transition-all border border-white/5 hover:border-[#14F1D9]"
-                        >
-                          <Plus className="h-3 w-3" /> Add
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* RIGHT COLUMN: CART PANEL */}
-            <div className="flex-1 min-w-0 flex flex-col justify-between gap-5 h-full overflow-y-auto pr-2 custom-scrollbar">
-              <div className="glass-panel border border-white/10 rounded-xl p-4 flex flex-col h-full shadow-[0_0_20px_rgba(20,241,217,0.05)] relative overflow-hidden">
-                <div className="absolute -top-10 -right-10 w-24 h-24 bg-[#14F1D9]/10 rounded-full blur-[40px] pointer-events-none"></div>
-
-                <div className="border-b border-white/10 pb-3 flex justify-between items-center flex-shrink-0 relative z-10">
-                  <div>
-                    <h3 className="font-black text-sm text-white flex items-center gap-2 tracking-tight">
-                      <ShoppingBag className="w-4 h-4 text-[#FFB703]" /> Food Court Cart
-                    </h3>
-                  </div>
-                  {foodCart.length > 0 && (
-                    <button
-                      id="btn-clear-cart"
-                      onClick={clearFoodCart}
-                      className="text-[9px] font-mono text-red-400 font-bold flex items-center gap-0.5 hover:text-red-300 cursor-pointer uppercase tracking-widest"
-                    >
-                      <Trash2 className="h-3 w-3" /> Clear
-                    </button>
-                  )}
-                </div>
-
-                {/* Cart item loop */}
-                <div className="flex-1 overflow-y-auto py-3 relative z-10 custom-scrollbar">
-                  {foodCart.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-[#9CA3AF] text-xs">
-                      <ShoppingBag className="h-10 w-10 mb-3 text-white/10" />
-                      <span className="font-medium text-white/50">Your cart is empty.</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {foodCart.map((cartItem, idx) => (
-                        <div key={idx} id={`cart-row-${cartItem.menuItemId}`} className="p-2.5 bg-[#050816] border border-white/5 rounded-lg text-xs flex justify-between items-center gap-2 group">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-bold text-white truncate">{cartItem.name}</div>
-                            <div className="text-[9px] text-[#9CA3AF] font-mono truncate">{cartItem.vendorName}</div>
-                          </div>
-                          
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono text-[#00B4FF] font-bold text-[10px]">{cartItem.quantity}x</span>
-                            <span className="font-mono font-black text-white">₹{(cartItem.price * cartItem.quantity).toFixed(2)}</span>
-                            <button
-                              id={`btn-cart-remove-${cartItem.menuItemId}`}
-                              onClick={() => removeFromFoodCart(cartItem.menuItemId)}
-                              className="text-white/40 hover:text-red-400 p-1 rounded cursor-pointer transition-colors"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Calculations & Submit button */}
-                <div className="border-t border-white/10 pt-4 flex-shrink-0 relative z-10">
-                  <div className="flex justify-between items-end mb-4">
-                    <span className="text-[#9CA3AF] font-bold text-[10px] uppercase tracking-widest">Total Bill</span>
-                    <span className="text-2xl font-black font-mono text-white tracking-tighter">
-                      ₹{foodCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}
-                    </span>
-                  </div>
-
-                  <button
-                    id="btn-dine-cart-checkout"
-                    onClick={() => {
-                      setFoodSuccessOrder(null);
-                      setIsFoodCheckoutOpen(true);
-                    }}
-                    disabled={foodCart.length === 0}
-                    className="w-full py-3 rounded-lg bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 overflow-hidden relative group shadow-[0_0_20px_rgba(20,241,217,0.3)] cursor-pointer"
-                  >
-                    <div className="absolute inset-0 w-full h-full animate-[shine_2s_ease-out_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent -skew-x-12"></div>
-                    <span className="relative flex items-center justify-center gap-2">
-                      Checkout <ArrowRight className="w-4 h-4" />
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* 3. HISTORY & WALLET SUB-TAB */}
@@ -944,169 +883,7 @@ export const CustomerDashboard: React.FC = () => {
 
 
 
-      {/* FOOD STREET ORDER CHECKOUT MODAL */}
-      <AnimatePresence>
-      {isFoodCheckoutOpen && (
-        <motion.div 
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-[#050816]/90 z-50 flex items-center justify-center p-4 backdrop-blur-xl"
-        >
-          <motion.div 
-            initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="glass-panel border border-[#14F1D9]/30 rounded-2xl shadow-[0_0_30px_rgba(20,241,217,0.15)] max-w-md w-full p-6 relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 w-48 h-48 bg-[#14F1D9]/10 rounded-full blur-[60px] pointer-events-none"></div>
 
-            <div className="flex justify-between items-start mb-6 relative z-10">
-              <div>
-                <h3 className="font-black text-xl text-white tracking-tight">Food Street Checkout</h3>
-                <p className="text-[9px] text-[#14F1D9] font-mono mt-1 font-bold tracking-widest uppercase">Multi-Vendor Settlement</p>
-              </div>
-              <button 
-                id="btn-close-food-checkout"
-                onClick={() => setIsFoodCheckoutOpen(false)} 
-                className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-white/20 transition-colors cursor-pointer border border-white/10"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={executeFoodCheckout} className="space-y-4 relative z-10">
-              <div className="bg-[#050816] p-4 rounded-xl border border-white/10 space-y-2 font-mono text-white shadow-inner">
-                {foodCart.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-xs">
-                    <span className="text-[#9CA3AF]">{item.quantity}x {item.name}</span>
-                    <span className="font-bold">₹{(item.price * item.quantity).toFixed(2)}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between font-black text-white border-t border-white/10 pt-2 mt-2 text-sm">
-                  <span className="font-sans text-xs uppercase tracking-widest text-[#9CA3AF]">Total Bill:</span>
-                  <span className="text-[#14F1D9]">₹{foodCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}</span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[#9CA3AF] font-black text-[9px] uppercase tracking-widest font-mono block text-center">Payment Gateway</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    key="upi"
-                    type="button"
-                    id="btn-food-pay-method-upi"
-                    onClick={() => setPaymentMethod('upi')}
-                    className={`p-3 rounded-xl border flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer ${
-                      paymentMethod === 'upi' 
-                        ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' 
-                        : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'
-                    }`}
-                  >
-                    <span className="font-black text-[10px] font-mono uppercase tracking-wider">UPI</span>
-                  </button>
-                  <button
-                    key="card"
-                    type="button"
-                    id="btn-food-pay-method-card"
-                    onClick={() => setPaymentMethod('card')}
-                    className={`p-3 rounded-xl border flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer ${
-                      paymentMethod === 'card' 
-                        ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' 
-                        : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4" />
-                  </button>
-                  <button
-                    key="net"
-                    type="button"
-                    id="btn-food-pay-method-net"
-                    onClick={() => setPaymentMethod('net_banking')}
-                    className={`p-3 rounded-xl border flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer ${
-                      paymentMethod === 'net_banking' 
-                        ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' 
-                        : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'
-                    }`}
-                  >
-                    <span className="font-black text-[10px] font-mono uppercase tracking-wider">Bank</span>
-                  </button>
-                  <button
-                    key="cash"
-                    type="button"
-                    id="btn-food-pay-method-cash"
-                    onClick={() => setPaymentMethod('cash')}
-                    className={`p-3 rounded-xl border flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer ${
-                      paymentMethod === 'cash' 
-                        ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' 
-                        : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'
-                    }`}
-                  >
-                    <span className="font-black text-[10px] font-mono uppercase tracking-wider">Cash</span>
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                id="btn-submit-food-payment"
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-[0_0_20px_rgba(20,241,217,0.3)] mt-4 flex items-center justify-center gap-2"
-              >
-                <ShieldCheck className="h-4 w-4 text-[#0B1120]" /> 
-                {(paymentMethod === 'upi' || paymentMethod === 'card' || paymentMethod === 'net_banking') ? 'Pay with Razorpay' : 'Dispatch Kitchen Order'}
-              </button>
-            </form>
-          </motion.div>
-        </motion.div>
-      )}
-      </AnimatePresence>
-
-      {/* FOOD DINE SUCCESS SCREEN INTERSTITIAL */}
-      <AnimatePresence>
-      {foodSuccessOrder && (
-        <motion.div 
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-[#050816]/90 z-50 flex items-center justify-center p-4 backdrop-blur-xl"
-        >
-          <motion.div 
-            initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="glass-panel border border-[#14F1D9]/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(20,241,217,0.15)] max-w-sm w-full text-center space-y-4 relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 w-48 h-48 bg-[#14F1D9]/10 rounded-full blur-[60px] pointer-events-none"></div>
-
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.5 }} className="w-16 h-16 bg-gradient-to-br from-[#14F1D9] to-[#00B4FF] rounded-full flex items-center justify-center mx-auto mb-4 shadow-[0_0_20px_rgba(20,241,217,0.4)] relative z-10">
-              <Check className="h-8 w-8 text-[#0B1120] font-bold" />
-            </motion.div>
-            
-            <div className="relative z-10">
-              <h3 className="font-black text-xl text-white tracking-tight">Kitchen Order Dispatched!</h3>
-              <p className="text-xs text-[#9CA3AF] max-w-xs mx-auto leading-normal mt-1 font-medium">
-                Your orders have been assigned to respective vendor queues! You can track cooking updates dynamically in your dashboard.
-              </p>
-            </div>
-
-            <div className="flex gap-2 justify-center pt-4 relative z-10">
-              <button
-                id="btn-food-view-rec"
-                onClick={() => {
-                  setSelectedInvoiceOrder(foodSuccessOrder);
-                  setFoodSuccessOrder(null);
-                }}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] rounded-xl font-black text-[10px] uppercase tracking-widest cursor-pointer hover:scale-[1.02] transition-transform shadow-[0_0_15px_rgba(20,241,217,0.2)]"
-              >
-                View Receipt
-              </button>
-              <button
-                id="btn-food-success-close"
-                onClick={() => {
-                  setActiveSubTab('history');
-                  setFoodSuccessOrder(null);
-                }}
-                className="flex-1 px-4 py-3 border border-white/10 hover:bg-white/10 text-white rounded-xl font-black text-[10px] uppercase tracking-widest cursor-pointer transition-colors"
-              >
-                Track Order
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-      </AnimatePresence>
 
       {/* ----------------------------------------------------------------- */}
       {/* GLOBAL MOUNTED INVOICE MODAL LAUNCHERS */}

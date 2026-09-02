@@ -6,6 +6,8 @@ import {
   ArrowRight, Check, X, CreditCard, AlertTriangle, RotateCcw, Minus, Plus, Zap
 } from 'lucide-react';
 import { printTicket } from '../lib/printTicket';
+import { ReservationCalendar } from './ReservationCalendar';
+import { getAvailableTimeSlots, getTodayDateString, isPastDate } from '../lib/slotUtils';
 
 interface BulletHole {
   x: number;
@@ -51,12 +53,20 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
   const [customerName, setCustomerName] = useState<string>('');
   const [customerEmail, setCustomerEmail] = useState<string>('');
   const [customerPhone, setCustomerPhone] = useState<string>('');
-  const [bookingDate, setBookingDate] = useState<string>(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
-  });
-  const [selectedSlot, setSelectedSlot] = useState<string>(timeSlots[0]);
+  const [bookingDate, setBookingDate] = useState<string>(() => getTodayDateString());
+
+  const availableSlots = getAvailableTimeSlots(bookingDate);
+  const [selectedSlot, setSelectedSlot] = useState<string>(() => availableSlots[0] || '');
+
+  React.useEffect(() => {
+    if (availableSlots.length > 0) {
+      if (!availableSlots.includes(selectedSlot)) {
+        setSelectedSlot(availableSlots[0]);
+      }
+    } else {
+      setSelectedSlot('');
+    }
+  }, [bookingDate, availableSlots.length]);
 
   const [shots, setShots] = useState<BulletHole[]>([]);
   const [totalScore, setTotalScore] = useState<number>(0);
@@ -65,11 +75,11 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
   const targetContainerRef = useRef<HTMLDivElement>(null);
 
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'net_banking' | 'cash'>('upi');
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'net_banking' | 'cash' | 'complimentary'>('upi');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successBooking, setSuccessBooking] = useState<any | null>(null);
 
-  const bookingTotal = selectedPackage.price * packageQuantity;
+  const bookingTotal = paymentMethod === 'complimentary' ? 0 : selectedPackage.price * packageQuantity;
 
   const triggerShot = () => {
     setIsAiming(true);
@@ -134,7 +144,17 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
       return;
     }
 
-    if (bookingTotal <= 0) {
+    if (isPastDate(bookingDate)) {
+      setErrorMessage('Booking for past dates is not allowed. Please select today or a future date.');
+      return;
+    }
+
+    if (!selectedSlot || !availableSlots.includes(selectedSlot)) {
+      setErrorMessage('Please select a valid available time slot.');
+      return;
+    }
+
+    if (bookingTotal <= 0 && paymentMethod !== 'complimentary') {
       setErrorMessage('Please select a valid range package.');
       return;
     }
@@ -148,10 +168,10 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
         activityName: 'Precision Air Gun Shooting',
         date: bookingDate,
         timeSlot: selectedSlot,
-        ticketType: 'package',
+        ticketType: paymentMethod === 'complimentary' ? 'Complimentary VIP Pass' : 'package',
         details,
         quantity: packageQuantity,
-        totalAmount: bookingTotal,
+        totalAmount: paymentMethod === 'complimentary' ? 0 : bookingTotal,
         paymentMethod
       });
   
@@ -162,7 +182,7 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
       }
     };
 
-    if (paymentMethod !== 'upi' && paymentMethod !== 'card' && paymentMethod !== 'net_banking') {
+    if (paymentMethod === 'complimentary' || (paymentMethod !== 'upi' && paymentMethod !== 'card' && paymentMethod !== 'net_banking')) {
       finalizeBooking();
       return;
     }
@@ -401,19 +421,34 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="relative">
-                      <input type="date" required value={bookingDate} onChange={e => setBookingDate(e.target.value)} min={new Date().toISOString().split('T')[0]} className="w-full bg-[#050816] border border-white/10 rounded-lg px-3 py-2 text-white focus:border-[#14F1D9] focus:ring-1 focus:ring-[#14F1D9]/50 focus:outline-none transition-all font-mono text-[10px]" />
-                      <label className="absolute left-3 -top-2 bg-[#0B1120] px-1 text-[9px] font-black text-[#14F1D9] uppercase tracking-widest">Date</label>
-                    </div>
-                    <div className="relative">
-                      <select value={selectedSlot} onChange={e => setSelectedSlot(e.target.value)} className="w-full bg-[#050816] border border-white/10 rounded-lg px-3 py-2 text-white focus:border-[#14F1D9] focus:ring-1 focus:ring-[#14F1D9]/50 focus:outline-none transition-all font-mono text-[10px] appearance-none cursor-pointer">
-                        {timeSlots.map((slot, idx) => (
-                          <option key={idx} value={slot}>{slot}</option>
-                        ))}
+                  {/* Interactive Reservation Calendar */}
+                  <div className="space-y-3 pt-1">
+                    <label className="text-[10px] uppercase font-mono font-bold text-[#14F1D9] block">
+                      📅 Select Reservation Date
+                    </label>
+                    <ReservationCalendar
+                      selectedDate={bookingDate}
+                      onSelectDate={dateStr => setBookingDate(dateStr)}
+                    />
+
+                    {/* Time Slot Selection */}
+                    <div className="space-y-1.5 pt-1">
+                      <label className="text-[10px] uppercase font-mono font-bold text-[#9CA3AF] block">
+                        ⏰ Select Time Slot
+                      </label>
+                      <select value={selectedSlot} onChange={e => setSelectedSlot(e.target.value)} disabled={availableSlots.length === 0} className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-white focus:border-[#14F1D9] focus:ring-1 focus:ring-[#14F1D9]/50 focus:outline-none transition-all font-mono text-xs appearance-none cursor-pointer disabled:opacity-50">
+                        {availableSlots.length > 0 ? (
+                          availableSlots.map((slot, idx) => (
+                            <option key={idx} value={slot}>{slot}</option>
+                          ))
+                        ) : (
+                          <option value="">No slots available</option>
+                        )}
                       </select>
-                      <label className="absolute left-3 -top-2 bg-[#0B1120] px-1 text-[9px] font-black text-[#14F1D9] uppercase tracking-widest">Slot</label>
                     </div>
+                    {availableSlots.length === 0 && (
+                      <p className="text-red-400 text-[10px] font-mono mt-1">No available slots for selected date. Please pick another date.</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -506,22 +541,9 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
                   </div>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-3">
-                  <button onClick={() => printTicket({
-                    receiptId: `TKT-${successBooking.booking.id}`,
-                    activityName: 'Air Rifle Shooting Range',
-                    customerName: successBooking.booking.customerName,
-                    date: successBooking.booking.date,
-                    slot: selectedSlot,
-                    items: [{ label: selectedPackage.name, value: `${selectedPackage.shots} shots` }],
-                    totalAmount: successBooking.booking.totalAmount,
-                    paymentStatus: successBooking.booking.paymentStatus === 'pending' ? 'pending' : 'paid',
-                    quantity: packageQuantity,
-                  })} className="flex-1 py-3 rounded-lg bg-[#14F1D9] text-[#0B1120] font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(20,241,217,0.3)]">
-                    Print Ticket
-                  </button>
-                  <button onClick={() => { setIsPaymentOpen(false); onSuccessClose?.(); }} className="flex-1 py-3 rounded-lg bg-transparent border border-[#14F1D9]/50 text-[#14F1D9] font-black uppercase tracking-widest text-xs hover:bg-[#14F1D9]/10 transition-colors">
-                    Close & Go to Dashboard
+                <div className="flex flex-col gap-3">
+                  <button onClick={() => { setIsPaymentOpen(false); onSuccessClose?.(); }} className="w-full py-3 rounded-xl bg-[#14F1D9] text-[#0B1120] font-black uppercase tracking-widest text-xs hover:bg-[#00B4FF] transition-colors cursor-pointer shadow-lg shadow-[#14F1D9]/20">
+                    Done & Return to Dashboard
                   </button>
                 </div>
               </div>
@@ -535,27 +557,38 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-[#9CA3AF] font-black text-[9px] uppercase tracking-widest font-mono block text-center">Payment Gateway</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button type="button" onClick={() => setPaymentMethod('upi')} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'upi' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
+                  <label className="text-[#9CA3AF] font-black text-[9px] uppercase tracking-widest font-mono block text-center">Payment / Pass Option</label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <button type="button" onClick={() => setPaymentMethod('upi')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'upi' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
                       <span className="font-black text-[10px] font-mono uppercase tracking-wider">UPI</span>
                     </button>
-                    <button type="button" onClick={() => setPaymentMethod('card')} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'card' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
+                    <button type="button" onClick={() => setPaymentMethod('card')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'card' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
                       <CreditCard className="w-4 h-4" />
                     </button>
-                    <button type="button" onClick={() => setPaymentMethod('net_banking')} className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'net_banking' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
+                    <button type="button" onClick={() => setPaymentMethod('net_banking')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'net_banking' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
                       <span className="font-black text-[10px] font-mono uppercase tracking-wider">Bank</span>
+                    </button>
+                    <button type="button" onClick={() => setPaymentMethod('complimentary')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'complimentary' ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-amber-400/50 hover:text-amber-300'}`}>
+                      <span className="font-black text-[9px] font-mono uppercase tracking-wider text-center">🎁 Comp</span>
                     </button>
                   </div>
                 </div>
 
-                <div className="p-4 bg-[#050816] rounded-xl border border-white/10 flex justify-between items-center mt-5">
-                  <span className="text-[#9CA3AF] font-black text-[10px] uppercase tracking-widest font-mono">Total</span>
-                  <span className="text-2xl font-black font-mono text-[#14F1D9] tracking-tighter">₹{bookingTotal.toFixed(2)}</span>
+                <div className="p-4 bg-[#050816] rounded-xl border border-white/10 flex justify-between items-center mt-4">
+                  <span className="text-[#9CA3AF] font-black text-[10px] uppercase tracking-widest font-mono">
+                    {paymentMethod === 'complimentary' ? 'VIP Status' : 'Total'}
+                  </span>
+                  <span className={`text-2xl font-black font-mono tracking-tighter ${paymentMethod === 'complimentary' ? 'text-amber-400' : 'text-[#14F1D9]'}`}>
+                    {paymentMethod === 'complimentary' ? '₹0.00 (FREE)' : `₹${bookingTotal.toFixed(2)}`}
+                  </span>
                 </div>
 
-                <button type="submit" className="w-full py-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-[0_0_20px_rgba(168,85,247,0.3)] mt-4">
-                  Pay with Razorpay
+                <button type="submit" className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-lg mt-4 ${
+                  paymentMethod === 'complimentary' 
+                    ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-black shadow-amber-500/20' 
+                    : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-[0_0_20px_rgba(168,85,247,0.3)]'
+                }`}>
+                  {paymentMethod === 'complimentary' ? '🎁 Issue Complimentary VIP Pass' : 'Pay with Razorpay'}
                 </button>
               </form>
             )}

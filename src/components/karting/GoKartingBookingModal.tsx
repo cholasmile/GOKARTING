@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, User, Phone, Calendar, Clock, Users, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { GoKartingBooking } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
+import { getAvailableTimeSlots, getTodayDateString, isPastDate } from '../../lib/slotUtils';
 
 interface GoKartingBookingModalProps {
   onClose: () => void;
@@ -9,19 +10,35 @@ interface GoKartingBookingModalProps {
 }
 
 const GoKartingBookingModal: React.FC<GoKartingBookingModalProps> = ({ onClose, onBook }) => {
-  const [formData, setFormData] = useState({
-    customerName: '',
-    customerEmail: '',
-    mobileNumber: '',
-    riderAge: '',
-    gender: 'unspecified',
-    emergencyContact: '',
-    numberOfRiders: 1,
-    sessionType: 'standard',
-    sessionDuration: 10,
-    preferredDate: new Date().toISOString().split('T')[0],
-    preferredTimeSlot: '10:00 AM',
+  const todayStr = getTodayDateString();
+  const [formData, setFormData] = useState(() => {
+    const slots = getAvailableTimeSlots(todayStr);
+    return {
+      customerName: '',
+      customerEmail: '',
+      mobileNumber: '',
+      riderAge: '',
+      gender: 'unspecified',
+      emergencyContact: '',
+      numberOfRiders: 1,
+      sessionType: 'standard',
+      sessionDuration: 10,
+      preferredDate: todayStr,
+      preferredTimeSlot: slots[0] || '',
+    };
   });
+
+  const availableSlots = getAvailableTimeSlots(formData.preferredDate);
+
+  React.useEffect(() => {
+    if (availableSlots.length > 0) {
+      if (!availableSlots.includes(formData.preferredTimeSlot)) {
+        setFormData(prev => ({ ...prev, preferredTimeSlot: availableSlots[0] }));
+      }
+    } else {
+      setFormData(prev => ({ ...prev, preferredTimeSlot: '' }));
+    }
+  }, [formData.preferredDate, availableSlots.length]);
 
   const [step, setStep] = useState<1 | 2>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,6 +47,16 @@ const GoKartingBookingModal: React.FC<GoKartingBookingModalProps> = ({ onClose, 
     e.preventDefault();
     if (step === 1) {
       setStep(2);
+      return;
+    }
+
+    if (isPastDate(formData.preferredDate)) {
+      alert('Booking for past dates is not allowed. Please select today or a future date.');
+      return;
+    }
+
+    if (!formData.preferredTimeSlot || !availableSlots.includes(formData.preferredTimeSlot)) {
+      alert('Please select a valid available time slot.');
       return;
     }
 
@@ -156,11 +183,22 @@ const GoKartingBookingModal: React.FC<GoKartingBookingModalProps> = ({ onClose, 
                   </div>
                   <div>
                     <label className={labelClass}>Preferred Date</label>
-                    <input required type="date" value={formData.preferredDate} onChange={e => setFormData({...formData, preferredDate: e.target.value})} className={inputClass} />
+                    <input required type="date" min={getTodayDateString()} value={formData.preferredDate} onChange={e => setFormData({...formData, preferredDate: e.target.value})} className={inputClass} />
                   </div>
                   <div>
-                    <label className={labelClass}>Preferred Time</label>
-                    <input required type="time" value={formData.preferredTimeSlot} onChange={e => setFormData({...formData, preferredTimeSlot: e.target.value})} className={inputClass} />
+                    <label className={labelClass}>Preferred Time Slot</label>
+                    <select required value={formData.preferredTimeSlot} onChange={e => setFormData({...formData, preferredTimeSlot: e.target.value})} disabled={availableSlots.length === 0} className={inputClass + " appearance-none disabled:opacity-50"}>
+                      {availableSlots.length > 0 ? (
+                        availableSlots.map(slot => (
+                          <option key={slot} value={slot}>{slot}</option>
+                        ))
+                      ) : (
+                        <option value="">No slots available</option>
+                      )}
+                    </select>
+                    {availableSlots.length === 0 && (
+                      <p className="text-red-400 text-[10px] font-mono mt-1">No slots available for this date.</p>
+                    )}
                   </div>
                 </div>
 

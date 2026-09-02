@@ -1,19 +1,30 @@
 import React, { useState } from 'react';
-import { Ticket, Users, CreditCard, CheckCircle, Smartphone, Printer, Search, FileText, Banknote, Utensils, Plus, Minus, ShoppingBag, Trash2, ArrowRight } from 'lucide-react';
+import { Ticket, Users, CreditCard, CheckCircle, Smartphone, Printer, Search, FileText, Banknote, Utensils, Plus, Minus, ShoppingBag, Trash2, ArrowRight, XCircle, RotateCcw, AlertTriangle, Check, X } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { Activity } from '../types';
+import { Activity, Payment } from '../types';
 import { UnifiedTicketingFlow } from './UnifiedTicketingFlow';
 import { printTicket } from '../lib/printTicket';
 
 const TicketingDashboard: React.FC = () => {
   const { 
     activities, currentUser, payments, menuItems, vendors, 
-    foodCart, addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder 
+    foodCart, addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder,
+    cancelAndRefundTicket
   } = useAppContext();
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'food_street' | 'history'>('new_booking');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Cancel & Refund Modal States
+  const [selectedRefundPayment, setSelectedRefundPayment] = useState<Payment | null>(null);
+  const [refundReason, setRefundReason] = useState<string>('Customer Cancellation Request');
+  const [customRefundReason, setCustomRefundReason] = useState<string>('');
+  const [refundAmountInput, setRefundAmountInput] = useState<string>('');
+  const [refundMethodInput, setRefundMethodInput] = useState<'cash' | 'upi' | 'card' | 'original'>('cash');
+  const [isRefunding, setIsRefunding] = useState<boolean>(false);
+  const [refundNotice, setRefundNotice] = useState<string | null>(null);
+  const [refundSuccessReceipt, setRefundSuccessReceipt] = useState<any | null>(null);
 
   // Food Street POS states
   const [foodSearch, setFoodSearch] = useState('');
@@ -52,6 +63,63 @@ const TicketingDashboard: React.FC = () => {
       quantity: 1,
       paymentMethod: p.method
     });
+  };
+
+  const handleInitiateRefund = (p: Payment) => {
+    setSelectedRefundPayment(p);
+    setRefundAmountInput(String(p.amount));
+    setRefundReason('Customer Cancellation Request');
+    setCustomRefundReason('');
+    setRefundNotice(null);
+    const defaultMethod = p.method === 'cash' ? 'cash' : p.method.startsWith('card') ? 'card' : 'upi';
+    setRefundMethodInput(defaultMethod);
+  };
+
+  const handleConfirmRefund = () => {
+    if (!selectedRefundPayment) return;
+    const finalReason = refundReason === 'Other / Custom' ? (customRefundReason.trim() || 'Staff Processed Cancellation') : refundReason;
+    const refAmt = parseFloat(refundAmountInput) || selectedRefundPayment.amount;
+
+    if (refAmt <= 0 || refAmt > selectedRefundPayment.amount) {
+      alert(`Invalid refund amount. Must be between ₹1 and ₹${selectedRefundPayment.amount}`);
+      return;
+    }
+
+    setIsRefunding(true);
+    const result = cancelAndRefundTicket({
+      ticketId: selectedRefundPayment.ticketId,
+      bookingId: selectedRefundPayment.bookingId,
+      reason: finalReason,
+      refundAmount: refAmt,
+      refundMethod: refundMethodInput,
+      staffName: currentUser?.name || 'Counter Staff'
+    });
+
+    setIsRefunding(false);
+    if (result.success) {
+      setRefundSuccessReceipt(result.refundReceipt);
+      setSelectedRefundPayment(null);
+
+      // Print Cancellation Credit Note / Refund Receipt
+      printTicket({
+        receiptId: `REF-${selectedRefundPayment.ticketId || selectedRefundPayment.bookingId}`,
+        activityName: `CANCELLED: ${selectedRefundPayment.activityName || 'Activity Ticket'}`,
+        customerName: selectedRefundPayment.customerName || 'Guest',
+        date: new Date().toISOString().split('T')[0],
+        slot: 'REFUND RECEIPT',
+        items: [
+          { label: 'Original Charge', value: `₹${selectedRefundPayment.amount}` },
+          { label: `Refund (${refundMethodInput.toUpperCase()})`, value: `-₹${refAmt}` },
+          { label: 'Cancellation Reason', value: finalReason }
+        ],
+        totalAmount: 0,
+        paymentStatus: 'refunded',
+        quantity: 1,
+        paymentMethod: refundMethodInput
+      });
+    } else {
+      alert(result.message || 'Failed to process refund.');
+    }
   };
 
   const handleProcessFoodOrder = (e: React.FormEvent) => {
@@ -446,24 +514,241 @@ const TicketingDashboard: React.FC = () => {
                         )}
                       </td>
                       <td className="p-4">
-                        <span className={`px-2 py-1 rounded-full text-[9px] font-bold font-mono uppercase tracking-wider ${p.status === 'paid' || p.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' : p.status === 'pending' ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'}`}>
-                          {p.status}
+                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black font-mono uppercase tracking-wider ${
+                          p.status === 'paid' || p.status === 'success' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
+                          p.status === 'refunded' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
+                          p.status === 'cancelled' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
+                          p.status === 'pending' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' :
+                          'bg-red-500/10 text-red-400'
+                        }`}>
+                          {p.status === 'refunded' ? '🛑 REFUNDED' : p.status === 'cancelled' ? '🛑 CANCELLED' : p.status}
                         </span>
                       </td>
                       <td className="p-4 text-center">
-                        <button
-                          onClick={() => handlePrintReceipt(p)}
-                          className="p-2 bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black rounded-lg transition-all inline-flex items-center gap-1 cursor-pointer"
-                          title="Print Ticket & Receipt"
-                        >
-                          <Printer className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handlePrintReceipt(p)}
+                            className="p-2 bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black rounded-lg transition-all inline-flex items-center gap-1 cursor-pointer"
+                            title="Print Ticket & Receipt"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+
+                          {p.status === 'refunded' || p.status === 'cancelled' ? (
+                            <span className="text-[10px] font-mono text-slate-500 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
+                              REFUNDED
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleInitiateRefund(p)}
+                              className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white rounded-lg font-mono text-[11px] font-bold uppercase transition-all flex items-center gap-1 border border-rose-500/30 cursor-pointer shadow-sm"
+                              title="Cancel Ticket & Issue Refund"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>REFUND</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          CANCEL & REFUND MODAL
+      ═══════════════════════════════════════════════════════════════════════ */}
+      {selectedRefundPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
+          <div className="w-full max-w-lg bg-[#090E20] border-2 border-rose-500/50 rounded-3xl p-6 text-white space-y-5 shadow-[0_0_50px_rgba(244,63,94,0.25)]">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <XCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black uppercase text-white font-sans">
+                    CANCEL & REFUND TICKET
+                  </h3>
+                  <p className="text-[10px] font-mono text-rose-400">
+                    Booking: {selectedRefundPayment.bookingId} · Ticket: {selectedRefundPayment.ticketId || `tkt-${selectedRefundPayment.bookingId}`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedRefundPayment(null)}
+                className="p-1 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Ticket Info Card */}
+            <div className="p-4 rounded-2xl bg-[#050816] border border-white/10 space-y-2 text-xs font-mono">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Guest:</span>
+                <span className="text-white font-bold">{selectedRefundPayment.customerName || 'Walk-in Guest'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Activity:</span>
+                <span className="text-[#14F1D9] font-bold">{selectedRefundPayment.activityName || 'Adventure Pass'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Original Amount Paid:</span>
+                <span className="text-white font-bold text-sm">₹{selectedRefundPayment.amount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Original Payment Mode:</span>
+                <span className="text-purple-400 font-bold uppercase">{selectedRefundPayment.method}</span>
+              </div>
+            </div>
+
+            {/* Refund Options */}
+            <div className="space-y-4">
+              {/* Cancellation Reason */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold">
+                  Reason for Cancellation *
+                </label>
+                <select
+                  value={refundReason}
+                  onChange={e => setRefundReason(e.target.value)}
+                  className="w-full bg-[#050816] border border-white/15 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-rose-400 focus:outline-none"
+                >
+                  <option value="Customer Cancellation Request">Customer Cancellation Request</option>
+                  <option value="Inclement Weather / Rain">Inclement Weather / Rain Condition</option>
+                  <option value="Track Maintenance / Technical Delay">Track Maintenance / Technical Delay</option>
+                  <option value="Duplicate Booking / Billing Error">Duplicate Booking / Billing Error</option>
+                  <option value="Medical / Emergency Reason">Medical / Emergency Reason</option>
+                  <option value="Group Size Changed">Group Size Changed</option>
+                  <option value="Other / Custom">Other / Custom Reason</option>
+                </select>
+
+                {refundReason === 'Other / Custom' && (
+                  <input
+                    type="text"
+                    placeholder="Enter specific cancellation reason..."
+                    value={customRefundReason}
+                    onChange={e => setCustomRefundReason(e.target.value)}
+                    className="w-full bg-[#050816] border border-white/15 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-rose-400 focus:outline-none mt-2"
+                  />
+                )}
+              </div>
+
+              {/* Refund Amount & Channel */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold">
+                    Refund Amount (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={selectedRefundPayment.amount}
+                    value={refundAmountInput}
+                    onChange={e => setRefundAmountInput(e.target.value)}
+                    className="w-full bg-[#050816] border border-white/15 rounded-xl px-3 py-2 text-xs font-black text-rose-400 font-mono focus:border-rose-400 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold">
+                    Refund Method
+                  </label>
+                  <select
+                    value={refundMethodInput}
+                    onChange={e => setRefundMethodInput(e.target.value as any)}
+                    className="w-full bg-[#050816] border border-white/15 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-rose-400 focus:outline-none"
+                  >
+                    <option value="cash">Instant Cash Handover</option>
+                    <option value="upi">Original UPI Account</option>
+                    <option value="card">Card Reversal</option>
+                    <option value="original">Original Payment Mode</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Warning Alert */}
+            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2.5 text-xs text-rose-300 font-mono">
+              <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              <span>This ticket will be permanently marked cancelled and cannot be scanned at activity check-in.</span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setSelectedRefundPayment(null)}
+                className="px-4 py-2.5 rounded-xl bg-white/10 text-slate-300 hover:text-white font-bold text-xs uppercase font-mono cursor-pointer"
+              >
+                BACK
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRefund}
+                disabled={isRefunding}
+                className="px-5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black text-xs uppercase font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-[0_0_20px_rgba(244,63,94,0.4)] disabled:opacity-50"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>{isRefunding ? 'PROCESSING...' : 'CONFIRM CANCEL & REFUND'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          REFUND SUCCESS CREDIT NOTE RECEIPT MODAL
+      ═══════════════════════════════════════════════════════════════════════ */}
+      {refundSuccessReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
+          <div className="w-full max-w-md bg-[#090E20] border-2 border-emerald-500/50 rounded-3xl p-6 text-white space-y-4 shadow-[0_0_50px_rgba(16,185,129,0.25)] text-center">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
+              <Check className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-lg font-black uppercase text-white font-sans">
+              REFUND PROCESSED SUCCESSFULLY
+            </h3>
+
+            <div className="p-4 rounded-2xl bg-[#050816] border border-white/10 text-left text-xs font-mono space-y-2">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Refund Amount:</span>
+                <span className="text-emerald-400 font-bold text-base">₹{refundSuccessReceipt.refundAmount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Refund Channel:</span>
+                <span className="text-white uppercase font-bold">{refundSuccessReceipt.refundMethod}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Guest:</span>
+                <span className="text-white">{refundSuccessReceipt.customerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Reason:</span>
+                <span className="text-slate-300 truncate max-w-[180px]">{refundSuccessReceipt.reason}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Staff Officer:</span>
+                <span className="text-[#14F1D9]">{refundSuccessReceipt.staffName}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-center gap-2 pt-2">
+              <button
+                onClick={() => setRefundSuccessReceipt(null)}
+                className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase text-xs font-mono cursor-pointer transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+              >
+                DONE
+              </button>
+            </div>
           </div>
         </div>
       )}

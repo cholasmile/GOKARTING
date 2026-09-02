@@ -186,3 +186,23 @@ body {
   0% { transform: translateX(-100%) skewX(12deg); }
   100% { transform: translateX(200%) skewX(12deg); }
 }
+
+/* ── 3-INCH BREADTH X 4-INCH HEIGHT THERMAL RECEIPT PRINT MEDIA RULES ── */
+@media print {
+  @page {
+    size: 3in 4in;
+    margin: 1.5mm;
+  }
+  html, body {
+    width: 3in !important;
+    max-width: 3in !important;
+    max-height: 4in !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 8px !important;
+  }
+}

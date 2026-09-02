@@ -14,7 +14,10 @@ import { NotificationToast } from './components/NotificationToast';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ProtectedLayout } from './components/ProtectedLayout';
 import { SyncStatusIndicator } from './components/SyncStatusIndicator';
-import { Mail, Lock, KeyRound } from 'lucide-react';
+import { CustomerMobileRaceView } from './components/karting/timingSystem/CustomerMobileRaceView';
+import { CustomerTvDisplayView } from './components/karting/timingSystem/CustomerTvDisplayView';
+import { RaceTimingMaster } from './components/karting/timingSystem/RaceTimingMaster';
+import { Mail, Lock, KeyRound, LogIn, User as UserIcon } from 'lucide-react';
 
 function LoginPage() {
   const { setCurrentUser, users } = useAppContext();
@@ -43,21 +46,24 @@ function LoginPage() {
       const isValidPassword = 
         (matchedUser?.role === 'super_admin' && password === 'admin') ||
         (matchedUser?.role === 'activity_staff' && password === 'staff') ||
-        (matchedUser?.role === 'food_vendor' && password === 'vendor') ||
-        (matchedUser?.role === 'go_karting_manager' && password === 'manager') ||
-        (matchedUser?.role === 'go_karting_staff' && password === 'staff') ||
-        (matchedUser?.role === 'ticket_counter_staff' && password === 'staff');
+        (matchedUser?.role === 'food_vendor' && (password === 'vendor' || password === 'cafe' || password === 'staff')) ||
+        (matchedUser?.role === 'cafe_staff' && (password === 'cafe' || password === 'vendor' || password === 'staff')) ||
+        (matchedUser?.role === 'go_karting_manager' && (password === 'manager' || password === 'staff' || password === 'karting')) ||
+        (matchedUser?.role === 'go_karting_staff' && (password === 'staff' || password === 'karting')) ||
+        (matchedUser?.role === 'horse_riding_staff' && (password === 'staff' || password === 'horse')) ||
+        (matchedUser?.role === 'shooting_staff' && (password === 'staff' || password === 'shooting')) ||
+        (matchedUser?.role === 'ticket_counter_staff' && (password === 'staff' || password === 'ticketing'));
 
       if (matchedUser && isValidPassword) {
         setCurrentUser(matchedUser);
         
         if (matchedUser.role === 'super_admin') navigate('/admin');
-        else if (matchedUser.role === 'activity_staff') navigate('/staff');
-        else if (matchedUser.role === 'food_vendor') navigate('/vendor');
-        else if (matchedUser.role === 'go_karting_manager') navigate('/staff/karting');
-        else if (matchedUser.role === 'go_karting_staff') navigate('/staff/karting');
+        else if (matchedUser.role === 'go_karting_manager' || matchedUser.role === 'go_karting_staff') navigate('/staff/karting');
+        else if (matchedUser.role === 'horse_riding_staff') navigate('/staff/horse-riding');
+        else if (matchedUser.role === 'shooting_staff') navigate('/staff/shooting');
+        else if (matchedUser.role === 'food_vendor' || matchedUser.role === 'cafe_staff') navigate('/staff/cafe');
         else if (matchedUser.role === 'ticket_counter_staff') navigate('/staff/ticketing');
-        else navigate('/');
+        else navigate('/staff');
       } else {
         setError('Invalid email or password. Access denied.');
         setLoading(false);
@@ -77,15 +83,17 @@ function LoginPage() {
         {/* Brand Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 mb-3">
-            <div className="bg-gradient-to-tr from-[#007B8B] via-[#00ABAB] to-[#3E8EDE] text-white w-14 h-14 rounded-2xl flex items-center justify-center font-black text-3xl shadow-[0_8px_30px_rgba(20,184,166,0.4)] border border-white/20">
-              D
-            </div>
+            <img 
+              src="/deuce-logo.jpg" 
+              alt="Deuce Logo" 
+              className="w-16 h-16 rounded-2xl object-cover shadow-[0_8px_30px_rgba(20,241,217,0.3)] border border-[#14F1D9]/40"
+            />
             <div className="text-left">
-              <h1 className="text-4xl font-black tracking-tight text-gradient uppercase leading-none">
+              <h1 className="text-3xl font-black tracking-tight text-gradient uppercase leading-none">
                 Deuce
               </h1>
-              <p className="text-[11px] text-[#40E0D0] tracking-[0.3em] font-mono uppercase font-bold mt-1">
-                Motorsport OS
+              <p className="text-[10px] text-[#40E0D0] tracking-[0.25em] font-mono uppercase font-bold mt-1">
+                Live The Rush • Yelagiri
               </p>
             </div>
           </div>
@@ -163,6 +171,55 @@ function LoginPage() {
             </button>
           </form>
 
+          {/* Quick Staff Demo Portals */}
+          <div className="mt-6 pt-4 border-t border-white/10">
+            <p className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold text-center mb-2">Select Activity Staff Demo Login</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { setEmail('kartingstaff@deucepark.com'); setPassword('staff'); }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
+              >
+                🏎️ Go-Karting Ops
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEmail('horseriding@deucepark.com'); setPassword('staff'); }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
+              >
+                🐎 Horse Riding Ops
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEmail('shooting@deucepark.com'); setPassword('staff'); }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
+              >
+                🎯 Precision Shooting
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEmail('cafe@deucepark.com'); setPassword('cafe'); }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
+              >
+                ☕ Deuce Cafe Staff
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEmail('ticketing@deucepark.com'); setPassword('staff'); }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
+              >
+                🎫 Ticket Counter
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEmail('admin@deucepark.com'); setPassword('admin'); }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
+              >
+                🛡️ Super Admin
+              </button>
+            </div>
+          </div>
+
         </div>
 
         {/* Footer info */}
@@ -176,6 +233,10 @@ function LoginPage() {
   );
 }
 
+import PublicLeaderboardScreen from './components/karting/PublicLeaderboardScreen';
+import GoKartingOpsDashboard from './components/karting/GoKartingOpsDashboard';
+import TicketingDashboard from './components/TicketingDashboard';
+
 // Wrapper for public layout with no explicit auth needed but some styling
 const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser, setCurrentUser } = useAppContext();
@@ -184,14 +245,18 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     <div className="min-h-screen flex flex-col text-[#FFFFFF] font-sans selection:bg-[#007B8B]/30 selection:text-white bg-transparent">
       <header className="sticky top-0 z-40 glass-panel border-b border-[#00ABAB]/30 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-tr from-[#007B8B] via-[#00ABAB] to-[#3E8EDE] text-white w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xl shadow-[0_4px_12px_rgba(20,184,166,0.3)] font-sans border border-white/20">
-              D
-            </div>
-            <div>
-              <h1 className="font-black text-2xl leading-none tracking-tight text-gradient font-sans uppercase">Deuce</h1>
-              <p className="text-[9px] text-[#40E0D0] tracking-widest font-mono uppercase font-bold mt-1">Racing & Adventure</p>
-            </div>
+          <div className="flex items-center gap-6">
+            <Link to="/" className="flex items-center gap-3 group">
+              <img 
+                src="/deuce-logo.jpg" 
+                alt="Deuce Logo" 
+                className="w-11 h-11 rounded-xl object-cover shadow-[0_4px_12px_rgba(20,241,217,0.3)] border border-[#14F1D9]/40 group-hover:scale-105 transition-transform"
+              />
+              <div>
+                <h1 className="font-black text-2xl leading-none tracking-tight text-gradient font-sans uppercase">Deuce</h1>
+                <p className="text-[9px] text-[#40E0D0] tracking-widest font-mono uppercase font-bold mt-1">Live The Rush • Yelagiri</p>
+              </div>
+            </Link>
           </div>
 
           {/* Member Status & Guest Controls in Header */}
@@ -218,6 +283,14 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
                   <span>Guest Mode</span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent('open-member-modal'))}
+                  className="text-xs font-bold text-[#0B1120] bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-[0_0_15px_rgba(20,241,217,0.3)] hover:scale-[1.02] transition-all cursor-pointer font-sans"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Member Login</span>
+                </button>
               </div>
             )}
 
@@ -238,10 +311,6 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   );
 };
 
-import PublicLeaderboardScreen from './components/karting/PublicLeaderboardScreen';
-import GoKartingOpsDashboard from './components/karting/GoKartingOpsDashboard';
-import TicketingDashboard from './components/TicketingDashboard';
-
 export default function App() {
   return (
     <AppProvider>
@@ -253,6 +322,12 @@ export default function App() {
           
           <Route path="/leaderboard/karting" element={<PublicLeaderboardScreen />} />
           
+          {/* Go-Kart Live Timing System Public Routes */}
+          <Route path="/race/live/:id" element={<CustomerMobileRaceView />} />
+          <Route path="/race/live" element={<CustomerMobileRaceView />} />
+          <Route path="/race/display/tv" element={<CustomerTvDisplayView />} />
+          <Route path="/race/timing/*" element={<RaceTimingMaster />} />
+          
           <Route element={<ProtectedLayout />}>
             <Route path="/admin/*" element={
               <ProtectedRoute allowedRoles={['super_admin']}>
@@ -260,12 +335,35 @@ export default function App() {
               </ProtectedRoute>
             } />
             <Route path="/staff/*" element={
-              <ProtectedRoute allowedRoles={['activity_staff']}>
+              <ProtectedRoute allowedRoles={['activity_staff', 'super_admin']}>
                 <ActivityStaffDashboard />
               </ProtectedRoute>
             } />
+            <Route path="/staff/horse-riding/*" element={
+              <ProtectedRoute allowedRoles={['horse_riding_staff', 'activity_staff', 'super_admin']}>
+                <ActivityStaffDashboard 
+                  activityIdFilter="act-horse-riding" 
+                  title="Horse Riding Arena Staff Portal" 
+                  subtitle="Manage horse arena queue, guide assignments, rider check-ins, and safety checks"
+                />
+              </ProtectedRoute>
+            } />
+            <Route path="/staff/shooting/*" element={
+              <ProtectedRoute allowedRoles={['shooting_staff', 'activity_staff', 'super_admin']}>
+                <ActivityStaffDashboard 
+                  activityIdFilter="act-air-gun" 
+                  title="Precision Air Gun Shooting Staff Portal" 
+                  subtitle="Manage target shooting range lanes, pellet inventory, and shooter check-ins"
+                />
+              </ProtectedRoute>
+            } />
             <Route path="/vendor/*" element={
-              <ProtectedRoute allowedRoles={['food_vendor']}>
+              <ProtectedRoute allowedRoles={['food_vendor', 'cafe_staff', 'super_admin']}>
+                <FoodVendorDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/staff/cafe/*" element={
+              <ProtectedRoute allowedRoles={['food_vendor', 'cafe_staff', 'super_admin']}>
                 <FoodVendorDashboard />
               </ProtectedRoute>
             } />
@@ -288,10 +386,5 @@ export default function App() {
     </AppProvider>
   );
 }
-
-
-
-
-
 
 

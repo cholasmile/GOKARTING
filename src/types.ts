@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type UserRole = 'super_admin' | 'activity_staff' | 'food_vendor' | 'customer' | 'go_karting_manager' | 'go_karting_staff' | 'ticket_counter_staff';
+export type UserRole = 'super_admin' | 'activity_staff' | 'food_vendor' | 'cafe_staff' | 'customer' | 'go_karting_manager' | 'go_karting_staff' | 'ticket_counter_staff' | 'horse_riding_staff' | 'shooting_staff';
 
 export interface User {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   role: UserRole;
   vendorId?: string; // If role is 'food_vendor'
 }
@@ -19,6 +20,33 @@ export interface ActivityPackage {
   price: number;
   description: string;
   shots?: number;
+}
+
+// ==========================================
+// ACTIVITY MANAGEMENT ENHANCEMENT TYPES
+// ==========================================
+
+export interface ActivityPhoto {
+  id: string;
+  url: string;
+  caption?: string;
+  uploadedAt: string;
+  order: number;
+}
+
+export interface ActivityOffer {
+  id: string;
+  name: string;
+  description: string;
+  bannerImage?: string;
+  originalPrice: number;
+  offerPrice: number;
+  discountPercentage: number;
+  validFrom: string;
+  validUntil: string;
+  termsAndConditions?: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface Activity {
@@ -32,6 +60,17 @@ export interface Activity {
   safetyInstructions: string[];
   packages?: ActivityPackage[];
   type: 'horse_riding' | 'shooting' | 'go_karting' | 'dynamic';
+  // -- Activity Management Enhancement Fields (all optional, backward-compatible) --
+  shortDescription?: string;
+  detailedDescription?: string;
+  photos?: ActivityPhoto[];
+  coverPhotoId?: string;
+  duration?: string;
+  ageRequirement?: string;
+  rules?: string[];
+  isActive?: boolean;
+  displayOrder?: number;
+  offers?: ActivityOffer[];
 }
 
 export interface Booking {
@@ -46,9 +85,18 @@ export interface Booking {
   details: string; // e.g. "2x Adult, 1x Child" or "Package: Sharp Shooter (25 shots)"
   quantity: number;
   totalAmount: number;
+  discountType?: 'none' | 'individual_5' | 'group_10' | 'group_15' | 'bulk_30' | 'custom';
+  discountPercentage?: number;
+  discountAmount?: number;
+  originalAmount?: number;
+  cancellationReason?: string;
+  refundAmount?: number;
+  refundMethod?: 'cash' | 'upi' | 'card' | 'original';
+  refundedAt?: string;
+  refundedBy?: string;
   paymentStatus: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded';
   bookingDate: string;
-  status?: 'confirmed' | 'reserved';
+  status?: 'confirmed' | 'reserved' | 'cancelled';
 }
 
 export interface Ticket {
@@ -63,7 +111,11 @@ export interface Ticket {
   ticketType: string;
   quantity: number;
   qrCodeValue: string;
-  status: 'valid' | 'used';
+  status: 'valid' | 'used' | 'cancelled' | 'refunded';
+  cancellationReason?: string;
+  refundAmount?: number;
+  refundedAt?: string;
+  refundedBy?: string;
   scannedAt?: string;
   scannedBy?: string;
 }
@@ -187,12 +239,30 @@ export interface GoKartingBooking extends Booking {
 
 export type KartStatus = 'Available' | 'Reserved' | 'On Track' | 'Maintenance' | 'Out of Service';
 
+export interface TransponderUnit {
+  id: string; // e.g. 'TR-01'
+  hardwareCode: string; // e.g. 'MYLAPS-849201'
+  assignedKartNumber: string; // e.g. '01'
+  assignedKartId: string;
+  batteryLevel: number; // 0 - 100%
+  signalDbm: number; // RSSI in dBm (e.g. -45 dBm)
+  lastLoopPing: string;
+  lastLoopLocation: 'Finish Line' | 'Sector 1' | 'Sector 2' | 'Pit Lane';
+  status: 'connected' | 'weak' | 'charging' | 'offline';
+  voltage: number; // e.g. 3.95V
+  totalPassings: number;
+}
+
 export interface Kart {
   id: string;
   kartNumber: string;
   status: KartStatus;
   currentDriverId?: string;
   assignedSessionId?: string;
+  transponderId?: string;
+  transponderCode?: string;
+  transponderBattery?: number;
+  transponderStatus?: 'connected' | 'weak' | 'charging' | 'offline';
 }
 
 export type SessionStatus = 'Scheduled' | 'Active' | 'Paused' | 'Completed';
@@ -228,4 +298,55 @@ export interface GoKartingWaiver {
   acceptedTerms: boolean;
   timestamp: string;
   verifiedByStaffId?: string;
+}
+
+// ==========================================
+// KART ALLOTMENT OPERATIONAL MODULE TYPES
+// ==========================================
+
+export type RiderOperationalStatus =
+  | 'pending'        // Ticket exists, not yet checked in
+  | 'checked_in'     // Waiver verified, checked in by staff
+  | 'kart_assigned'  // A kart has been allocated
+  | 'ready_to_race'  // All conditions met — race can start
+  | 'racing'         // Race started (kart On Track)
+  | 'completed';     // Race finished, kart released
+
+export interface OperationalRider {
+  id: string;                    // Unique rider op ID: rider-{ticketId}-{index}
+  riderIndex: number;            // 1-based index within a multi-rider booking
+  riderName: string;             // Auto from ticket (Rider 1) or staff-entered (Rider 2 dual kart)
+  ticketId: string;
+  bookingId: string;
+  customerId: string;            // customerEmail used as customer ID
+  sessionDuration: number;       // Minutes, derived from booking details
+  isDualKart: boolean;           // Whether this booking is a dual-kart type
+  status: RiderOperationalStatus;
+  assignedKartId?: string;
+  assignedKartNumber?: string;
+  checkInTime?: string;
+  kartAssignedTime?: string;
+  raceStartTime?: string;
+  raceEndTime?: string;
+  assignedByStaffId?: string;
+  assignedByStaffName?: string;
+  waiverVerified: boolean;
+  bookingSource?: 'online' | 'walk_in';
+}
+
+export interface AllotmentAuditEntry {
+  id: string;
+  riderId: string;
+  riderName: string;
+  ticketId: string;
+  bookingId: string;
+  kartId: string;
+  kartNumber: string;
+  action: 'assigned' | 'changed' | 'released' | 'race_started' | 'race_completed';
+  fromKartNumber?: string;   // Only for 'changed'
+  toKartNumber?: string;     // Only for 'changed'
+  timestamp: string;
+  staffId: string;
+  staffName: string;
+  notes?: string;
 }

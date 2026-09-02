@@ -9,8 +9,11 @@ export const INITIAL_USERS: User[] = [
   { id: 'usr-admin', name: 'Executive Director Cooper', email: 'admin@deucepark.com', role: 'super_admin' },
   { id: 'usr-staff', name: 'Activity Ranger Smith', email: 'staff@deucepark.com', role: 'activity_staff' },
   { id: 'usr-vendor', name: 'Sarah Jenkins', email: 'vendor@deucepark.com', role: 'food_vendor', vendorId: 'vendor-forest-cafe' },
+  { id: 'usr-cafe', name: 'Deuce Cafe Staff', email: 'cafe@deucepark.com', role: 'cafe_staff', vendorId: 'vendor-forest-cafe' },
   { id: 'usr-gkm', name: 'Karting Manager', email: 'kartingmanager@deucepark.com', role: 'go_karting_manager' },
   { id: 'usr-gks', name: 'Karting Staff', email: 'kartingstaff@deucepark.com', role: 'go_karting_staff' },
+  { id: 'usr-hrs', name: 'Horse Riding Arena Staff', email: 'horseriding@deucepark.com', role: 'horse_riding_staff' },
+  { id: 'usr-sht', name: 'Precision Shooting Range Staff', email: 'shooting@deucepark.com', role: 'shooting_staff' },
   { id: 'usr-tcs', name: 'Ticket Counter Staff', email: 'ticketing@deucepark.com', role: 'ticket_counter_staff' },
   { id: 'usr-customer-watson', name: 'John Watson', email: 'watson@baker.street', role: 'customer' }
 ];
@@ -20,10 +23,14 @@ export const INITIAL_ACTIVITIES: Activity[] = [
     id: 'act-go-karting',
     name: 'High-Octane Go-Karting',
     description: 'Race on our winding 800-meter asphalt track with professional grade electronic lap timing and high-torque pro-karts.',
-    adultPrice: 30,
-    childPrice: 20,
-    image: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=800&q=80',
-    dailyLimit: 80,
+    adultPrice: 100,
+    childPrice: 100,
+    image: '/gokart-night.png',
+    photos: [
+      { id: 'photo-kart-1', url: '/gokart-night.png', caption: 'Night Track Racing', uploadedAt: '2026-01-01T00:00:00.000Z', order: 0 },
+      { id: 'photo-kart-2', url: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=800&q=80', caption: 'Daytime Sprints', uploadedAt: '2026-01-01T00:00:00.000Z', order: 1 }
+    ],
+    dailyLimit: 500,
     safetyInstructions: [
       'Helmets and safety harnesses must be tightly secured at all times.',
       'Never step out of the kart while on the racing track.',
@@ -32,9 +39,9 @@ export const INITIAL_ACTIVITIES: Activity[] = [
     ],
     type: 'go_karting',
     packages: [
-      { id: 'pkg-kart-single', name: 'Single Rider Experience (10 Mins)', price: 20, description: 'Classic single-seat kart session with lap analysis.' },
-      { id: 'pkg-kart-double', name: 'Double Co-Pilot Ride (10 Mins)', price: 30, description: 'Twin-seater kart perfect for a parent and child pairing.' },
-      { id: 'pkg-kart-race', name: 'Grand Prix Tournament (30 Mins)', price: 65, description: 'Warm-up, qualifying session, and an 8-lap medal race.' }
+      { id: 'pkg-kart-single', name: 'Single Rider Experience (10 Mins)', price: 100, description: 'Classic single-seat kart session with lap analysis. 100 per kart per slot.' },
+      { id: 'pkg-kart-double', name: 'Double Co-Pilot Ride (10 Mins)', price: 150, description: 'Twin-seater kart perfect for a parent and child pairing.' },
+      { id: 'pkg-kart-race', name: 'Grand Prix Tournament (30 Mins)', price: 250, description: 'Warm-up, qualifying session, and an 8-lap medal race.' }
     ]
   },
   {
@@ -43,7 +50,10 @@ export const INITIAL_ACTIVITIES: Activity[] = [
     description: 'Test your focus and aim in a professional, safety-hardened indoor air gun shooting range with electronic target retrieval.',
     adultPrice: 25,
     childPrice: 15,
-    image: 'https://images.unsplash.com/photo-1595246140625-573b715d11dc?auto=format&fit=crop&w=800&q=80',
+    image: 'https://www.gunforglory.in/wp-content/uploads/2026/04/GFG-BLOG-FEATURE-3-1.png',
+    photos: [
+      { id: 'photo-shoot-1', url: 'https://www.gunforglory.in/wp-content/uploads/2026/04/GFG-BLOG-FEATURE-3-1.png', caption: 'Olympic 10m Air Rifle', uploadedAt: '2026-01-01T00:00:00.000Z', order: 0 }
+    ],
     dailyLimit: 60,
     safetyInstructions: [
       'Keep the gun pointed downrange at all times.',
@@ -64,7 +74,10 @@ export const INITIAL_ACTIVITIES: Activity[] = [
     description: 'Experience guided horseback rides through scenic nature trails under expert handler supervision. Perfect for families, beginners, and seasoned riders alike.',
     adultPrice: 45,
     childPrice: 25,
-    image: 'https://images.unsplash.com/photo-1553284965-83fd3e82fa5a?auto=format&fit=crop&w=800&q=80',
+    image: 'https://www.huntleyequestrian.com/cdn/shop/articles/Is-Horse-Riding-a-Sport-Huntley-Equestrian-110301396.jpg?crop=center&height=1200&v=1743859147&width=1200',
+    photos: [
+      { id: 'photo-horse-1', url: 'https://www.huntleyequestrian.com/cdn/shop/articles/Is-Horse-Riding-a-Sport-Huntley-Equestrian-110301396.jpg?crop=center&height=1200&v=1743859147&width=1200', caption: 'Royal Equestrian Trails', uploadedAt: '2026-01-01T00:00:00.000Z', order: 0 }
+    ],
     dailyLimit: 40,
     safetyInstructions: [
       'Always wear the provided certified riding helmet.',

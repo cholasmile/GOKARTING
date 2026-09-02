@@ -470,19 +470,42 @@ app.get('/api/razorpay/payments', async (req, res) => {
   }
 });
 
-// ─── NOTIFICATIONS (mock) ─────────────────────────────────────────────────────
-app.post('/api/notifications/send', async (req, res) => {
+// ─── ACTIVITIES BACKEND PERSISTENCE ─────────────────────────────────────────
+const activitiesFilePath = path.join('/tmp', 'activities.json');
+let inMemoryActivities = null;
+
+app.get('/api/activities', (req, res) => {
   try {
-    const { to, type, ticketId, details } = req.body;
-    await new Promise(r => setTimeout(r, 400));
-    console.log(`[notification] Sent ${type} to ${to} for ticket ${ticketId}`);
-    res.status(200).json({
-      success: true,
-      message: `${type} notification sent to ${to}`
-    });
-  } catch (error) {
-    console.error('[notification]', error);
-    res.status(500).json({ message: 'Notification failed' });
+    if (inMemoryActivities && inMemoryActivities.length > 0) {
+      return res.json(inMemoryActivities);
+    }
+    if (fs.existsSync(activitiesFilePath)) {
+      const data = JSON.parse(fs.readFileSync(activitiesFilePath, 'utf8'));
+      inMemoryActivities = data;
+      return res.json(data);
+    }
+  } catch (e) {
+    console.error('[backend] Failed to read activities file:', e);
+  }
+  res.json([]);
+});
+
+app.post('/api/activities', (req, res) => {
+  try {
+    const activities = req.body;
+    if (Array.isArray(activities)) {
+      inMemoryActivities = activities;
+      try {
+        fs.writeFileSync(activitiesFilePath, JSON.stringify(activities, null, 2), 'utf8');
+      } catch (err) {
+        console.warn('[backend] Could not write activities to /tmp:', err);
+      }
+      return res.json({ success: true, count: activities.length });
+    }
+    res.status(400).json({ success: false, message: 'Expected array of activities' });
+  } catch (e) {
+    console.error('[backend] Failed to save activities:', e);
+    res.status(500).json({ success: false, error: String(e) });
   }
 });
 

@@ -3,62 +3,20 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Activity, Ticket, Booking, Payment } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { QRCodeSVG } from 'qrcode.react';
-import { QrCode, CreditCard, CheckCircle, User, Loader2, Calendar, Banknote, Smartphone, ArrowRight, AlertCircle, Printer, Check } from 'lucide-react';
+import { QrCode, CreditCard, CheckCircle, User, Loader2, Calendar, Banknote, Smartphone, ArrowRight, AlertCircle, Printer, Check, Gift } from 'lucide-react';
 import TicketPass from './TicketPass';
 import { InvoiceModal } from './InvoiceModal';
 import { printTicket } from '../lib/printTicket';
 import { generateOfflineId } from '../lib/deviceSetup';
+
+import { getAvailableTimeSlots, isPastDate as isPastDateSelection, getTodayDateString } from '../lib/slotUtils';
 
 interface Props {
   activities: Activity[];
   onCancel: () => void;
 }
 
-const TIME_SLOTS = [
-  '09:00 AM - 10:00 AM',
-  '10:00 AM - 11:00 AM',
-  '11:00 AM - 12:00 PM',
-  '01:00 PM - 02:00 PM',
-  '02:00 PM - 03:00 PM',
-  '03:00 PM - 04:00 PM',
-  '04:00 PM - 05:00 PM',
-  '05:00 PM - 06:00 PM'
-];
-
-// Helper function to get available time slots based on selected date
-const getAvailableTimeSlots = (selectedDate: string): string[] => {
-  const today = new Date().toISOString().split('T')[0];
-  const now = new Date();
-  const currentHour = now.getHours();
-  
-  // If selected date is today, filter out past time slots
-  if (selectedDate === today) {
-    return TIME_SLOTS.filter(slot => {
-      const slotHour = parseInt(slot.split(':')[0]);
-      const isPM = slot.includes('PM') && !slot.includes('12:');
-      const isNoon = slot.includes('12:');
-      
-      let hour24 = slotHour;
-      if (isPM) hour24 = slotHour + 12;
-      if (isNoon && !slot.includes('12:00 PM')) hour24 = 12;
-      
-      return hour24 > currentHour;
-    });
-  }
-  
-  // For future dates, all slots are available
-  return TIME_SLOTS;
-};
-
-const isPastDateSelection = (selectedDate: string): boolean => {
-  if (!selectedDate) return true;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const selected = new Date(`${selectedDate}T00:00:00`);
-  return selected < today;
-};
-
-type PaymentMethod = 'cash' | 'upi' | 'qrcode' | 'card_tap' | 'card_insert' | 'card_swipe';
+type PaymentMethod = 'cash' | 'upi' | 'qrcode' | 'card_tap' | 'card_insert' | 'card_swipe' | 'complimentary';
 type CounterStep = 'idle' | 'confirming' | 'confirmed';
 
 export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) => {
@@ -136,17 +94,31 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
     return act.packages.find(p => p.id === selectedPackages[actId]) || act.packages[0];
   };
 
-  // Compute total from packages (if activity has packages) or adult/child pricing
-  const totalAmount = activities.reduce((sum, act) => {
+  // ── Discount & Tiered Promotional Rules ──
+  const [discountType, setDiscountType] = useState<'none' | 'individual_5' | 'group_10' | 'group_15' | 'bulk_30' | 'custom'>('none');
+  const [customDiscountPct, setCustomDiscountPct] = useState<number>(0);
+
+  // Compute raw subtotal from packages or adult/child pricing
+  const subtotalAmount = activities.reduce((sum, act) => {
     const pkg = getSelectedPackage(act.id);
     if (pkg) {
-      // Package is per-person, multiply by total guests
       return sum + pkg.price * (adultCount + childCount);
     }
     return sum + (act.adultPrice || 0) * adultCount + (act.childPrice || 0) * childCount;
   }, 0);
 
   const totalQuantity = adultCount + childCount;
+
+  // Active discount percentage
+  const activeDiscountPct = 
+    discountType === 'individual_5' ? 5 :
+    discountType === 'group_10' ? 10 :
+    discountType === 'group_15' ? 15 :
+    discountType === 'bulk_30' ? 30 :
+    discountType === 'custom' ? customDiscountPct : 0;
+
+  const discountAmount = Math.round((subtotalAmount * activeDiscountPct) / 100);
+  const totalAmount = Math.max(0, subtotalAmount - discountAmount);
 
   // Human-readable details string that includes package names
   const buildDetailsString = () => {
@@ -295,6 +267,57 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
       setShowInvoiceModal(true);
     } else {
       setCounterError(confirmResult.message);
+    }
+    setIsProcessing(false);
+  };
+
+  // ── COMPLIMENTARY VIP PASS FLOW
+  const handleComplimentaryPayment = async () => {
+    if (!guestName || !guestPhone) return alert('Please fill in guest name and phone number.');
+    setIsProcessing(true);
+    setCounterError(null);
+
+    const totalQuantity = adultCount + childCount;
+
+    // 1. Create Booking with ₹0 (Complimentary VIP)
+    const bookingResult = createBooking({
+      customerName: guestName,
+      customerEmail: guestEmail,
+      customerPhone: guestPhone,
+      activityId: combinedActivityIds,
+      activityName: combinedActivityNames,
+      date,
+      timeSlot,
+      ticketType: 'Complimentary VIP Pass',
+      details: buildDetailsString(),
+      quantity: totalQuantity,
+      totalAmount: 0,
+      paymentMethod: 'complimentary'
+    });
+
+    if (typeof bookingResult === 'string') {
+      setCounterError(bookingResult);
+      setIsProcessing(false);
+      return;
+    }
+
+    // 2. Mark as confirmed in DB
+    const confirmResult = markPaymentConfirmed({
+      bookingId: bookingResult.booking.id,
+      method: 'complimentary',
+      staffId: currentUser?.id,
+      amountReceived: 0,
+      bookingData: { ...bookingResult.booking, totalAmount: 0, paymentStatus: 'paid' }
+    });
+
+    if (confirmResult.success) {
+      setConfirmedBooking(confirmResult.booking || bookingResult.booking);
+      setConfirmedTicket(confirmResult.ticket || null);
+      setCounterStep('confirmed');
+      setStep(4);
+      setShowInvoiceModal(true);
+    } else {
+      setCounterError(confirmResult.message || 'Failed to issue complimentary pass.');
     }
     setIsProcessing(false);
   };
@@ -469,6 +492,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
   // ── METHOD ICON
   const methodIcon = (m: PaymentMethod) => {
+    if (m === 'complimentary') return <Gift className="w-5 h-5 text-amber-400" />;
     if (m === 'qrcode') return <QrCode className="w-5 h-5 text-violet-400" />;
     if (m === 'upi') return <Smartphone className="w-5 h-5 text-violet-400" />;
     if (m.startsWith('card')) return <CreditCard className="w-5 h-5 text-[#00ABAB]" />;
@@ -588,12 +612,155 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   );
                 })}
 
-                <div className="bg-[#00ABAB]/10 border border-[#00ABAB]/30 rounded-xl p-4">
-                  <div className="flex justify-between items-center text-sm text-[#94A3B8] mb-1">
-                    <span>Guests</span><span>{adultCount} Adult{adultCount !== 1 ? 's' : ''}{childCount > 0 ? ` + ${childCount} Child${childCount !== 1 ? 'ren' : ''}` : ''}</span>
+                {/* ── TIERED DISCOUNTS & OFFERS ENGINE ── */}
+                <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] space-y-3">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[#94A3B8] font-mono text-xs uppercase tracking-widest font-bold">
+                      Discounts & Group Tiers
+                    </p>
+                    {activeDiscountPct > 0 && (
+                      <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded bg-[#14F1D9]/20 text-[#14F1D9] border border-[#14F1D9]/30">
+                        {activeDiscountPct}% OFF APPLIED
+                      </span>
+                    )}
                   </div>
-                  <div className="flex justify-between items-center text-xl font-bold text-[#00ABAB]">
-                    <span>Total</span><span>₹{totalAmount}</span>
+
+                  {/* Smart Contextual Recommendation Prompt */}
+                  {totalQuantity >= 100 ? (
+                    <div className="p-3 bg-purple-500/15 border border-purple-500/40 rounded-xl flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-mono text-purple-300 font-bold">
+                        🏢 100+ Mega Bulk Order! 30% Corporate Discount Eligible
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType('bulk_30')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-black uppercase cursor-pointer transition-all ${
+                          discountType === 'bulk_30'
+                            ? 'bg-[#14F1D9] text-[#050816] shadow-[0_0_15px_rgba(20,241,217,0.4)]'
+                            : 'bg-purple-500 text-white hover:bg-purple-400'
+                        }`}
+                      >
+                        {discountType === 'bulk_30' ? '✓ 30% APPLIED' : 'APPLY 30%'}
+                      </button>
+                    </div>
+                  ) : totalQuantity > 10 ? (
+                    <div className="p-2.5 bg-emerald-500/15 border border-emerald-500/40 rounded-xl flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-mono text-emerald-300 font-bold">
+                        👥 Group ({totalQuantity} Pax)! 10% or 15% Group Discount
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType(discountType === 'group_10' ? 'group_15' : 'group_10')}
+                        className="px-3 py-1 rounded-lg text-xs font-mono font-black uppercase bg-emerald-500 text-[#050816] hover:bg-emerald-400 cursor-pointer"
+                      >
+                        {discountType === 'group_10' ? '✓ 10% APPLIED' : discountType === 'group_15' ? '✓ 15% APPLIED' : 'APPLY 10%'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-2 bg-sky-500/10 border border-sky-500/20 rounded-xl flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-mono text-sky-300">
+                        🏷️ 1–10 Pax: 5% Individual or 15% VIP Group Available
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType(discountType === 'individual_5' ? 'none' : 'individual_5')}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase cursor-pointer ${
+                          discountType === 'individual_5'
+                            ? 'bg-[#14F1D9] text-black font-black'
+                            : 'bg-sky-500/20 text-sky-300 hover:bg-sky-500/30'
+                        }`}
+                      >
+                        {discountType === 'individual_5' ? '✓ 5% APPLIED' : 'APPLY 5%'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Manual Tier Selection Pills */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[10px] font-mono">
+                    <button
+                      type="button"
+                      onClick={() => setDiscountType('individual_5')}
+                      className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                        discountType === 'individual_5'
+                          ? 'bg-[#14F1D9] text-black font-black border-[#14F1D9]'
+                          : 'bg-[#141414] text-slate-300 border-white/10 hover:border-white/20'
+                      }`}
+                    >
+                      🏷️ 5% Individual
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDiscountType('group_10')}
+                      className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                        discountType === 'group_10'
+                          ? 'bg-emerald-400 text-black font-black border-emerald-400'
+                          : 'bg-[#141414] text-slate-300 border-white/10 hover:border-white/20'
+                      }`}
+                    >
+                      👥 10% Group (10+)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDiscountType('group_15')}
+                      className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                        discountType === 'group_15'
+                          ? 'bg-teal-400 text-black font-black border-teal-400'
+                          : 'bg-[#141414] text-slate-300 border-white/10 hover:border-white/20'
+                      }`}
+                    >
+                      👥 15% VIP Group
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDiscountType('bulk_30')}
+                      className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                        discountType === 'bulk_30'
+                          ? 'bg-purple-400 text-black font-black border-purple-400'
+                          : 'bg-[#141414] text-slate-300 border-white/10 hover:border-white/20'
+                      }`}
+                    >
+                      🏢 30% Bulk (100+)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDiscountType('none')}
+                      className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                        discountType === 'none'
+                          ? 'bg-slate-700 text-white font-black border-slate-600'
+                          : 'bg-[#141414] text-slate-400 border-white/10 hover:text-white'
+                      }`}
+                    >
+                      ✕ No Discount
+                    </button>
+                  </div>
+                </div>
+
+                {/* Pricing Summary Card */}
+                <div className="bg-[#00ABAB]/10 border border-[#00ABAB]/30 rounded-xl p-4 space-y-1.5">
+                  <div className="flex justify-between items-center text-xs text-[#94A3B8]">
+                    <span>Guests</span>
+                    <span>{adultCount} Adult{adultCount !== 1 ? 's' : ''}{childCount > 0 ? ` + ${childCount} Child${childCount !== 1 ? 'ren' : ''}` : ''} ({totalQuantity} Total)</span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-xs text-[#94A3B8]">
+                    <span>Subtotal</span>
+                    <span>₹{subtotalAmount}</span>
+                  </div>
+
+                  {activeDiscountPct > 0 && (
+                    <div className="flex justify-between items-center text-xs text-emerald-400 font-bold">
+                      <span>Discount ({activeDiscountPct}%)</span>
+                      <span>-₹{discountAmount}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center text-xl font-bold text-[#00ABAB] border-t border-[#00ABAB]/20 pt-2">
+                    <span>Total Due</span>
+                    <span>₹{totalAmount}</span>
                   </div>
                 </div>
               </div>
@@ -660,16 +827,26 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="glass-panel p-8 rounded-2xl border border-[#00ABAB]/30 shadow-[0_0_30px_rgba(0,171,171,0.1)] space-y-6">
 
             {/* Order Summary */}
-            <div className="bg-[#0A0A0A] p-5 rounded-2xl border border-[#1C1C1C]">
-              <p className="text-xs text-[#94A3B8] font-mono uppercase tracking-widest mb-3">Order Summary</p>
-              <div className="flex justify-between text-sm mb-1">
+            <div className="bg-[#0A0A0A] p-5 rounded-2xl border border-[#1C1C1C] space-y-1.5">
+              <p className="text-xs text-[#94A3B8] font-mono uppercase tracking-widest mb-2">Order Summary</p>
+              <div className="flex justify-between text-sm">
                 <span>{combinedActivityNames}</span>
                 <span>{adultCount}A + {childCount}C</span>
               </div>
-              <div className="flex justify-between text-sm text-[#94A3B8] mb-3">
+              <div className="flex justify-between text-xs text-[#94A3B8]">
                 <span>{date} • {timeSlot}</span>
                 <span>{totalQuantity} tickets</span>
               </div>
+              <div className="flex justify-between text-xs text-[#94A3B8] pt-1">
+                <span>Subtotal</span>
+                <span>₹{subtotalAmount}</span>
+              </div>
+              {activeDiscountPct > 0 && (
+                <div className="flex justify-between text-xs text-emerald-400 font-bold">
+                  <span>Discount ({activeDiscountPct}%)</span>
+                  <span>-₹{discountAmount}</span>
+                </div>
+              )}
               <div className="flex justify-between text-xl font-bold text-[#00ABAB] border-t border-[#1C1C1C] pt-3">
                 <span>Total Due</span>
                 <span>₹{totalAmount}</span>
@@ -680,17 +857,24 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
             <div className="space-y-4">
               <div>
                 <p className="text-xs text-[#94A3B8] font-mono uppercase tracking-widest mb-3">Counter Payment Methods</p>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-4 gap-2">
                   {([
                     { key: 'cash', label: 'Cash', desc: 'Cash collection' },
                     { key: 'upi', label: 'UPI Collect', desc: 'Manual request' },
-                    { key: 'qrcode', label: 'QR Code', desc: 'Scan dynamic QR' }
+                    { key: 'qrcode', label: 'QR Code', desc: 'Scan dynamic QR' },
+                    { key: 'complimentary', label: '🎁 Comp Pass', desc: 'VIP / Zero Charge' }
                   ] as { key: PaymentMethod; label: string; desc: string }[]).map(m => (
                     <button
                       key={m.key}
                       type="button"
                       onClick={() => setPaymentMethod(m.key)}
-                      className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-center ${paymentMethod === m.key ? 'bg-[#00ABAB]/10 border-[#00ABAB] text-[#00ABAB] shadow-[0_0_15px_rgba(0,171,171,0.2)]' : 'bg-[#0A0A0A] border-[#1C1C1C] text-[#94A3B8] hover:border-white/30 hover:text-white'}`}
+                      className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-center ${
+                        paymentMethod === m.key 
+                          ? m.key === 'complimentary'
+                            ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                            : 'bg-[#00ABAB]/10 border-[#00ABAB] text-[#00ABAB] shadow-[0_0_15px_rgba(0,171,171,0.2)]' 
+                          : 'bg-[#0A0A0A] border-[#1C1C1C] text-[#94A3B8] hover:border-white/30 hover:text-white'
+                      }`}
                     >
                       {methodIcon(m.key)}
                       <span className="font-bold text-[10px] uppercase tracking-wide leading-tight mt-1">{m.label}</span>
@@ -745,6 +929,35 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 {counterError}
               </div>
+            )}
+
+            {/* ── COMPLIMENTARY VIP PASS FLOW ── */}
+            {paymentMethod === 'complimentary' && counterStep === 'idle' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                <div className="bg-[#0A0A0A] p-5 rounded-xl border border-amber-500/30 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center mx-auto">
+                    <Gift className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-lg font-bold text-amber-300">Complimentary VIP Access Pass</h4>
+                  <p className="text-[#94A3B8] text-xs max-w-md mx-auto">
+                    Issue a 100% complimentary guest of honor pass with <strong className="text-white">₹0 billing</strong> and full gate turnstile clearance for <strong className="text-amber-400">{guestName || 'Guest'}</strong>.
+                  </p>
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl inline-block font-mono text-xs text-amber-300 font-bold">
+                    Total Due: ₹0.00 (Zero Charge)
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <button onClick={() => setStep(2)} className="px-6 py-2 rounded-xl text-[#94A3B8] bg-[#1C1C1C] hover:bg-[#2C2C2C]">Back</button>
+                  <button 
+                    onClick={handleComplimentaryPayment} 
+                    disabled={isProcessing} 
+                    className="px-8 py-3 rounded-xl font-bold flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-600 text-black hover:scale-105 transition-transform shadow-lg shadow-amber-500/20 cursor-pointer"
+                  >
+                    {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gift className="w-4 h-4" />}
+                    Issue Complimentary VIP Pass
+                  </button>
+                </div>
+              </motion.div>
             )}
 
             {/* ── CASH FLOW ── */}
@@ -936,17 +1149,22 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                       receiptId: `TKT-${confirmedBooking.id}`,
                       activityName: combinedActivityNames,
                       customerName: confirmedBooking.customerName,
+                      customerPhone: confirmedBooking.customerPhone,
                       date: confirmedBooking.date,
                       slot: confirmedBooking.timeSlot,
                       items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+                      subtotalAmount: confirmedBooking.originalAmount || subtotalAmount,
+                      discountPercentage: confirmedBooking.discountPercentage || activeDiscountPct,
+                      discountAmount: confirmedBooking.discountAmount || discountAmount,
                       totalAmount: confirmedBooking.totalAmount,
                       paymentStatus: 'paid',
                       quantity: totalQuantity,
-                      paymentMethod: pd.paymentMethod,
-                      transactionId: pd.transactionId
+                      paymentMethod: pd.paymentMethod || 'CASH',
+                      transactionId: pd.transactionId,
+                      counterStaff: currentUser?.name || 'Counter Staff'
                     });
                   }} className="btn-glow px-6 py-3 rounded-xl font-bold flex items-center gap-2">
-                    <Printer className="w-4 h-4" /> Print Ticket
+                    <Printer className="w-4 h-4" /> Print Gate Pass & Receipt
                   </button>
                   <button onClick={onCancel} className="bg-[#1C1C1C] hover:bg-[#2C2C2C] text-white px-6 py-3 rounded-xl font-bold">
                     New Booking
@@ -989,17 +1207,22 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   receiptId: `TKT-${confirmedBooking.id}`,
                   activityName: combinedActivityNames,
                   customerName: confirmedBooking.customerName,
+                  customerPhone: confirmedBooking.customerPhone,
                   date: confirmedBooking.date,
                   slot: confirmedBooking.timeSlot,
                   items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+                  subtotalAmount: confirmedBooking.originalAmount || subtotalAmount,
+                  discountPercentage: confirmedBooking.discountPercentage || activeDiscountPct,
+                  discountAmount: confirmedBooking.discountAmount || discountAmount,
                   totalAmount: confirmedBooking.totalAmount,
                   paymentStatus: 'paid',
                   quantity: totalQuantity,
-                  paymentMethod: pd.paymentMethod,
-                  transactionId: pd.transactionId
+                  paymentMethod: pd.paymentMethod || 'CASH',
+                  transactionId: pd.transactionId,
+                  counterStaff: currentUser?.name || 'Counter Staff'
                 });
               }} className="btn-glow px-6 py-3 rounded-xl font-bold flex items-center gap-2">
-                <Printer className="w-4 h-4" /> Print Ticket
+                <Printer className="w-4 h-4" /> Print Single Gate Pass & Receipt
               </button>
               <button onClick={onCancel} className="bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black text-white px-8 py-3 rounded-xl font-bold transition-all duration-300">
                 Return to POS Dashboard

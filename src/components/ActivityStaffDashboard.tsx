@@ -10,7 +10,17 @@ import { Scan, ClipboardList, CheckCircle2, AlertTriangle, Search, Activity as A
 import GoKartingOpsDashboard from './karting/GoKartingOpsDashboard';
 import StaffScanner from './StaffScanner';
 
-export const ActivityStaffDashboard: React.FC = () => {
+export interface ActivityStaffDashboardProps {
+  activityIdFilter?: string;
+  title?: string;
+  subtitle?: string;
+}
+
+export const ActivityStaffDashboard: React.FC<ActivityStaffDashboardProps> = ({
+  activityIdFilter,
+  title,
+  subtitle
+}) => {
   const { tickets, bookings, scanTicket, markBookingAsPaid, activities, timeSlots } = useAppContext();
 
   // Search and simulator inputs
@@ -19,7 +29,7 @@ export const ActivityStaffDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   // Active activity filter for check-ins
-  const [selectedActivityFilter, setSelectedActivityFilter] = useState<string>('all');
+  const [selectedActivityFilter, setSelectedActivityFilter] = useState<string>(activityIdFilter || 'all');
 
   const handleManualScan = (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,9 +160,11 @@ export const ActivityStaffDashboard: React.FC = () => {
                 <span className="w-2.5 h-2.5 rounded-full btn-glow animate-pulse" />
                 <span className="text-[10px] uppercase font-bold tracking-widest text-[#40E0D0] font-mono">Gate & Trail Operations</span>
               </div>
-              <h2 className="text-xl font-bold font-sans tracking-tight mt-1 text-[#FFFFFF]">Staff Check-In Terminal</h2>
+              <h2 className="text-xl font-bold font-sans tracking-tight mt-1 text-[#FFFFFF]">
+                {title || "Staff Check-In Terminal"}
+              </h2>
               <p className="text-[#9CA3AF] text-xs max-w-lg mt-0.5">
-                Authenticate visitor entry passes instantly, monitor hourly ride occupancy levels, and avoid double check-ins.
+                {subtitle || "Authenticate visitor entry passes instantly, monitor hourly ride occupancy levels, and avoid double check-ins."}
               </p>
             </div>
             <div className="px-4 py-2 bg-[#0A0A0A] rounded-xl border border-[#00ABAB]/30 text-xs font-mono text-[#40E0D0]">

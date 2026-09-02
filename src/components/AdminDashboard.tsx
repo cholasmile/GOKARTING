@@ -14,8 +14,10 @@ import {
   TrendingUp, Users, Ticket, Utensils, Award, ShieldAlert,
   Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle,
   MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check,
-  Banknote, Smartphone, Filter, Search, IndianRupee, Loader2
+  Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag
 } from 'lucide-react';
+import ActivityManagementPanel from './admin/ActivityManagementPanel';
+
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -125,7 +127,7 @@ export const AdminDashboard: React.FC = () => {
   const [reconciliationTab, setReconciliationTab] = useState<'reports' | 'reconciliation'>('reports');
 
   // Active Admin Tabs
-  const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'vendors' | 'users' | 'reports' | 'database' | 'payments' | 'pay_settings'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'users' | 'reports' | 'database' | 'payments' | 'pay_settings'>('analytics');
   const [activeDbSubTab, setActiveDbSubTab] = useState<'schema' | 'rls' | 'hierarchy' | 'api_routes' | 'deploy'>('schema');
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -405,7 +407,7 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Admin Tabs */}
       <div className="flex border-b border-[#00ABAB]/30 gap-1 overflow-x-auto text-[#FFFFFF] pb-px">
-        {(['analytics', 'activities', 'vendors', 'users', 'reports', 'payments', 'pay_settings', 'database'] as const).map(tab => (
+        {(['analytics', 'activities', 'activity_mgmt', 'vendors', 'users', 'reports', 'payments', 'pay_settings', 'database'] as const).map(tab => (
           <button
             key={tab}
             id={`btn-admin-tab-${tab}`}
@@ -418,13 +420,18 @@ export const AdminDashboard: React.FC = () => {
           >
             {tab === 'analytics' && <TrendingUp className="h-4 w-4" />}
             {tab === 'activities' && <Award className="h-4 w-4" />}
+            {tab === 'activity_mgmt' && <ImageIcon className="h-4 w-4" />}
             {tab === 'vendors' && <Coffee className="h-4 w-4" />}
             {tab === 'users' && <Users className="h-4 w-4" />}
             {tab === 'reports' && <FileText className="h-4 w-4" />}
             {tab === 'payments' && <IndianRupee className="h-4 w-4" />}
             {tab === 'pay_settings' && <Settings className="h-4 w-4" />}
             {tab === 'database' && <Database className="h-4 w-4" />}
-            {tab === 'database' ? 'Supabase & RLS' : tab === 'pay_settings' ? 'Pay Settings' : tab === 'payments' ? 'Pay Reports' : tab}
+            {tab === 'database' ? 'Supabase & RLS'
+              : tab === 'pay_settings' ? 'Pay Settings'
+              : tab === 'payments' ? 'Pay Reports'
+              : tab === 'activity_mgmt' ? 'Activity Mgmt'
+              : tab}
           </button>
         ))}
       </div>
@@ -709,6 +716,15 @@ export const AdminDashboard: React.FC = () => {
             ))}
           </div>
 
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* 2b. ACTIVITY MANAGEMENT VIEW (new enhancement tab) */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === 'activity_mgmt' && (
+        <div className="space-y-4">
+          <ActivityManagementPanel />
         </div>
       )}
 

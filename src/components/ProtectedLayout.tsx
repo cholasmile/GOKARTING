@@ -24,12 +24,14 @@ export const ProtectedLayout: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           
           <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-tr from-[#007B8B] via-[#00ABAB] to-[#3E8EDE] text-white w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xl shadow-[0_4px_12px_rgba(20,184,166,0.3)] font-sans border border-white/20 transform hover:scale-105 transition-transform">
-              D
-            </div>
+            <img 
+              src="/deuce-logo.jpg" 
+              alt="Deuce Logo" 
+              className="w-10 h-10 rounded-xl object-cover shadow-[0_4px_12px_rgba(20,241,217,0.3)] border border-[#14F1D9]/40 transform hover:scale-105 transition-transform"
+            />
             <div>
               <h1 className="font-black text-2xl leading-none tracking-tight text-gradient font-sans uppercase">Deuce</h1>
-              <p className="text-[9px] text-[#40E0D0] tracking-widest font-mono uppercase font-bold mt-1">Motorsport OS</p>
+              <p className="text-[9px] text-[#40E0D0] tracking-widest font-mono uppercase font-bold mt-1">Live The Rush • Yelagiri</p>
             </div>
           </div>
 

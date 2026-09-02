@@ -8,7 +8,8 @@ import {
   User, UserRole, Activity, FoodVendor, MenuItem, 
   InventoryItem, Booking, Ticket, FoodOrder, Payment, 
   NotificationLog, OrderStatus, FoodOrderItem, ActivityPackage,
-  Kart, GoKartingSession, LapRecord, GoKartingWaiver, KartStatus, SessionStatus
+  Kart, GoKartingSession, LapRecord, GoKartingWaiver, KartStatus, SessionStatus,
+  ActivityPhoto, ActivityOffer
 } from '../types';
 import { 
   INITIAL_ACTIVITIES, INITIAL_FOOD_VENDORS, INITIAL_MENU_ITEMS, 
@@ -57,6 +58,17 @@ interface AppContextProps {
   updateActivity: (activity: Activity) => void;
   deleteActivity: (id: string) => void;
 
+  // Mutators - Activity Management Enhancement (photos + offers)
+  addActivityPhoto: (activityId: string, photo: Omit<ActivityPhoto, 'id' | 'uploadedAt' | 'order'>) => void;
+  removeActivityPhoto: (activityId: string, photoId: string) => void;
+  reorderActivityPhotos: (activityId: string, reorderedPhotos: ActivityPhoto[]) => void;
+  setCoverPhoto: (activityId: string, photoId: string) => void;
+  updateActivityExtended: (activityId: string, fields: Partial<Pick<Activity, 'shortDescription' | 'detailedDescription' | 'duration' | 'ageRequirement' | 'rules' | 'isActive' | 'displayOrder'>>) => void;
+  addActivityOffer: (activityId: string, offer: Omit<ActivityOffer, 'id' | 'createdAt'>) => void;
+  updateActivityOffer: (activityId: string, offer: ActivityOffer) => void;
+  deleteActivityOffer: (activityId: string, offerId: string) => void;
+  setOfferActive: (activityId: string, offerId: string, active: boolean) => void;
+
   // Mutators - Users
   updateUserRole: (userId: string, role: UserRole) => void;
   addUser: (user: Omit<User, 'id'>) => void;
@@ -97,6 +109,15 @@ interface AppContextProps {
     failureReason?: string;
     paymentStatus?: 'paid' | 'failed' | 'cancelled' | 'refunded';
   }) => { success: boolean; message: string; ticket?: Ticket };
+
+  cancelAndRefundTicket: (params: {
+    ticketId?: string;
+    bookingId: string;
+    reason: string;
+    refundAmount: number;
+    refundMethod: 'cash' | 'upi' | 'card' | 'original';
+    staffName?: string;
+  }) => { success: boolean; message: string; refundReceipt?: any };
 
   // Payment settings & gateway details
   counterUpiId: string;
@@ -152,16 +173,9 @@ interface AppContextProps {
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
 
-const TIME_SLOTS = [
-  '09:00 AM - 10:00 AM',
-  '10:00 AM - 11:00 AM',
-  '11:00 AM - 12:00 PM',
-  '01:00 PM - 02:00 PM',
-  '02:00 PM - 03:00 PM',
-  '03:00 PM - 04:00 PM',
-  '04:00 PM - 05:00 PM',
-  '05:00 PM - 06:00 PM'
-];
+import { WEEKEND_SLOTS } from '../lib/slotUtils';
+
+const TIME_SLOTS = WEEKEND_SLOTS;
 
 const localLoadHelper = <T,>(key: string, initial: T): T => {
   if (typeof window === 'undefined') return initial;
@@ -352,9 +366,41 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     loadDataFromSupabase();
   }, []);
 
-  // Save states on updates to localStorage
+  // Fetch backend persisted activities on startup
+  useEffect(() => {
+    fetch('/api/activities')
+      .then(res => res.json())
+      .then(serverActivities => {
+        if (Array.isArray(serverActivities) && serverActivities.length > 0) {
+          setActivities(prev => {
+            const map = new Map<string, Activity>();
+            prev.forEach(a => map.set(a.id, a));
+            serverActivities.forEach((sa: Activity) => {
+              const existing = map.get(sa.id);
+              if (existing) {
+                map.set(sa.id, { ...existing, ...sa });
+              } else {
+                map.set(sa.id, sa);
+              }
+            });
+            return Array.from(map.values());
+          });
+        }
+      })
+      .catch(err => console.warn('[frontend] Backend activities sync not available:', err));
+  }, []);
+
+  // Save states on updates to localStorage and backend API
   useEffect(() => { localStorage.setItem('ap_users', JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem('ap_activities', JSON.stringify(activities)); }, [activities]);
+  useEffect(() => { 
+    localStorage.setItem('ap_activities', JSON.stringify(activities));
+    // Persist activities array to backend API
+    fetch('/api/activities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(activities)
+    }).catch(() => {});
+  }, [activities]);
   useEffect(() => { localStorage.setItem('ap_vendors', JSON.stringify(vendors)); }, [vendors]);
   useEffect(() => { localStorage.setItem('ap_menu_items', JSON.stringify(menuItems)); }, [menuItems]);
   useEffect(() => { localStorage.setItem('ap_inventory', JSON.stringify(inventory)); }, [inventory]);
@@ -465,6 +511,115 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (isSupabaseConfigured) {
       writeToLocalAndSync('activities', 'delete', { id });
     }
+  };
+
+  // ==========================================
+  // ACTIVITY MANAGEMENT ENHANCEMENT FUNCTIONS
+  // ==========================================
+
+  const addActivityPhoto = (activityId: string, photo: Omit<ActivityPhoto, 'id' | 'uploadedAt' | 'order'>) => {
+    setActivities(prev => prev.map(act => {
+      if (act.id !== activityId) return act;
+      const existingPhotos = act.photos || [];
+      const newPhoto: ActivityPhoto = {
+        ...photo,
+        id: `photo-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        uploadedAt: new Date().toISOString(),
+        order: existingPhotos.length
+      };
+      const updated = { ...act, photos: [...existingPhotos, newPhoto] };
+      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+      return updated;
+    }));
+  };
+
+  const removeActivityPhoto = (activityId: string, photoId: string) => {
+    setActivities(prev => prev.map(act => {
+      if (act.id !== activityId) return act;
+      const filtered = (act.photos || []).filter(p => p.id !== photoId);
+      const reordered = filtered.map((p, idx) => ({ ...p, order: idx }));
+      const updated = {
+        ...act,
+        photos: reordered,
+        coverPhotoId: act.coverPhotoId === photoId ? undefined : act.coverPhotoId
+      };
+      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+      return updated;
+    }));
+  };
+
+  const reorderActivityPhotos = (activityId: string, reorderedPhotos: ActivityPhoto[]) => {
+    setActivities(prev => prev.map(act => {
+      if (act.id !== activityId) return act;
+      const updated = { ...act, photos: reorderedPhotos.map((p, idx) => ({ ...p, order: idx })) };
+      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+      return updated;
+    }));
+  };
+
+  const setCoverPhoto = (activityId: string, photoId: string) => {
+    setActivities(prev => prev.map(act => {
+      if (act.id !== activityId) return act;
+      const photo = (act.photos || []).find(p => p.id === photoId);
+      const updated = {
+        ...act,
+        coverPhotoId: photoId,
+        // Also update the main image to the selected cover photo
+        image: photo ? photo.url : act.image
+      };
+      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+      return updated;
+    }));
+  };
+
+  const updateActivityExtended = (activityId: string, fields: Partial<Pick<Activity, 'shortDescription' | 'detailedDescription' | 'duration' | 'ageRequirement' | 'rules' | 'isActive' | 'displayOrder'>>) => {
+    setActivities(prev => prev.map(act => {
+      if (act.id !== activityId) return act;
+      const updated = { ...act, ...fields };
+      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+      return updated;
+    }));
+  };
+
+  const addActivityOffer = (activityId: string, offer: Omit<ActivityOffer, 'id' | 'createdAt'>) => {
+    setActivities(prev => prev.map(act => {
+      if (act.id !== activityId) return act;
+      const newOffer: ActivityOffer = {
+        ...offer,
+        id: `offer-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        createdAt: new Date().toISOString()
+      };
+      const updated = { ...act, offers: [...(act.offers || []), newOffer] };
+      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+      return updated;
+    }));
+  };
+
+  const updateActivityOffer = (activityId: string, offer: ActivityOffer) => {
+    setActivities(prev => prev.map(act => {
+      if (act.id !== activityId) return act;
+      const updated = { ...act, offers: (act.offers || []).map(o => o.id === offer.id ? offer : o) };
+      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+      return updated;
+    }));
+  };
+
+  const deleteActivityOffer = (activityId: string, offerId: string) => {
+    setActivities(prev => prev.map(act => {
+      if (act.id !== activityId) return act;
+      const updated = { ...act, offers: (act.offers || []).filter(o => o.id !== offerId) };
+      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+      return updated;
+    }));
+  };
+
+  const setOfferActive = (activityId: string, offerId: string, active: boolean) => {
+    setActivities(prev => prev.map(act => {
+      if (act.id !== activityId) return act;
+      const updated = { ...act, offers: (act.offers || []).map(o => o.id === offerId ? { ...o, isActive: active } : o) };
+      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+      return updated;
+    }));
   };
 
   // User Management
@@ -876,6 +1031,88 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true, message: 'Payment confirmed successfully.', ticket: newTicket, booking: updatedBooking };
   };
 
+  // Cancel and Refund a Ticket / Booking
+  const cancelAndRefundTicket = (params: {
+    ticketId?: string;
+    bookingId: string;
+    reason: string;
+    refundAmount: number;
+    refundMethod: 'cash' | 'upi' | 'card' | 'original';
+    staffName?: string;
+  }) => {
+    const booking = bookings.find(b => b.id === params.bookingId);
+    if (!booking) return { success: false, message: 'Booking not found.' };
+
+    const now = new Date().toISOString();
+    const refundAmt = params.refundAmount != null ? params.refundAmount : booking.totalAmount;
+
+    // 1. Update Booking
+    const updatedBooking: Booking = {
+      ...booking,
+      paymentStatus: 'refunded',
+      status: 'cancelled',
+      cancellationReason: params.reason,
+      refundAmount: refundAmt,
+      refundMethod: params.refundMethod,
+      refundedAt: now,
+      refundedBy: params.staffName || currentUser?.name || 'Staff Counter'
+    };
+    setBookings(prev => prev.map(b => b.id === params.bookingId ? updatedBooking : b));
+    if (isSupabaseConfigured) writeToLocalAndSync('bookings', 'update', updatedBooking);
+
+    // 2. Update Ticket
+    setTickets(prev => prev.map(t => {
+      if (t.bookingId === params.bookingId || (params.ticketId && t.id === params.ticketId)) {
+        const updatedTicket: Ticket = {
+          ...t,
+          status: 'refunded',
+          cancellationReason: params.reason,
+          refundAmount: refundAmt,
+          refundedAt: now,
+          refundedBy: params.staffName || currentUser?.name || 'Staff Counter'
+        };
+        if (isSupabaseConfigured) writeToLocalAndSync('tickets', 'update', updatedTicket);
+        return updatedTicket;
+      }
+      return t;
+    }));
+
+    // 3. Update Payment record
+    const existingPayment = payments.find(p => p.bookingId === params.bookingId);
+    if (existingPayment) {
+      const updatedPayment: Payment = {
+        ...existingPayment,
+        status: 'refunded',
+        payment_status: 'REFUNDED',
+        updated_at: now
+      };
+      setPayments(prev => prev.map(p => p.id === existingPayment.id ? updatedPayment : p));
+      if (isSupabaseConfigured) writeToLocalAndSync('payments', 'update', updatedPayment);
+    }
+
+    sendMockNotification(
+      booking.customerEmail,
+      '🛑 Booking Cancelled & Refunded – Deuce Adventure Park',
+      `Hi ${booking.customerName}, your booking #${booking.id} (${booking.activityName}) has been cancelled. Refund of ₹${refundAmt} was processed via ${params.refundMethod.toUpperCase()}.`,
+      'email'
+    );
+
+    return {
+      success: true,
+      message: `Successfully cancelled & refunded ₹${refundAmt} to ${params.refundMethod.toUpperCase()}`,
+      refundReceipt: {
+        bookingId: booking.id,
+        ticketId: params.ticketId || `tkt-${booking.id}`,
+        customerName: booking.customerName,
+        refundAmount: refundAmt,
+        refundMethod: params.refundMethod,
+        reason: params.reason,
+        timestamp: now,
+        staffName: params.staffName || currentUser?.name || 'Staff Counter'
+      }
+    };
+  };
+
   // Ticket Scanning Check-In
   const scanTicket = (qrValue: string, staffName: string) => {
     const foundTicket = tickets.find(t => t.qrCodeValue === qrValue);
@@ -1262,12 +1499,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       addActivity,
       updateActivity,
       deleteActivity,
+      addActivityPhoto,
+      removeActivityPhoto,
+      reorderActivityPhotos,
+      setCoverPhoto,
+      updateActivityExtended,
+      addActivityOffer,
+      updateActivityOffer,
+      deleteActivityOffer,
+      setOfferActive,
       updateUserRole,
       addUser,
       
       createBooking,
       markBookingAsPaid,
       markPaymentConfirmed,
+      cancelAndRefundTicket,
       scanTicket,
 
       counterUpiId,

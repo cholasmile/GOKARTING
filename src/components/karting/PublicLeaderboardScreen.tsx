@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trophy, Timer, Zap, Flag } from 'lucide-react';
 import { mockLapRecords } from '../../data/kartingMockData';
 
@@ -39,9 +39,11 @@ const PublicLeaderboardScreen: React.FC = () => {
       <header className="relative z-10 bg-[#0A0A0A]/80 border-b border-[#00ABAB]/30 p-8 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-6">
-            <div className="bg-gradient-to-tr from-[#007B8B] via-[#00ABAB] to-[#3E8EDE] text-[#0A0A0A] w-20 h-20 rounded-2xl flex items-center justify-center shadow-[0_0_40px_rgba(20,184,166,0.4)]">
-              <Trophy className="w-10 h-10" />
-            </div>
+            <img 
+              src="/deuce-logo.jpg" 
+              alt="Deuce Logo" 
+              className="w-20 h-20 rounded-2xl object-cover shadow-[0_0_40px_rgba(20,241,217,0.4)] border border-[#14F1D9]/40" 
+            />
             <div>
               <h1 className="text-6xl font-black uppercase tracking-tight text-gradient leading-none">Top Drivers</h1>
               <p className="text-[#40E0D0] font-mono text-xl tracking-[0.3em] uppercase font-bold mt-2">Track Record Leaderboard</p>

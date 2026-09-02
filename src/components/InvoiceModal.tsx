@@ -49,10 +49,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
       receiptId: `TKT-${receiptId}`,
       activityName,
       customerName,
+      customerPhone: booking?.customerPhone,
       date: printDate,
       slot,
       items: itemList,
-      totalAmount: subtotal,
+      subtotalAmount: booking?.originalAmount || subtotal,
+      discountPercentage: booking?.discountPercentage || 0,
+      discountAmount: booking?.discountAmount || 0,
+      totalAmount: booking?.totalAmount || subtotal,
       paymentStatus: isPaid ? 'paid' : 'pending',
       quantity,
       paymentMethod,
@@ -95,10 +99,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
           
           {/* Park Branding */}
           <div className="flex justify-between items-start border-b border-[#00ABAB]/30 pb-4">
-            <div>
-              <h4 className="font-extrabold text-base text-teal-950 font-sans tracking-tight">DEUCE PARK</h4>
-              <p className="text-[10px] text-[#9CA3AF] font-mono mt-0.5">Deuce Park, Yelagiri</p>
-              <p className="text-[10px] text-[#9CA3AF] font-mono">GSTIN: 33INYPK7449Q1ZL</p>
+            <div className="flex items-center gap-3">
+              <img src="/deuce-logo.jpg" alt="Deuce Logo" className="w-10 h-10 rounded-lg object-cover border border-[#14F1D9]/30" />
+              <div>
+                <h4 className="font-extrabold text-base text-white font-sans tracking-tight">DEUCE PARK</h4>
+                <p className="text-[10px] text-[#9CA3AF] font-mono mt-0.5">Yelagiri • Live The Rush</p>
+                <p className="text-[10px] text-[#9CA3AF] font-mono">GSTIN: 33INYPK7449Q1ZL</p>
+              </div>
             </div>
             <div className="text-right">
               <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Invoice ID</span>

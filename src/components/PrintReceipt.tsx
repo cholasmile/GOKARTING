@@ -1,5 +1,4 @@
 import React from 'react';
-import { Booking, FoodOrder } from '../types';
 
 interface PrintReceiptProps {
   receiptId: string;
@@ -22,107 +21,82 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
   paymentMethod,
   transactionId
 }) => {
+  const totalQty = items.reduce((acc, item) => acc + item.qty, 0);
+
   return (
-    <div id={`print-receipt-${receiptId}`} className="hidden print:block w-full text-black bg-white p-4 font-mono text-sm">
-      <div className="text-center border-b-2 border-black pb-2 mb-4">
-        <h2 className="text-xl font-black">DEUCE PARK</h2>
-        <p className="text-xs">Deuce Park, Yelagiri</p>
-        <p className="text-xs">GSTIN: 33INYPK7449Q1ZL</p>
-        <p className="text-xs">Offline Billing Receipt</p>
+    <div 
+      id={`print-receipt-${receiptId}`} 
+      className="hidden print:block w-[2.85in] max-w-[2.85in] max-h-[3.85in] mx-auto text-black bg-white p-1.5 font-mono text-[8px] leading-tight overflow-hidden border border-black rounded"
+    >
+      {/* Header */}
+      <div className="text-center border-b border-dashed border-black pb-1 mb-1">
+        <h2 className="text-[11px] font-black uppercase tracking-wider">DEUCE ADVENTURE PARK</h2>
+        <p className="text-[7px] font-bold">Yelagiri Hills • GST: 33INYPK7449Q1ZL</p>
       </div>
 
-      <div className="flex justify-between mb-2 text-xs">
-        <span>Receipt: {receiptId}</span>
-        <span>Date: {new Date(date).toLocaleString()}</span>
-      </div>
-      <div className="mb-4 text-xs">
-        <p>Customer: {customerName}</p>
-        <p>Type: {type.toUpperCase()}</p>
+      {/* Meta Bar */}
+      <div className="flex justify-between items-center mb-1 text-[7.5px] border-b border-dotted border-gray-400 pb-1">
+        <span>REC: <strong className="font-bold">{receiptId}</strong></span>
+        <span>{new Date(date).toLocaleDateString()}</span>
       </div>
 
-      <table className="w-full text-xs mb-4">
+      <div className="mb-1 text-[7.5px]">
+        <p>Guest: <strong className="font-bold">{customerName}</strong> ({totalQty} Pax)</p>
+        <p>Type: <strong className="uppercase">{type}</strong></p>
+      </div>
+
+      {/* Table */}
+      <table className="w-full text-[7.5px] mb-1 border-collapse">
         <thead>
-          <tr className="border-b border-black">
-            <th className="text-left py-1">Item</th>
-            <th className="text-center py-1">Qty</th>
-            <th className="text-right py-1">Price</th>
+          <tr className="border-b border-black text-left">
+            <th className="py-0.5">Item</th>
+            <th className="text-center py-0.5">Qty</th>
+            <th className="text-right py-0.5">Price</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item, idx) => (
-            <tr key={idx}>
-              <td className="py-1">{item.name}</td>
-              <td className="text-center py-1">{item.qty}</td>
-              <td className="text-right py-1">₹{item.price.toFixed(2)}</td>
+            <tr key={idx} className="border-b border-gray-100">
+              <td className="py-0.5 truncate max-w-[1.2in]">{item.name}</td>
+              <td className="text-center py-0.5">{item.qty}</td>
+              <td className="text-right py-0.5 font-mono">₹{item.price.toFixed(2)}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <div className="border-t-2 border-black pt-2 flex justify-between font-bold text-sm">
-        <span>TOTAL:</span>
-        <span>₹{totalAmount.toFixed(2)}</span>
-      </div>
-      <div className="flex justify-between text-xs mt-1">
-        <span>State GST / SGST (9%):</span>
-        <span>₹{(totalAmount * 0.09).toFixed(2)}</span>
-      </div>
-      <div className="flex justify-between text-xs mt-0.5">
-        <span>Central GST / CGST (9%):</span>
-        <span>₹{(totalAmount * 0.09).toFixed(2)}</span>
-      </div>
-      <div className="border-t-2 border-black pt-2 mt-1 flex justify-between font-black text-sm">
-        <span>GRAND TOTAL:</span>
-        <span>₹{(totalAmount * 1.18).toFixed(2)}</span>
-      </div>
-
-      <div className="border-t-2 border-black pt-2 mt-1 flex justify-between font-bold text-sm">
-        <span>PAYMENT STATUS:</span>
-        <span>PAID</span>
-      </div>
-
-      {(paymentMethod || transactionId) && (
-        <div className="border-t border-black/50 border-dotted mt-2 pt-2 text-[11px] space-y-0.5">
-          {paymentMethod && <p>PAYMENT METHOD: <span style={{ textTransform: 'uppercase' }}>{paymentMethod}</span></p>}
-          {transactionId && <p>TRANSACTION REF: {transactionId}</p>}
+      {/* Summary */}
+      <div className="border-t border-dashed border-black pt-1 space-y-0.5 text-[7.5px]">
+        <div className="flex justify-between font-bold text-[9px] border-t border-b border-black py-0.5 mt-0.5">
+          <span>GRAND TOTAL ({paymentMethod ? paymentMethod.toUpperCase() : 'PAID'}):</span>
+          <span>₹{totalAmount.toFixed(2)}</span>
         </div>
-      )}
-      
-      <div className="text-center mt-6">
-        <p className="text-[10px]">Thank you for visiting!</p>
-        <p className="text-[10px]">Please keep this receipt for your records.</p>
-        <p className="mt-2 text-[8px] text-gray-500">System generated offline invoice</p>
       </div>
 
+      {/* Single Compact Gate QR Pass if Booking */}
       {type === 'booking' && (
-        <div className="mt-8 pt-8 border-t-2 border-black border-dashed">
-          <h3 className="text-lg font-black text-center mb-6">ENTRY PASSES</h3>
-          <div className="flex flex-col gap-6">
-            {items.map((item, idx) => (
-              <React.Fragment key={idx}>
-                {Array.from({ length: item.qty }).map((_, i) => (
-                  <div key={`${idx}-${i}`} className="border-2 border-black p-4 rounded-lg flex items-center justify-between">
-                    <div>
-                      <h4 className="font-black text-lg">{item.name}</h4>
-                      <p className="text-xs mt-1">Ticket ID: {receiptId}-{i + 1}</p>
-                      <p className="text-xs">Date: {new Date(date).toLocaleDateString()}</p>
-                      <p className="text-xs font-bold mt-2">Pass {i + 1} of {item.qty}</p>
-                    </div>
-                    <div className="w-24 h-24">
-                      {/* Simulated QR Code for print view */}
-                      <svg className="w-full h-full text-black" viewBox="0 0 100 100">
-                         <path d="M5 5h30v30H5V5zm5 5v20h20V10H10zm55-5h30v30H65V5zm5 5v20h20V10H70zM5 65h30v30H5V65zm5 5v20h20V70H10z" fill="currentColor"/>
-                         <path d="M45 10h10v10H45V10zm20 45h10v10H65V55zm15 15h15v15H80V70zm-15 15h10v10H65V85zm-20-20h10v10H45V65zm20-20h10v10H65V45zm-10 10h10v10H55V55z" fill="currentColor"/>
-                      </svg>
-                      <div className="text-center text-[8px] font-bold mt-1">SCAN AT GATE</div>
-                    </div>
-                  </div>
-                ))}
-              </React.Fragment>
-            ))}
+        <div className="mt-1 p-1 border border-black rounded flex items-center justify-between bg-gray-50">
+          <div className="text-[7px]">
+            <p className="font-black text-[8px] uppercase">GATE ENTRY PASS</p>
+            <p>Passes: <strong>{totalQty} Pax</strong></p>
+            <p>ID: {receiptId}</p>
+          </div>
+          <div className="w-8 h-8 text-center flex-shrink-0">
+            <svg className="w-full h-full text-black" viewBox="0 0 100 100">
+               <path d="M5 5h30v30H5V5zm5 5v20h20V10H10zm55-5h30v30H65V5zm5 5v20h20V10H70zM5 65h30v30H5V65zm5 5v20h20V70H10z" fill="currentColor"/>
+               <path d="M45 10h10v10H45V10zm20 45h10v10H65V55zm15 15h15v15H80V70zm-15 15h10v10H65V85zm-20-20h10v10H45V65zm20-20h10v10H65V45zm-10 10h10v10H55V55z" fill="currentColor"/>
+            </svg>
+            <span className="text-[5px] font-bold block -mt-0.5">SCAN</span>
           </div>
         </div>
       )}
+
+      {/* Footer */}
+      <div className="text-center mt-1 pt-1 border-t border-dotted border-gray-400 text-[6.5px]">
+        <p>Valid for date printed above. Non-refundable.</p>
+        <p className="font-bold">Thank you for visiting Deuce Park!</p>
+      </div>
     </div>
   );
 };
+
