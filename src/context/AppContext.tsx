@@ -433,11 +433,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               const serverAct = map.get(existing.id);
               if (serverAct) {
                 map.set(existing.id, {
-                  ...existing,
-                  ...serverAct, // Server data takes precedence for cross-device sync!
-                  photos: (serverAct.photos && serverAct.photos.length > 0) ? serverAct.photos : (existing.photos || []),
-                  packages: (serverAct.packages && serverAct.packages.length > 0) ? serverAct.packages : (existing.packages || []),
-                  offers: (serverAct.offers && serverAct.offers.length > 0) ? serverAct.offers : (existing.offers || [])
+                  ...serverAct,
+                  ...existing, // Local Admin edits ALWAYS take precedence!
+                  packages: (existing.packages && existing.packages.length > 0) ? existing.packages : (serverAct.packages || []),
+                  photos: (existing.photos && existing.photos.length > 0) ? existing.photos : (serverAct.photos || []),
+                  offers: (existing.offers && existing.offers.length > 0) ? existing.offers : (serverAct.offers || [])
                 });
               } else {
                 map.set(existing.id, existing);
