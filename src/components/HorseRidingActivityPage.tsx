@@ -29,6 +29,13 @@ interface TrailRoute {
   scenicPoints: string[];
 }
 
+interface HorsePackage {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+}
+
 interface ActivityPageProps {
   onSuccessClose?: () => void;
 }
@@ -58,20 +65,32 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
     { id: 'route-river', name: 'Riverfront Canopy', duration: '1.0 Hr', difficulty: 'Easy', description: 'A completely flat route exploring the scenic wetlands.', scenicPoints: ['Heron Flat', 'Sandy Shallows'] }
   ];
 
+  const defaultPackages: HorsePackage[] = [
+    { id: 'pkg-horse-pony', name: 'Pony Walk (15 Mins)', price: 25, description: 'Gentle pony lead walk on flat trails — perfect for young children.' },
+    { id: 'pkg-horse-guided', name: 'Guided Trail Ride (30 Mins)', price: 45, description: 'Scenic guided nature trail ride with an experienced handler.' },
+    { id: 'pkg-horse-advanced', name: 'Advanced Forest Trek (60 Mins)', price: 80, description: 'Full forest trail with trotting/cantering for confident riders.' }
+  ];
+
+  const packages: HorsePackage[] = (horseActivity?.packages && horseActivity.packages.length > 0)
+    ? horseActivity.packages
+    : defaultPackages;
+
   const [selectedHorse, setSelectedHorse] = useState<HorseBreed>(horses[0]);
   const [selectedRoute, setSelectedRoute] = useState<TrailRoute>(routes[0]);
-  const [adultCount, setAdultCount] = useState<number>(1);
-  const [childCount, setChildCount] = useState<number>(0);
-  const [selectedPkgId, setSelectedPkgId] = useState<string>(horseActivity?.packages?.[0]?.id || '');
-  
+  const [selectedPackage, setSelectedPackage] = useState<HorsePackage>(packages[0] || defaultPackages[0]);
+
   React.useEffect(() => {
-    if (horseActivity?.packages && horseActivity.packages.length > 0) {
-      if (!selectedPkgId || !horseActivity.packages.some(p => p.id === selectedPkgId)) {
-        setSelectedPkgId(horseActivity.packages[0].id);
+    if (packages.length > 0) {
+      const match = packages.find(p => p.id === selectedPackage?.id);
+      if (match) {
+        setSelectedPackage(match);
+      } else {
+        setSelectedPackage(packages[0]);
       }
     }
-  }, [horseActivity?.packages]);
-  
+  }, [packages]);
+
+  const [packageQuantity, setPackageQuantity] = useState<number>(1);
   const [customerName, setCustomerName] = useState<string>('');
   const [customerEmail, setCustomerEmail] = useState<string>('');
   const [customerPhone, setCustomerPhone] = useState<string>('');
@@ -100,16 +119,7 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successBooking, setSuccessBooking] = useState<any | null>(null);
 
-  const packages = horseActivity?.packages || [];
-  const selectedPkg = packages.find(p => p.id === selectedPkgId);
-
-  const priceAdult = horseActivity?.adultPrice ?? 45;
-  const priceChild = horseActivity?.childPrice ?? 25;
-  const totalRiders = Math.max(1, adultCount + childCount);
-
-  const bookingTotal = paymentMethod === 'complimentary' ? 0 : (selectedPkg 
-    ? selectedPkg.price * totalRiders
-    : (adultCount * priceAdult) + (childCount * priceChild));
+  const bookingTotal = paymentMethod === 'complimentary' ? 0 : selectedPackage.price * packageQuantity;
 
   const feedTreat = () => {
     setBondLevel(prev => Math.min(100, prev + 15));
@@ -153,9 +163,7 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
       return;
     }
 
-    const details = selectedPkg 
-      ? `Package: ${selectedPkg.name} | Horse: ${selectedHorse.name} (${selectedHorse.type}) | Route: ${selectedRoute.name}`
-      : `Horse: ${selectedHorse.name} (${selectedHorse.type}) | Route: ${selectedRoute.name} (${adultCount} Adult, ${childCount} Child)`;
+    const details = `Package: ${selectedPackage.name} | Horse: ${selectedHorse.name} (${selectedHorse.type}) | Route: ${selectedRoute.name}`;
 
     const finalizeBooking = () => {
       const result = createBooking({
@@ -164,9 +172,9 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
         activityName: horseActivity?.name || 'Royal Horse Riding',
         date: bookingDate,
         timeSlot: selectedSlot,
-        ticketType: selectedPkg ? 'package' : 'standard',
+        ticketType: 'package',
         details,
-        quantity: totalRiders,
+        quantity: packageQuantity,
         totalAmount: paymentMethod === 'complimentary' ? 0 : bookingTotal,
         paymentMethod
       });
@@ -389,37 +397,35 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
           </section>
         </div>
 
-        {/* RIGHT COLUMN: TRAILS & BOOKING */}
+        {/* RIGHT COLUMN: PACKAGES & BOOKING */}
         <div className="flex-1 min-w-0 flex flex-col justify-between gap-5 h-full overflow-y-auto pr-2 custom-scrollbar">
             
-          {/* 5. TRAIL SELECTION */}
+          {/* 5. PACKAGE SELECTION */}
           <div className="glass-panel p-4 rounded-xl border border-white/10 shadow-lg flex-shrink-0">
             <h3 className="font-black text-sm text-white mb-3 flex items-center gap-2 tracking-tight">
-              <Compass className="w-4 h-4 text-[#FFB703]" /> Select Trail Route
+              <Compass className="w-4 h-4 text-[#FFB703]" /> Select Riding Package
             </h3>
             <div className="space-y-2">
-              {routes.map(route => (
+              {packages.map(pkg => (
                 <button
-                  key={route.id}
-                  onClick={() => setSelectedRoute(route)}
+                  key={pkg.id}
+                  onClick={() => setSelectedPackage(pkg)}
                   className={`w-full text-left p-3 rounded-xl transition-all duration-300 border relative overflow-hidden group cursor-pointer ${
-                    selectedRoute.id === route.id 
+                    selectedPackage.id === pkg.id 
                       ? 'bg-[#FFB703]/10 border-[#FFB703]/50 shadow-[0_0_15px_rgba(255,183,3,0.15)]' 
                       : 'bg-[#050816] border-white/5 hover:border-white/20'
                   }`}
                 >
-                  {selectedRoute.id === route.id && (
+                  {selectedPackage.id === pkg.id && (
                     <div className="absolute top-0 right-0 w-16 h-16 bg-[#FFB703]/20 rounded-full blur-[20px] pointer-events-none"></div>
                   )}
                   <div className="flex justify-between items-start mb-1 relative z-10">
-                    <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedRoute.id === route.id ? 'text-[#FFB703]' : 'text-white'}`}>{route.name}</h4>
-                    <span className="font-black font-mono text-[10px] text-white/50 border border-white/10 px-1.5 py-0.5 rounded">{route.difficulty}</span>
+                    <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
+                    <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
                   </div>
-                  <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1 mb-1.5">{route.description}</p>
-                  <div className="flex items-center gap-2 text-[8px] font-mono text-[#00B4FF] relative z-10 uppercase font-bold">
-                    <span>⏱ {route.duration}</span>
-                    <span>•</span>
-                    <span className="truncate">📍 {route.scenicPoints.join(', ')}</span>
+                  <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1 mb-1.5">{pkg.description}</p>
+                  <div className="text-[9px] font-mono text-[#14F1D9] relative z-10 uppercase font-bold">
+                    <span>🐎 Includes Guided Handler & Riding Gear</span>
                   </div>
                 </button>
               ))}
@@ -435,52 +441,13 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
             <form className="flex-1 flex flex-col justify-between" onSubmit={(e) => e.preventDefault()}>
               
               <div className="space-y-3">
-                {/* HORSE RIDING PACKAGE SELECTION */}
-                {packages.length > 0 && (
-                  <div className="space-y-2 mb-2">
-                    <label className="text-[10px] uppercase font-mono font-bold text-[#14F1D9] block">
-                      🎟️ Select Riding Package
-                    </label>
-                    <div className="grid grid-cols-1 gap-2">
-                      {packages.map(pkg => (
-                        <button
-                          key={pkg.id}
-                          type="button"
-                          onClick={() => setSelectedPkgId(pkg.id)}
-                          className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
-                            selectedPkgId === pkg.id
-                              ? 'bg-[#14F1D9]/10 border-[#14F1D9] text-white shadow-[0_0_10px_rgba(20,241,217,0.2)]'
-                              : 'bg-[#050816] border-white/5 text-white/70 hover:border-white/20'
-                          }`}
-                        >
-                          <div>
-                            <div className="font-bold text-xs text-white">{pkg.name}</div>
-                            <div className="text-[9px] text-[#9CA3AF] line-clamp-1">{pkg.description}</div>
-                          </div>
-                          <div className="text-right flex-shrink-0 ml-2">
-                            <div className="font-black text-xs text-[#14F1D9] font-mono">₹{pkg.price}</div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center justify-between p-2 bg-[#050816] rounded-xl border border-white/5">
-                    <span className="font-bold text-[#9CA3AF] text-[10px] uppercase tracking-wider font-mono">Adult</span>
+                  <div className="flex-1 flex items-center justify-between p-2.5 bg-[#050816] rounded-xl border border-white/5">
+                    <span className="font-bold text-[#9CA3AF] text-[10px] uppercase tracking-wider font-mono">Passes / Riders</span>
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => setAdultCount(Math.max(0, adultCount - 1))} className="w-5 h-5 rounded bg-white/5 flex items-center justify-center text-white hover:bg-white/20 transition-colors cursor-pointer border border-white/5"><Minus className="w-3 h-3" /></button>
-                      <span className="font-black font-mono text-xs text-white w-3 text-center">{adultCount}</span>
-                      <button type="button" onClick={() => setAdultCount(adultCount + 1)} className="w-5 h-5 rounded bg-white/5 flex items-center justify-center text-white hover:bg-[#14F1D9] hover:text-[#0B1120] transition-colors cursor-pointer border border-white/5"><Plus className="w-3 h-3" /></button>
-                    </div>
-                  </div>
-                  <div className="flex-1 flex items-center justify-between p-2 bg-[#050816] rounded-xl border border-white/5">
-                    <span className="font-bold text-[#9CA3AF] text-[10px] uppercase tracking-wider font-mono">Child</span>
-                    <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => setChildCount(Math.max(0, childCount - 1))} className="w-5 h-5 rounded bg-white/5 flex items-center justify-center text-white hover:bg-white/20 transition-colors cursor-pointer border border-white/5"><Minus className="w-3 h-3" /></button>
-                      <span className="font-black font-mono text-xs text-white w-3 text-center">{childCount}</span>
-                      <button type="button" onClick={() => setChildCount(childCount + 1)} className="w-5 h-5 rounded bg-white/5 flex items-center justify-center text-white hover:bg-[#14F1D9] hover:text-[#0B1120] transition-colors cursor-pointer border border-white/5"><Plus className="w-3 h-3" /></button>
+                      <button type="button" onClick={() => setPackageQuantity(Math.max(1, packageQuantity - 1))} className="w-6 h-6 rounded bg-white/5 flex items-center justify-center text-white hover:bg-white/20 transition-colors cursor-pointer border border-white/5"><Minus className="w-3 h-3" /></button>
+                      <span className="font-black font-mono text-sm text-white w-4 text-center">{packageQuantity}</span>
+                      <button type="button" onClick={() => setPackageQuantity(packageQuantity + 1)} className="w-6 h-6 rounded bg-white/5 flex items-center justify-center text-white hover:bg-[#14F1D9] hover:text-[#0B1120] transition-colors cursor-pointer border border-white/5"><Plus className="w-3 h-3" /></button>
                     </div>
                   </div>
                 </div>
