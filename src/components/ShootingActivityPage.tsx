@@ -247,6 +247,28 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
         {/* LEFT COLUMN: SIMULATOR STATION */}
         <div className="flex-1 min-w-0 flex flex-col justify-between gap-5 h-full overflow-y-auto pr-2 custom-scrollbar">
           
+          {/* 1. ACTIVITY PHOTO GALLERY (If uploaded by Admin) */}
+          {shootingActivity?.photos && shootingActivity.photos.length > 0 && (
+            <section className="flex-shrink-0 mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-1.5 h-4 bg-[#FFB703] rounded-full shadow-[0_0_5px_#FFB703]"></div>
+                <h2 className="text-lg font-black text-white tracking-tight">Range Photo Gallery</h2>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {shootingActivity.photos.map((photo) => (
+                  <div key={photo.id} className="relative rounded-xl overflow-hidden group border border-white/10 h-28 bg-[#050816]">
+                    <img src={photo.url} alt={photo.caption || 'Range Photo'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                    {photo.caption && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2 opacity-90">
+                        <span className="text-[10px] text-white font-medium truncate">{photo.caption}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* SIMULATOR GAME */}
           <section className="flex-1 flex flex-col">
             <div className="flex items-center gap-2 mb-3">

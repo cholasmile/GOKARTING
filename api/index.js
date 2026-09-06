@@ -493,7 +493,8 @@ app.get('/api/razorpay/payments', async (req, res) => {
 });
 
 // ─── ACTIVITIES BACKEND PERSISTENCE ─────────────────────────────────────────
-const activitiesFilePath = path.join('/tmp', 'activities.json');
+const persistentActivitiesFile = path.join(__dirname, 'activities_store.json');
+const tmpActivitiesPath = path.join('/tmp', 'activities.json');
 let inMemoryActivities = null;
 
 app.get('/api/activities', (req, res) => {
@@ -501,8 +502,13 @@ app.get('/api/activities', (req, res) => {
     if (inMemoryActivities && inMemoryActivities.length > 0) {
       return res.json(inMemoryActivities);
     }
-    if (fs.existsSync(activitiesFilePath)) {
-      const data = JSON.parse(fs.readFileSync(activitiesFilePath, 'utf8'));
+    if (fs.existsSync(persistentActivitiesFile)) {
+      const data = JSON.parse(fs.readFileSync(persistentActivitiesFile, 'utf8'));
+      inMemoryActivities = data;
+      return res.json(data);
+    }
+    if (fs.existsSync(tmpActivitiesPath)) {
+      const data = JSON.parse(fs.readFileSync(tmpActivitiesPath, 'utf8'));
       inMemoryActivities = data;
       return res.json(data);
     }
@@ -515,10 +521,15 @@ app.get('/api/activities', (req, res) => {
 app.post('/api/activities', (req, res) => {
   try {
     const activities = req.body;
-    if (Array.isArray(activities)) {
+    if (Array.isArray(activities) && activities.length > 0) {
       inMemoryActivities = activities;
       try {
-        fs.writeFileSync(activitiesFilePath, JSON.stringify(activities, null, 2), 'utf8');
+        fs.writeFileSync(persistentActivitiesFile, JSON.stringify(activities, null, 2), 'utf8');
+      } catch (err) {
+        console.warn('[backend] Could not write persistent activities store:', err);
+      }
+      try {
+        fs.writeFileSync(tmpActivitiesPath, JSON.stringify(activities, null, 2), 'utf8');
       } catch (err) {
         console.warn('[backend] Could not write activities to /tmp:', err);
       }

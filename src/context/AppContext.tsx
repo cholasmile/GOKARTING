@@ -426,16 +426,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (Array.isArray(serverActivities) && serverActivities.length > 0) {
           setActivities(prev => {
             const map = new Map<string, Activity>();
+            // Load server activities first
             serverActivities.forEach((sa: Activity) => map.set(sa.id, sa));
+            // Merge with local state to preserve un-synced edits
             prev.forEach(existing => {
               const serverAct = map.get(existing.id);
               if (serverAct) {
-                map.set(existing.id, { 
-                  ...serverAct, 
-                  ...existing, // Local custom edits always take precedence!
-                  packages: (existing.packages && existing.packages.length > 0) ? existing.packages : (serverAct.packages || []),
-                  photos: (existing.photos && existing.photos.length > 0) ? existing.photos : (serverAct.photos || []),
-                  offers: (existing.offers && existing.offers.length > 0) ? existing.offers : (serverAct.offers || [])
+                map.set(existing.id, {
+                  ...existing,
+                  ...serverAct, // Server data takes precedence for cross-device sync!
+                  photos: (serverAct.photos && serverAct.photos.length > 0) ? serverAct.photos : (existing.photos || []),
+                  packages: (serverAct.packages && serverAct.packages.length > 0) ? serverAct.packages : (existing.packages || []),
+                  offers: (serverAct.offers && serverAct.offers.length > 0) ? serverAct.offers : (existing.offers || [])
                 });
               } else {
                 map.set(existing.id, existing);

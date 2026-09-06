@@ -266,6 +266,28 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
         {/* LEFT COLUMN: KARTS, TUNING, SIMULATOR */}
         <div className="flex-1 min-w-0 flex flex-col justify-between gap-5 h-full overflow-y-auto pr-2 custom-scrollbar">
           
+          {/* 1. ACTIVITY PHOTO GALLERY (If uploaded by Admin) */}
+          {kartingActivity?.photos && kartingActivity.photos.length > 0 && (
+            <section className="flex-shrink-0 mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-1.5 h-4 bg-[#14F1D9] rounded-full shadow-[0_0_5px_#14F1D9]"></div>
+                <h2 className="text-lg font-black text-white tracking-tight">Official Track Gallery</h2>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {kartingActivity.photos.map((photo) => (
+                  <div key={photo.id} className="relative rounded-xl overflow-hidden group border border-white/10 h-28 bg-[#050816]">
+                    <img src={photo.url} alt={photo.caption || 'Track Photo'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                    {photo.caption && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2 opacity-90">
+                        <span className="text-[10px] text-white font-medium truncate">{photo.caption}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* 2. KART SELECTION */}
           <section className="flex-shrink-0">
             <div className="flex items-center gap-2 mb-3">
