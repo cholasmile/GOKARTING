@@ -646,7 +646,7 @@ export const GoKartRaceControlHub: React.FC = () => {
   // Global default capacity & pricing (Alterable by Super Admin)
   const [defaultSlotCapacity, setDefaultSlotCapacity] = useState<number>(() => {
     try {
-      const saved = sessionStorage.getItem('gk_default_capacity');
+      const saved = localStorage.getItem('gk_default_capacity');
       if (saved) return parseInt(saved);
     } catch { /* ignore */ }
     return 50;
@@ -654,7 +654,7 @@ export const GoKartRaceControlHub: React.FC = () => {
 
   const [defaultPricePerKart, setDefaultPricePerKart] = useState<number>(() => {
     try {
-      const saved = sessionStorage.getItem('gk_default_price');
+      const saved = localStorage.getItem('gk_default_price');
       if (saved) return parseInt(saved);
     } catch { /* ignore */ }
     return 100;
@@ -678,22 +678,22 @@ export const GoKartRaceControlHub: React.FC = () => {
 
   const [scheduleSlots, setScheduleSlots] = useState(() => {
     try {
-      const saved = sessionStorage.getItem('gk_schedule_slots');
+      const saved = localStorage.getItem('gk_schedule_slots');
       if (saved) return JSON.parse(saved);
     } catch { /* ignore */ }
     return DEFAULT_INITIAL_SLOTS;
   });
 
   useEffect(() => {
-    sessionStorage.setItem('gk_schedule_slots', JSON.stringify(scheduleSlots));
+    localStorage.setItem('gk_schedule_slots', JSON.stringify(scheduleSlots));
   }, [scheduleSlots]);
 
   useEffect(() => {
-    sessionStorage.setItem('gk_default_capacity', defaultSlotCapacity.toString());
+    localStorage.setItem('gk_default_capacity', defaultSlotCapacity.toString());
   }, [defaultSlotCapacity]);
 
   useEffect(() => {
-    sessionStorage.setItem('gk_default_price', defaultPricePerKart.toString());
+    localStorage.setItem('gk_default_price', defaultPricePerKart.toString());
   }, [defaultPricePerKart]);
 
   // Alteration Modals State

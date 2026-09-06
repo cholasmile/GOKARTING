@@ -42,7 +42,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
   ];
 
   const defaultPackages: KartPackage[] = [
-    { id: 'pkg-kart-single', name: 'Single Rider Experience (10 Mins)', price: 100, description: 'Classic single-seat session. Includes complete electronic lap-time reporting. (100 per kart per slot)' },
+    { id: 'pkg-kart-single', name: 'Single Rider Experience (10 Mins)', price: 100, description: 'Classic single-seat session. Includes complete electronic lap-time reporting.' },
     { id: 'pkg-kart-double', name: 'Double Co-Pilot Ride (10 Mins)', price: 150, description: 'Twin-seater kart. Great for parent and child side-by-side racing.' },
     { id: 'pkg-kart-race', name: 'Grand Prix Tournament (30 Mins)', price: 250, description: 'Warm-up lap, 5-minute qualification round, and 12-lap medal grand finale.' }
   ];
