@@ -4,6 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import { Activity, Payment } from '../types';
 import { UnifiedTicketingFlow } from './UnifiedTicketingFlow';
 import { printTicket } from '../lib/printTicket';
+import { BulkAddMenuModal } from './BulkAddMenuModal';
 
 const TicketingDashboard: React.FC = () => {
   const { 
@@ -13,6 +14,7 @@ const TicketingDashboard: React.FC = () => {
   } = useAppContext();
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isBulkMenuModalOpen, setIsBulkMenuModalOpen] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'food_street' | 'history'>('new_booking');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -54,10 +56,11 @@ const TicketingDashboard: React.FC = () => {
     printTicket({
       receiptId: p.ticketId || `TKT-${p.bookingId}`,
       activityName: p.activityName || 'Adventure Activity',
+      packageName: p.details || p.activityName || 'Standard Package',
       customerName: p.customerName || 'Walk-in Guest',
       date: p.timestamp ? p.timestamp.split('T')[0] : new Date().toISOString().split('T')[0],
       slot: 'Standard Session',
-      items: [{ label: p.activityName || 'Activity Package', value: `₹${p.amount}` }],
+      items: [{ label: p.details || p.activityName || 'Activity Package', value: `₹${p.amount}` }],
       totalAmount: p.amount,
       paymentStatus: 'paid',
       quantity: 1,
@@ -285,8 +288,8 @@ const TicketingDashboard: React.FC = () => {
                   <Utensils className="w-5 h-5 text-[#00ABAB]" /> Food Street Stalls Catalog
                 </h2>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:w-48">
+                <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                  <div className="relative flex-1 sm:w-48 min-w-[140px]">
                     <Search className="w-4 h-4 text-[#94A3B8] absolute left-3 top-2.5" />
                     <input
                       type="text"
@@ -307,6 +310,13 @@ const TicketingDashboard: React.FC = () => {
                       <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
                   </select>
+
+                  <button
+                    onClick={() => setIsBulkMenuModalOpen(true)}
+                    className="bg-[#00ABAB]/20 hover:bg-[#00ABAB]/30 border border-[#00ABAB]/50 text-[#40E0D0] text-xs font-extrabold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    <Plus className="w-4 h-4" /> ⚡ Bulk Add N Items
+                  </button>
                 </div>
               </div>
 
@@ -752,6 +762,11 @@ const TicketingDashboard: React.FC = () => {
           </div>
         </div>
       )}
+      {/* BULK ADD MENU MODAL */}
+      <BulkAddMenuModal
+        isOpen={isBulkMenuModalOpen}
+        onClose={() => setIsBulkMenuModalOpen(false)}
+      />
     </div>
   );
 };

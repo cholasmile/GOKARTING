@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { MenuItem, InventoryItem, FoodOrder } from '../types';
 import { printTicket } from '../lib/printTicket';
+import { BulkAddMenuModal } from './BulkAddMenuModal';
 import { 
   Plus, Edit, Trash2, Check, X, ShieldAlert, 
   Utensils, Clipboard, Package, ShoppingBag, 
@@ -19,6 +20,9 @@ export const FoodVendorDashboard: React.FC = () => {
     addMenuItem, updateMenuItem, deleteMenuItem, updateInventoryStock, updateOrderStatus,
     foodCart, addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder
   } = useAppContext();
+
+  // Bulk add modal state
+  const [isBulkMenuModalOpen, setIsBulkMenuModalOpen] = useState(false);
 
   // Find currently selected vendor details
   const currentVendor = vendors.find(v => v.id === selectedVendorId) || vendors[0];
@@ -337,8 +341,8 @@ export const FoodVendorDashboard: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans text-white">
           {/* Left 2 cols: All Menu Items Grid for Staff */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="p-4 glass-panel border border-[#00ABAB]/30 rounded-2xl flex flex-col md:flex-row gap-3">
-              <div className="flex-1 relative">
+            <div className="p-4 glass-panel border border-[#00ABAB]/30 rounded-2xl flex flex-col md:flex-row items-center gap-3">
+              <div className="flex-1 relative w-full">
                 <input 
                   type="text"
                   placeholder="Search espresso, pizzas, burgers..."
@@ -351,13 +355,20 @@ export const FoodVendorDashboard: React.FC = () => {
               <select
                 value={posCategoryFilter}
                 onChange={e => setPosCategoryFilter(e.target.value)}
-                className="px-3 py-2.5 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl text-xs font-bold text-white focus:outline-none focus:border-[#00ABAB] cursor-pointer font-mono"
+                className="w-full md:w-auto px-3 py-2.5 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl text-xs font-bold text-white focus:outline-none focus:border-[#00ABAB] cursor-pointer font-mono"
               >
                 <option value="all">All Item Categories</option>
                 {Array.from(new Set(stallMenuItems.map(m => m.category))).map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
+              <button
+                id="btn-quick-bulk-add-pos"
+                onClick={() => setIsBulkMenuModalOpen(true)}
+                className="w-full md:w-auto px-3.5 py-2.5 bg-[#00ABAB]/20 hover:bg-[#00ABAB]/30 border border-[#00ABAB]/50 text-[#40E0D0] font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="h-4 w-4" /> ⚡ Bulk Add N Items
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -633,24 +644,33 @@ export const FoodVendorDashboard: React.FC = () => {
               <h3 className="font-bold text-base text-[#FFFFFF] font-sans">Menu Management</h3>
               <p className="text-xs text-[#9CA3AF] font-sans">Add, edit, or toggle availability of menu items for customers</p>
             </div>
-            <button
-              id="btn-add-menu-item"
-              onClick={() => {
-                setEditingMenuItem(null);
-                setMenuForm({
-                  name: '',
-                  description: '',
-                  price: 6.5,
-                  category: 'Beverages',
-                  image: '',
-                  isAvailable: true
-                });
-                setIsMenuModalOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold btn-glow text-[#0B0F14] rounded-xl hover:bg-[#00A99D]  transition-all cursor-pointer"
-            >
-              <Plus className="h-4 w-4" /> Add Food Item
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                id="btn-bulk-add-menu-vendor"
+                onClick={() => setIsBulkMenuModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold btn-glow text-[#0B0F14] rounded-xl hover:bg-[#00A99D] transition-all cursor-pointer shadow-lg"
+              >
+                <Plus className="h-4 w-4" /> ⚡ Bulk Add N Items
+              </button>
+              <button
+                id="btn-add-menu-item"
+                onClick={() => {
+                  setEditingMenuItem(null);
+                  setMenuForm({
+                    name: '',
+                    description: '',
+                    price: 6.5,
+                    category: 'Beverages',
+                    image: '',
+                    isAvailable: true
+                  });
+                  setIsMenuModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold border border-[#00ABAB]/40 text-[#FFFFFF] rounded-xl hover:bg-[#0A0A0A] transition-all cursor-pointer"
+              >
+                <Plus className="h-4 w-4" /> Single Item
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1015,6 +1035,12 @@ export const FoodVendorDashboard: React.FC = () => {
           </div>
         </div>
       )}
+      {/* BULK ADD MENU MODAL */}
+      <BulkAddMenuModal
+        isOpen={isBulkMenuModalOpen}
+        onClose={() => setIsBulkMenuModalOpen(false)}
+        defaultVendorId={currentVendor?.id}
+      />
 
     </div>
   );

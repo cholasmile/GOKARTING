@@ -17,19 +17,22 @@ interface InvoiceModalProps {
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, payment, onClose }) => {
   const getSubtotalAndTax = () => {
-    let subtotal = 0;
+    let rawTotal = 0;
     if (booking) {
-      subtotal = booking.totalAmount;
+      rawTotal = booking.totalAmount;
     } else if (order) {
-      subtotal = order.totalAmount;
+      rawTotal = order.totalAmount;
     }
-    const sgst = subtotal * 0.09;
-    const cgst = subtotal * 0.09;
-    const total = subtotal + sgst + cgst;
-    return { subtotal, sgst, cgst, total };
+    const baseAmount = Math.round((rawTotal / 1.18) * 100) / 100;
+    const totalGst = Math.round((rawTotal - baseAmount) * 100) / 100;
+    const sgst = Math.round((totalGst / 2) * 100) / 100;
+    const cgst = Math.round((totalGst / 2) * 100) / 100;
+    const subtotal = rawTotal;
+    const total = rawTotal;
+    return { baseAmount, sgst, cgst, totalGst, total, subtotal };
   };
 
-  const { subtotal, sgst, cgst, total } = getSubtotalAndTax();
+  const { baseAmount, sgst, cgst, totalGst, total, subtotal } = getSubtotalAndTax();
 
   const handlePrint = () => {
     const receiptId = booking ? booking.id : order?.id || 'INV';
@@ -39,7 +42,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
     const slot = booking ? booking.timeSlot : 'N/A';
     const quantity = booking ? booking.quantity : order?.items.reduce((sum, item) => sum + item.quantity, 0) || 1;
     const itemList = booking
-      ? [{ label: booking.activityName, value: `₹${booking.totalAmount.toFixed(2)}` }]
+      ? [{ label: booking.details || booking.activityName, value: `₹${booking.totalAmount.toFixed(2)}` }]
       : order?.items.map(item => ({
           label: item.name,
           value: `₹${(item.price * item.quantity).toFixed(2)}`
@@ -48,6 +51,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
     printTicket({
       receiptId: `TKT-${receiptId}`,
       activityName,
+      packageName: booking ? (booking.details || 'Standard Package') : undefined,
       customerName,
       customerPhone: booking?.customerPhone,
       date: printDate,
@@ -102,9 +106,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
             <div className="flex items-center gap-3">
               <img src="/deuce-logo.jpg" alt="Deuce Logo" className="w-10 h-10 rounded-lg object-cover border border-[#14F1D9]/30" />
               <div>
-                <h4 className="font-extrabold text-base text-white font-sans tracking-tight">DEUCE PARK</h4>
-                <p className="text-[10px] text-[#9CA3AF] font-mono mt-0.5">Yelagiri • Live The Rush</p>
-                <p className="text-[10px] text-[#9CA3AF] font-mono">GSTIN: 33INYPK7449Q1ZL</p>
+                <h4 className="font-extrabold text-base text-white font-sans tracking-tight">DEUCE</h4>
+                <p className="text-[10px] text-[#9CA3AF] font-mono mt-0.5">Yelagiri • GSTIN: 33INYPK7449Q1ZL</p>
               </div>
             </div>
             <div className="text-right">
@@ -199,18 +202,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
           </div>
 
           {/* Pricing Summary */}
-          <div className="border-t border-[#00ABAB]/30 pt-4 space-y-1.5 text-xs text-right font-mono text-[#9CA3AF]">
-            <div className="flex justify-between">
-              <span className="text-[#9CA3AF]">Package Amount:</span>
-              <span className="text-[#FFFFFF]">₹{subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#9CA3AF]">State GST (9%):</span>
-              <span className="text-[#FFFFFF]">₹{sgst.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#9CA3AF]">Central GST (9%):</span>
-              <span className="text-[#FFFFFF]">₹{cgst.toFixed(2)}</span>
+          <div className="border-t border-[#00ABAB]/30 pt-4 space-y-2 text-xs font-mono text-[#9CA3AF]">
+            <div className="flex justify-between items-center bg-[#111] p-2.5 rounded-lg border border-[#00ABAB]/20 text-[11px] font-bold text-white">
+              <span>Base: ₹{baseAmount.toFixed(2)}</span>
+              <span>SGST (9%): ₹{sgst.toFixed(2)}</span>
+              <span>CGST (9%): ₹{cgst.toFixed(2)}</span>
             </div>
             <div className="flex justify-between border-t border-[#00ABAB]/30 pt-2 font-bold text-sm">
               <span className="text-[#FFFFFF] font-sans">Total Payable:</span>

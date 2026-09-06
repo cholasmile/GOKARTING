@@ -19,6 +19,8 @@ import { CustomerTvDisplayView } from './components/karting/timingSystem/Custome
 import { RaceTimingMaster } from './components/karting/timingSystem/RaceTimingMaster';
 import { Mail, Lock, KeyRound, LogIn, User as UserIcon } from 'lucide-react';
 
+import { INITIAL_USERS } from './data/initialData';
+
 function LoginPage() {
   const { setCurrentUser, users } = useAppContext();
   const navigate = useNavigate();
@@ -33,28 +35,42 @@ function LoginPage() {
     setLoading(true);
 
     setTimeout(() => {
-      const normalizedEmail = email.trim().toLowerCase();
+      const rawInput = email.trim().toLowerCase();
       
-      // Match credentials against users in Context
-      const matchedUser = users.find(
-        u => u.email.toLowerCase() === normalizedEmail
-      );
+      // Combine users from Context with INITIAL_USERS fallback to ensure staff accounts always exist
+      const allAvailableUsers = [...users];
+      INITIAL_USERS.forEach(init => {
+        if (!allAvailableUsers.some(u => u.email.toLowerCase() === init.email.toLowerCase())) {
+          allAvailableUsers.push(init);
+        }
+      });
 
-      // We still simulate a simple password check (matching password with role for now, or just 'admin', 'staff', 'vendor')
-      // If the user's role is admin, password is 'admin' etc., or just check if user is found. 
-      // For a proper system we'd use Supabase auth, but per plan we use hardcoded credentials check matching the user object.
+      // Match credentials against users (supports full email or short username prefix e.g. kartingstaff)
+      const matchedUser = allAvailableUsers.find(u => {
+        const uEmail = u.email.toLowerCase();
+        const uPrefix = uEmail.split('@')[0];
+        return uEmail === rawInput || uPrefix === rawInput;
+      });
+
+      if (!matchedUser) {
+        setError('Staff account not found. Please check your username or email address.');
+        setLoading(false);
+        return;
+      }
+
       const isValidPassword = 
-        (matchedUser?.role === 'super_admin' && password === 'admin') ||
-        (matchedUser?.role === 'activity_staff' && password === 'staff') ||
-        (matchedUser?.role === 'food_vendor' && (password === 'vendor' || password === 'cafe' || password === 'staff')) ||
-        (matchedUser?.role === 'cafe_staff' && (password === 'cafe' || password === 'vendor' || password === 'staff')) ||
-        (matchedUser?.role === 'go_karting_manager' && (password === 'manager' || password === 'staff' || password === 'karting')) ||
-        (matchedUser?.role === 'go_karting_staff' && (password === 'staff' || password === 'karting')) ||
-        (matchedUser?.role === 'horse_riding_staff' && (password === 'staff' || password === 'horse')) ||
-        (matchedUser?.role === 'shooting_staff' && (password === 'staff' || password === 'shooting')) ||
-        (matchedUser?.role === 'ticket_counter_staff' && (password === 'staff' || password === 'ticketing'));
+        (matchedUser.password && password === matchedUser.password) ||
+        (matchedUser.role === 'super_admin' && (password === 'admin' || password === 'admin123')) ||
+        (matchedUser.role === 'activity_staff' && password === 'staff') ||
+        (matchedUser.role === 'food_vendor' && (password === 'vendor' || password === 'cafe' || password === 'staff')) ||
+        (matchedUser.role === 'cafe_staff' && (password === 'cafe' || password === 'vendor' || password === 'staff')) ||
+        (matchedUser.role === 'go_karting_manager' && (password === 'manager' || password === 'staff' || password === 'karting')) ||
+        (matchedUser.role === 'go_karting_staff' && (password === 'staff' || password === 'karting')) ||
+        (matchedUser.role === 'horse_riding_staff' && (password === 'staff' || password === 'horse')) ||
+        (matchedUser.role === 'shooting_staff' && (password === 'staff' || password === 'shooting')) ||
+        (matchedUser.role === 'ticket_counter_staff' && (password === 'staff' || password === 'ticketing'));
 
-      if (matchedUser && isValidPassword) {
+      if (isValidPassword) {
         setCurrentUser(matchedUser);
         
         if (matchedUser.role === 'super_admin') navigate('/admin');
@@ -65,10 +81,10 @@ function LoginPage() {
         else if (matchedUser.role === 'ticket_counter_staff') navigate('/staff/ticketing');
         else navigate('/staff');
       } else {
-        setError('Invalid email or password. Access denied.');
+        setError('Incorrect password. Access denied.');
         setLoading(false);
       }
-    }, 800); // Premium micro-spinner feel
+    }, 300);
   };
 
   return (
@@ -110,22 +126,22 @@ function LoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             
-            {/* Email Field */}
+            {/* Email / Username Field */}
             <div>
               <label className="block text-[10px] uppercase tracking-wider text-[#94A3B8] font-bold mb-1.5 ml-1 font-mono">
-                Email Address
+                Email Address or Username
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#40E0D0]">
                   <Mail className="h-4.5 w-4.5" />
                 </span>
                 <input
-                  type="email"
+                  type="text"
                   required
-                  placeholder="name@deucepark.com"
+                  placeholder="kartingstaff or kartingstaff@deucepark.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full bg-[#0A0A0A]/50 border border-[#00ABAB]/30 rounded-2xl py-3 pl-11 pr-4 text-sm text-white placeholder-[#94A3B8] focus:outline-none focus:border-[#3E8EDE] focus:ring-1 focus:ring-[#40E0D0] transition-all font-medium"
+                  className="w-full bg-[#0A0A0A]/50 border border-[#00ABAB]/30 rounded-2xl py-3 pl-11 pr-4 text-sm text-white placeholder-[#94A3B8] focus:outline-none focus:border-[#3E8EDE] focus:ring-1 focus:ring-[#40E0D0] transition-all font-medium font-mono"
                 />
               </div>
             </div>
@@ -170,55 +186,6 @@ function LoginPage() {
               )}
             </button>
           </form>
-
-          {/* Quick Staff Demo Portals */}
-          <div className="mt-6 pt-4 border-t border-white/10">
-            <p className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold text-center mb-2">Select Activity Staff Demo Login</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => { setEmail('kartingstaff@deucepark.com'); setPassword('staff'); }}
-                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
-              >
-                🏎️ Go-Karting Ops
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail('horseriding@deucepark.com'); setPassword('staff'); }}
-                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
-              >
-                🐎 Horse Riding Ops
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail('shooting@deucepark.com'); setPassword('staff'); }}
-                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
-              >
-                🎯 Precision Shooting
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail('cafe@deucepark.com'); setPassword('cafe'); }}
-                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
-              >
-                ☕ Deuce Cafe Staff
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail('ticketing@deucepark.com'); setPassword('staff'); }}
-                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
-              >
-                🎫 Ticket Counter
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail('admin@deucepark.com'); setPassword('admin'); }}
-                className="p-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-[10px] font-mono text-left font-bold text-white hover:text-[#14F1D9] transition-all cursor-pointer flex items-center gap-1"
-              >
-                🛡️ Super Admin
-              </button>
-            </div>
-          </div>
 
         </div>
 
@@ -293,10 +260,6 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
                 </button>
               </div>
             )}
-
-            <Link to="/login" className="text-xs font-bold text-white px-3.5 py-2 rounded-xl btn-glow flex items-center gap-1">
-              Staff Portal
-            </Link>
           </div>
         </div>
       </header>
@@ -304,8 +267,19 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         {children}
       </main>
       <NotificationToast />
-      <footer className="border-t border-[#00ABAB]/30 bg-[#0A0A0A]/80 py-6 text-center text-[10px] text-[#40E0D0] font-mono tracking-wider">
-        Deuce Racing & Deuce Park • Premium Destination
+      <footer className="border-t border-[#00ABAB]/30 bg-[#0A0A0A]/90 py-6 px-4">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono">
+          <div className="text-[#94A3B8]">
+            Deuce Racing & Deuce Park • Premium Destination
+          </div>
+          <Link 
+            to="/login" 
+            className="px-4 py-2 rounded-xl bg-white/5 hover:bg-[#14F1D9]/10 border border-white/10 text-white hover:text-[#14F1D9] font-bold transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <KeyRound className="w-3.5 h-3.5 text-[#14F1D9]" />
+            <span>Staff Portal Login</span>
+          </Link>
+        </div>
       </footer>
     </div>
   );
@@ -386,5 +360,3 @@ export default function App() {
     </AppProvider>
   );
 }
-
-

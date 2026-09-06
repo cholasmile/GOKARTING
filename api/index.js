@@ -31,12 +31,16 @@ app.use(cors());
 
 // Raw body needed for webhook signature verification
 app.use('/api/razorpay/webhook', express.raw({ type: 'application/json' }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+const LIVE_KEY_ID = 'rzp_live_TYnsYBkCUZzRR3';
+const LIVE_KEY_SECRET = 'o6uE9Rd6ucqEetOhsurGYWmF';
 
 // Initialize razorpay instance dynamically
 let razorpay = new Razorpay({
-  key_id: getSecret('RAZORPAY_KEY_ID', 'rzp_test_placeholder'),
-  key_secret: getSecret('RAZORPAY_KEY_SECRET', 'placeholder_secret'),
+  key_id: getSecret('RAZORPAY_KEY_ID', LIVE_KEY_ID),
+  key_secret: getSecret('RAZORPAY_KEY_SECRET', LIVE_KEY_SECRET),
 });
 
 // Idempotency store — prevents duplicate ticket generation for same Razorpay order
@@ -45,27 +49,38 @@ const processedOrders = new Set();
 // ─── CREATE ORDER ─────────────────────────────────────────────────────────────
 app.post('/api/razorpay/create-order', async (req, res) => {
   try {
-    const { amount, currency = 'INR', receipt, bookingRef } = req.body;
+    const { amount, currency = 'INR', receipt, bookingRef, applyServiceFee = true } = req.body;
     if (!amount || amount <= 0) {
       return res.status(400).json({ message: 'Invalid amount' });
     }
 
-    const key_secret = getSecret('RAZORPAY_KEY_SECRET', 'placeholder_secret');
-    const key_id = getSecret('RAZORPAY_KEY_ID', 'rzp_test_placeholder');
+    const baseAmount = Number(amount);
+    // Razorpay standard service fee (2% gateway fee + 18% GST = 2.36%) collected from customer
+    const serviceFee = applyServiceFee ? Math.round(baseAmount * 0.0236 * 100) / 100 : 0;
+    const finalAmount = Math.round((baseAmount + serviceFee) * 100) / 100;
+    const amountInPaise = Math.round(finalAmount * 100);
 
-    if (!key_secret || key_secret === 'placeholder_secret' || !key_id || key_id === 'rzp_test_placeholder' || key_id.includes('placeholder')) {
+    const key_secret = getSecret('RAZORPAY_KEY_SECRET', LIVE_KEY_SECRET);
+    const key_id = getSecret('RAZORPAY_KEY_ID', LIVE_KEY_ID);
+
+    if (!key_secret || !key_id) {
       const mockOrder = {
         id: `order_mock_${Date.now()}`,
         entity: 'order',
-        amount: Math.round(amount * 100),
+        amount: amountInPaise,
+        baseAmount,
+        serviceFee,
+        totalAmount: finalAmount,
         amount_paid: 0,
-        amount_due: Math.round(amount * 100),
+        amount_due: amountInPaise,
         currency,
         receipt: receipt || `rcpt_${Date.now()}`,
         status: 'created',
         attempts: 0,
         notes: {
           bookingRef: bookingRef || '',
+          baseAmount: String(baseAmount),
+          serviceFee: String(serviceFee),
           source: 'deuce_adventure_park'
         },
         created_at: Math.floor(Date.now() / 1000)
@@ -74,11 +89,13 @@ app.post('/api/razorpay/create-order', async (req, res) => {
     }
 
     const options = {
-      amount: Math.round(amount * 100), // paise
+      amount: amountInPaise, // paise
       currency,
       receipt: receipt || `rcpt_${Date.now()}`,
       notes: {
         bookingRef: bookingRef || '',
+        baseAmount: String(baseAmount),
+        serviceFee: String(serviceFee),
         source: 'deuce_adventure_park'
       }
     };
@@ -86,7 +103,12 @@ app.post('/api/razorpay/create-order', async (req, res) => {
     const order = await razorpay.orders.create(options);
     if (!order) return res.status(500).json({ message: 'Could not create order' });
 
-    res.json(order);
+    res.json({
+      ...order,
+      baseAmount,
+      serviceFee,
+      totalAmount: finalAmount
+    });
   } catch (error) {
     console.error('[create-order]', error);
     res.status(500).json({ message: 'Order creation failed', error: String(error) });

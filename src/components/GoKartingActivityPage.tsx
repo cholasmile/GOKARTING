@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Calendar as CalendarIcon, Clock, Shield, Flag, Award, Gauge,
   ArrowRight, Check, X, CreditCard, AlertTriangle, Play, Minus, Plus,
-  Info, ChevronRight, Zap, Target
+  Info, ChevronRight, Zap, Target, MapPin, Navigation, Compass, Radio, Wifi
 } from 'lucide-react';
 import { printTicket } from '../lib/printTicket';
 import { ReservationCalendar } from './ReservationCalendar';
@@ -32,7 +32,7 @@ interface ActivityPageProps {
 }
 
 export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClose }) => {
-  const { createBooking, timeSlots, activities } = useAppContext();
+  const { createBooking, timeSlots, activities, razorpayKeyId } = useAppContext();
   const kartingActivity = activities.find(a => a.id === 'act-go-karting');
 
   const karts: KartType[] = [
@@ -55,8 +55,13 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
   const [selectedPackage, setSelectedPackage] = useState<KartPackage>(packages[0] || defaultPackages[0]);
 
   React.useEffect(() => {
-    if (packages.length > 0 && (!selectedPackage || !packages.some(p => p.id === selectedPackage.id))) {
-      setSelectedPackage(packages[0]);
+    if (packages.length > 0) {
+      const match = packages.find(p => p.id === selectedPackage?.id);
+      if (match) {
+        setSelectedPackage(match);
+      } else {
+        setSelectedPackage(packages[0]);
+      }
     }
   }, [packages]);
   const [bookingQuantity, setBookingQuantity] = useState<number>(1);
@@ -84,6 +89,8 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
 
   const [isSimulating, setIsSimulating] = useState(false);
   const [simLapTime, setSimLapTime] = useState<string | null>(null);
+  const [gpsTab, setGpsTab] = useState<'track' | 'telemetry'>('track');
+  const [selectedTrackKart, setSelectedTrackKart] = useState<number>(1);
 
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'net_banking' | 'cash' | 'complimentary'>('upi');
@@ -207,7 +214,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
 
       // 2. Open Razorpay Modal
       const options = {
-        key: 'rzp_test_TI7eXiGfnUXpao',
+        key: razorpayKeyId || 'rzp_live_TYnsYBkCUZzRR3',
         amount: order.amount,
         currency: order.currency,
         name: 'Deuce Adventure Park',
@@ -358,11 +365,32 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
             </div>
           </section>
 
-          {/* 4 & 7. PERFORMANCE ANALYTICS & SIMULATION */}
+          {/* 4 & 7. PERFORMANCE ANALYTICS & GPS LIVE TRACKING */}
           <section className="flex-shrink-0">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-1.5 h-4 bg-[#FFB703] rounded-full shadow-[0_0_5px_#FFB703]"></div>
-              <h2 className="text-lg font-black text-white tracking-tight">Simulator</h2>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-4 bg-[#14F1D9] rounded-full shadow-[0_0_8px_#14F1D9]"></div>
+                <h2 className="text-lg font-black text-white tracking-tight">GPS Live Tracking & Simulator</h2>
+              </div>
+              
+              <div className="flex gap-1 bg-[#050816] p-1 rounded-lg border border-white/10 text-[10px] font-mono font-bold">
+                <button
+                  onClick={() => setGpsTab('track')}
+                  className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                    gpsTab === 'track' ? 'bg-[#14F1D9] text-[#0B1120] font-black' : 'text-[#9CA3AF] hover:text-white'
+                  }`}
+                >
+                  <Navigation className="w-3 h-3" /> GPS Track
+                </button>
+                <button
+                  onClick={() => setGpsTab('telemetry')}
+                  className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                    gpsTab === 'telemetry' ? 'bg-[#14F1D9] text-[#0B1120] font-black' : 'text-[#9CA3AF] hover:text-white'
+                  }`}
+                >
+                  <Gauge className="w-3 h-3" /> Telemetry
+                </button>
+              </div>
             </div>
             
             <div className="glass-panel p-[1px] rounded-xl border border-white/10 overflow-hidden relative group shadow-lg">
@@ -370,106 +398,193 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
               
               <div className="relative bg-[#0B1120]/90 backdrop-blur-xl rounded-[11px] p-4">
                 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                {/* GPS LIVE TRACK VISUALIZER TAB */}
+                {gpsTab === 'track' ? (
                   <div>
-                    <h3 className="font-mono text-[9px] text-[#9CA3AF] uppercase tracking-widest mb-0.5">Live Telemetry</h3>
-                    <div className="flex items-center gap-2">
-                      <div className="relative flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-red-500 z-10"></div>
-                        <div className="w-2 h-2 rounded-full bg-red-500 absolute animate-ping opacity-75"></div>
+                    {/* Live GPS Lock Banner */}
+                    <div className="flex items-center justify-between gap-2 p-2.5 bg-[#050816] rounded-lg border border-[#14F1D9]/30 mb-3 text-xs font-mono">
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex items-center justify-center">
+                          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 z-10"></div>
+                          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 absolute animate-ping opacity-75"></div>
+                        </div>
+                        <div>
+                          <span className="font-black text-emerald-400 text-[10px] uppercase block leading-none">GPS Live Tracking Active</span>
+                          <span className="text-[9px] text-[#9CA3AF] font-bold">12.5841° N, 78.6322° E • 12 Satellites</span>
+                        </div>
                       </div>
-                      <span className="font-black text-white text-xs tracking-tight uppercase">System Online</span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-black border border-emerald-500/40 uppercase">
+                        RTK-GPS (±0.1m)
+                      </span>
                     </div>
-                  </div>
-                  
-                  <button
-                    onClick={() => setBoostEnabled(!boostEnabled)}
-                    className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg font-black font-mono text-[10px] uppercase tracking-wider border transition-all duration-300 cursor-pointer ${
-                      boostEnabled 
-                        ? 'bg-red-500/20 text-red-400 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
-                        : 'bg-[#050816] text-[#9CA3AF] border-white/10 hover:border-white/30 hover:text-white'
-                    }`}
-                  >
-                    <Zap className={`w-3 h-3 ${boostEnabled ? 'fill-red-400 text-red-400' : ''}`} />
-                    Kers {boostEnabled ? 'ON' : 'OFF'}
-                  </button>
-                </div>
 
-                <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-5">
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[10px] font-black font-mono tracking-wider">
-                      <span className="text-[#9CA3AF] uppercase">Speed</span>
-                      <span className="text-[#14F1D9]">{currentSpecs.topSpeed}</span>
-                    </div>
-                    <div className="h-1 w-full bg-[#050816] rounded-full overflow-hidden border border-white/5">
-                      <motion.div className="h-full bg-gradient-to-r from-[#14F1D9]/50 to-[#14F1D9] shadow-[0_0_5px_#14F1D9]" initial={{ width: 0 }} animate={{ width: `${Math.min(100, (currentSpecs.topSpeed / 90) * 100)}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
-                    </div>
-                  </div>
+                    {/* Interactive Animated Track Blueprint Map */}
+                    <div className="relative w-full h-40 bg-[#050816] rounded-lg border border-white/10 overflow-hidden flex items-center justify-center mb-3">
+                      {/* Grid Background Lines */}
+                      <div className="absolute inset-0 bg-[radial-gradient(#14F1D9_1px,transparent_1px)] [background-size:16px_16px] opacity-10"></div>
+                      
+                      {/* Yelagiri Circuit Track Vector SVG */}
+                      <svg className="w-full h-full p-3 text-[#14F1D9]/30" viewBox="0 0 300 140" fill="none">
+                        {/* Track Outer Curve */}
+                        <path 
+                          d="M 30 70 C 30 20, 90 20, 150 40 C 210 60, 270 20, 270 70 C 270 120, 200 120, 140 100 C 80 80, 30 120, 30 70 Z" 
+                          stroke="currentColor" 
+                          strokeWidth="14" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                        />
+                        {/* Track Center Line */}
+                        <path 
+                          d="M 30 70 C 30 20, 90 20, 150 40 C 210 60, 270 20, 270 70 C 270 120, 200 120, 140 100 C 80 80, 30 120, 30 70 Z" 
+                          stroke="#14F1D9" 
+                          strokeWidth="2" 
+                          strokeDasharray="4 4" 
+                        />
 
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[10px] font-black font-mono tracking-wider">
-                      <span className="text-[#9CA3AF] uppercase">Accel</span>
-                      <span className="text-[#00B4FF]">{currentSpecs.accel}s</span>
-                    </div>
-                    <div className="h-1 w-full bg-[#050816] rounded-full overflow-hidden border border-white/5">
-                      <motion.div className="h-full bg-gradient-to-r from-[#00B4FF]/50 to-[#00B4FF] shadow-[0_0_5px_#00B4FF]" initial={{ width: 0 }} animate={{ width: `${Math.min(100, (6 / currentSpecs.accel) * 100)}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
-                    </div>
-                  </div>
+                        {/* Animated Live GPS Karts on Track */}
+                        {/* Kart #01 */}
+                        <g>
+                          <circle cx="150" cy="40" r="6" fill="#14F1D9" className="animate-pulse" />
+                          <circle cx="150" cy="40" r="12" fill="#14F1D9" opacity="0.2" className="animate-ping" />
+                          <text x="150" y="24" fill="#14F1D9" fontSize="8" fontWeight="bold" textAnchor="middle" fontFamily="monospace">KART #01 (GT Pro)</text>
+                        </g>
 
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[10px] font-black font-mono tracking-wider">
-                      <span className="text-[#9CA3AF] uppercase">Grip</span>
-                      <span className="text-[#FFB703]">{currentSpecs.grip}%</span>
-                    </div>
-                    <div className="h-1 w-full bg-[#050816] rounded-full overflow-hidden border border-white/5">
-                      <motion.div className="h-full bg-gradient-to-r from-[#FFB703]/50 to-[#FFB703] shadow-[0_0_5px_#FFB703]" initial={{ width: 0 }} animate={{ width: `${currentSpecs.grip}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
-                    </div>
-                  </div>
+                        {/* Kart #02 */}
+                        <g>
+                          <circle cx="240" cy="95" r="5" fill="#FFB703" />
+                          <text x="240" y="112" fill="#FFB703" fontSize="8" fontWeight="bold" textAnchor="middle" fontFamily="monospace">KART #02</text>
+                        </g>
+                      </svg>
 
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[10px] font-black font-mono tracking-wider">
-                      <span className="text-[#9CA3AF] uppercase">Drift</span>
-                      <span className="text-purple-400">{currentSpecs.driftFactor}%</span>
-                    </div>
-                    <div className="h-1 w-full bg-[#050816] rounded-full overflow-hidden border border-white/5">
-                      <motion.div className="h-full bg-gradient-to-r from-purple-500/50 to-purple-500 shadow-[0_0_5px_#a855f7]" initial={{ width: 0 }} animate={{ width: `${currentSpecs.driftFactor}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-4 p-3 bg-[#050816] rounded-lg border border-white/5 shadow-inner">
-                  <div>
-                    <span className="text-[9px] text-[#9CA3AF] uppercase tracking-widest font-mono font-bold block mb-1">Est. Lap Time</span>
-                    <div className="text-2xl md:text-3xl font-black font-mono tracking-tighter text-white">
-                      {simLapTime ? (
-                        <motion.span initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="text-[#14F1D9] drop-shadow-[0_0_10px_rgba(20,241,217,0.5)]">
-                          {simLapTime}<span className="text-lg text-white/40">s</span>
-                        </motion.span>
-                      ) : (
-                        <span className="text-white/10">--.---<span className="text-lg">s</span></span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <button onClick={handleSimulateLap} disabled={isSimulating} className="relative group overflow-hidden rounded-lg bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] p-[1.5px] disabled:opacity-50 cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.2)]">
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <div className="relative px-4 py-2 bg-[#0B1120] rounded-lg flex items-center justify-center gap-2 group-hover:bg-transparent transition-colors duration-300">
-                      {isSimulating ? (
-                        <span className="font-black text-white font-mono uppercase tracking-widest text-[10px] flex items-center gap-2">
-                          <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                          Simulating...
+                      {/* GPS Telemetry Legend Overlay */}
+                      <div className="absolute bottom-2 left-2 flex gap-2 font-mono text-[9px]">
+                        <span className="bg-[#0B1120]/90 px-2 py-0.5 rounded border border-white/10 text-white font-bold flex items-center gap-1">
+                          <MapPin className="w-2.5 h-2.5 text-[#14F1D9]" /> Yelagiri Track (850m)
                         </span>
-                      ) : (
-                        <>
-                          <Play className="w-3 h-3 text-white fill-white group-hover:text-[#0B1120] group-hover:fill-[#0B1120] transition-colors" />
-                          <span className="font-black text-white group-hover:text-[#0B1120] font-mono uppercase tracking-widest text-[10px] transition-colors">
-                            Run Lap
-                          </span>
-                        </>
-                      )}
+                      </div>
                     </div>
-                  </button>
-                </div>
+
+                    {/* Active Kart GPS Telemetry Strip */}
+                    <div className="grid grid-cols-3 gap-2 text-center font-mono text-[10px]">
+                      <div className="p-2 bg-[#050816] rounded-lg border border-white/5">
+                        <span className="text-[#9CA3AF] text-[8px] uppercase block">Live GPS Speed</span>
+                        <span className="text-[#14F1D9] font-black text-xs">{currentSpecs.topSpeed} KM/H</span>
+                      </div>
+                      <div className="p-2 bg-[#050816] rounded-lg border border-white/5">
+                        <span className="text-[#9CA3AF] text-[8px] uppercase block">Sector 1 Split</span>
+                        <span className="text-[#FFB703] font-black text-xs">14.28s</span>
+                      </div>
+                      <div className="p-2 bg-[#050816] rounded-lg border border-white/5">
+                        <span className="text-[#9CA3AF] text-[8px] uppercase block">GPS Accuracy</span>
+                        <span className="text-emerald-400 font-black text-xs">0.12m</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* TELEMETRY & SIMULATOR TAB */
+                  <div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                      <div>
+                        <h3 className="font-mono text-[9px] text-[#9CA3AF] uppercase tracking-widest mb-0.5">Live Telemetry</h3>
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex items-center justify-center">
+                            <div className="w-2 h-2 rounded-full bg-red-500 z-10"></div>
+                            <div className="w-2 h-2 rounded-full bg-red-500 absolute animate-ping opacity-75"></div>
+                          </div>
+                          <span className="font-black text-white text-xs tracking-tight uppercase">System Online</span>
+                        </div>
+                      </div>
+                      
+                      <button
+                        onClick={() => setBoostEnabled(!boostEnabled)}
+                        className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg font-black font-mono text-[10px] uppercase tracking-wider border transition-all duration-300 cursor-pointer ${
+                          boostEnabled 
+                            ? 'bg-red-500/20 text-red-400 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
+                            : 'bg-[#050816] text-[#9CA3AF] border-white/10 hover:border-white/30 hover:text-white'
+                        }`}
+                      >
+                        <Zap className={`w-3 h-3 ${boostEnabled ? 'fill-red-400 text-red-400' : ''}`} />
+                        Kers {boostEnabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-5">
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[10px] font-black font-mono tracking-wider">
+                          <span className="text-[#9CA3AF] uppercase">Speed</span>
+                          <span className="text-[#14F1D9]">{currentSpecs.topSpeed}</span>
+                        </div>
+                        <div className="h-1 w-full bg-[#050816] rounded-full overflow-hidden border border-white/5">
+                          <motion.div className="h-full bg-gradient-to-r from-[#14F1D9]/50 to-[#14F1D9] shadow-[0_0_5px_#14F1D9]" initial={{ width: 0 }} animate={{ width: `${Math.min(100, (currentSpecs.topSpeed / 90) * 100)}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[10px] font-black font-mono tracking-wider">
+                          <span className="text-[#9CA3AF] uppercase">Accel</span>
+                          <span className="text-[#00B4FF]">{currentSpecs.accel}s</span>
+                        </div>
+                        <div className="h-1 w-full bg-[#050816] rounded-full overflow-hidden border border-white/5">
+                          <motion.div className="h-full bg-gradient-to-r from-[#00B4FF]/50 to-[#00B4FF] shadow-[0_0_5px_#00B4FF]" initial={{ width: 0 }} animate={{ width: `${Math.min(100, (6 / currentSpecs.accel) * 100)}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[10px] font-black font-mono tracking-wider">
+                          <span className="text-[#9CA3AF] uppercase">Grip</span>
+                          <span className="text-[#FFB703]">{currentSpecs.grip}%</span>
+                        </div>
+                        <div className="h-1 w-full bg-[#050816] rounded-full overflow-hidden border border-white/5">
+                          <motion.div className="h-full bg-gradient-to-r from-[#FFB703]/50 to-[#FFB703] shadow-[0_0_5px_#FFB703]" initial={{ width: 0 }} animate={{ width: `${currentSpecs.grip}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[10px] font-black font-mono tracking-wider">
+                          <span className="text-[#9CA3AF] uppercase">Drift</span>
+                          <span className="text-purple-400">{currentSpecs.driftFactor}%</span>
+                        </div>
+                        <div className="h-1 w-full bg-[#050816] rounded-full overflow-hidden border border-white/5">
+                          <motion.div className="h-full bg-gradient-to-r from-purple-500/50 to-purple-500 shadow-[0_0_5px_#a855f7]" initial={{ width: 0 }} animate={{ width: `${currentSpecs.driftFactor}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4 p-3 bg-[#050816] rounded-lg border border-white/5 shadow-inner">
+                      <div>
+                        <span className="text-[9px] text-[#9CA3AF] uppercase tracking-widest font-mono font-bold block mb-1">Est. Lap Time</span>
+                        <div className="text-2xl md:text-3xl font-black font-mono tracking-tighter text-white">
+                          {simLapTime ? (
+                            <motion.span initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="text-[#14F1D9] drop-shadow-[0_0_10px_rgba(20,241,217,0.5)]">
+                              {simLapTime}<span className="text-lg text-white/40">s</span>
+                            </motion.span>
+                          ) : (
+                            <span className="text-white/10">--.---<span className="text-lg">s</span></span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <button onClick={handleSimulateLap} disabled={isSimulating} className="relative group overflow-hidden rounded-lg bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] p-[1.5px] disabled:opacity-50 cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.2)]">
+                        <div className="absolute inset-0 bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        <div className="relative px-4 py-2 bg-[#0B1120] rounded-lg flex items-center justify-center gap-2 group-hover:bg-transparent transition-colors duration-300">
+                          {isSimulating ? (
+                            <span className="font-black text-white font-mono uppercase tracking-widest text-[10px] flex items-center gap-2">
+                              <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                              Simulating...
+                            </span>
+                          ) : (
+                            <>
+                              <Play className="w-3 h-3 text-white fill-white group-hover:text-[#0B1120] group-hover:fill-[#0B1120] transition-colors" />
+                              <span className="font-black text-white group-hover:text-[#0B1120] font-mono uppercase tracking-widest text-[10px] transition-colors">
+                                Run Lap
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
               </div>
             </div>
@@ -659,7 +774,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                       <div className="flex justify-between items-center border-t border-white/5 pt-2"><span className="text-[#9CA3AF] font-bold">Amount Due</span> <span className="font-black text-amber-400">₹{bookingTotal.toFixed(2)} (Cash)</span></div>
                     )}
                   </div>
-                  <div className="w-full md:w-32 flex flex-col justify-center items-center p-4 bg-white rounded-xl shadow-lg border-2 border-dashed border-gray-300">
+                  <div className="w-full md:w-32 flex flex-col justify-center items-center p-4 bg-white rounded-xl shadow-lg border-2 border-solid border-gray-300">
                     {/* Simulated QR Code for print view */}
                     <svg className="w-full h-auto text-black" viewBox="0 0 100 100">
                        <path d="M5 5h30v30H5V5zm5 5v20h20V10H10zm55-5h30v30H65V5zm5 5v20h20V10H70zM5 65h30v30H5V65zm5 5v20h20V70H10z" fill="currentColor"/>
@@ -687,7 +802,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                 <div className="space-y-2">
                   <div className="space-y-2">
                     <label className="text-[#9CA3AF] font-black text-[9px] uppercase tracking-widest font-mono block text-center">Payment / Pass Option</label>
-                    <div className="grid grid-cols-4 gap-1.5">
+                    <div className="grid grid-cols-3 gap-1.5">
                       <button type="button" onClick={() => setPaymentMethod('upi')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'upi' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
                         <span className="font-black text-[10px] font-mono uppercase tracking-wider">UPI</span>
                       </button>
@@ -697,28 +812,31 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                       <button type="button" onClick={() => setPaymentMethod('net_banking')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'net_banking' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
                         <span className="font-black text-[10px] font-mono uppercase tracking-wider">Bank</span>
                       </button>
-                      <button type="button" onClick={() => setPaymentMethod('complimentary')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'complimentary' ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-amber-400/50 hover:text-amber-300'}`}>
-                        <span className="font-black text-[9px] font-mono uppercase tracking-wider text-center">🎁 Comp</span>
-                      </button>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-4 bg-[#050816] rounded-xl border border-white/10 flex justify-between items-center mt-4">
-                  <span className="text-[#9CA3AF] font-black text-[10px] uppercase tracking-widest font-mono">
-                    {paymentMethod === 'complimentary' ? 'VIP Status' : 'Total'}
-                  </span>
-                  <span className={`text-2xl font-black font-mono tracking-tighter ${paymentMethod === 'complimentary' ? 'text-amber-400' : 'text-[#14F1D9]'}`}>
-                    {paymentMethod === 'complimentary' ? '₹0.00 (FREE)' : `₹${bookingTotal.toFixed(2)}`}
-                  </span>
+                <div className="p-4 bg-[#050816] rounded-xl border border-white/10 space-y-2 mt-4 font-mono">
+                  <div className="flex justify-between items-center text-xs text-[#9CA3AF]">
+                    <span>Subtotal:</span>
+                    <span>₹{bookingTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs text-[#40E0D0]">
+                    <span>Razorpay Fee (2.36%):</span>
+                    <span>+ ₹{(bookingTotal * 0.0236).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center border-t border-white/10 pt-2">
+                    <span className="text-white font-black text-[10px] uppercase tracking-widest">
+                      Total Payable
+                    </span>
+                    <span className="text-2xl font-black tracking-tighter text-[#14F1D9]">
+                      ₹{(bookingTotal * 1.0236).toFixed(2)}
+                    </span>
+                  </div>
                 </div>
 
-                <button type="submit" className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-lg mt-4 ${
-                  paymentMethod === 'complimentary' 
-                    ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-black shadow-amber-500/20' 
-                    : 'bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] shadow-[0_0_20px_rgba(20,241,217,0.3)]'
-                }`}>
-                  {paymentMethod === 'complimentary' ? '🎁 Issue Complimentary VIP Pass' : 'Pay with Razorpay'}
+                <button type="submit" className="w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-lg mt-4 bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] shadow-[0_0_20px_rgba(20,241,217,0.3)]">
+                  Pay with Razorpay (₹{(bookingTotal * 1.0236).toFixed(2)})
                 </button>
               </form>
             )}

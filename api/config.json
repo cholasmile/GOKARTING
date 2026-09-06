@@ -1,10 +1,10 @@
 {
-  "RAZORPAY_KEY_ID": "rzp_test_mock_id",
-  "RAZORPAY_KEY_SECRET": "rzp_test_mock_secret",
+  "RAZORPAY_KEY_ID": "rzp_live_TYnsYBkCUZzRR3",
+  "RAZORPAY_KEY_SECRET": "o6uE9Rd6ucqEetOhsurGYWmF",
   "COUNTER_UPI_ID": "deuce@upi",
-  "BUSINESS_NAME": "Deuce Adventure Park Test",
-  "POS_PROVIDER": "mock_pos",
-  "POS_TERMINAL_NAME": "Mock Terminal 1",
-  "POS_TERMINAL_ID": "POS-MOCK-999",
+  "BUSINESS_NAME": "Deuce Adventure Park",
+  "POS_PROVIDER": "razorpay_pos",
+  "POS_TERMINAL_NAME": "Deuce POS Terminal 1",
+  "POS_TERMINAL_ID": "POS-TERM-001",
   "ENABLED_METHODS": "CASH,UPI,QR_CODE,CARD"
 }

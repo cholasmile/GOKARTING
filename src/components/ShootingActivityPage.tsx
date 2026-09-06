@@ -29,7 +29,7 @@ interface ActivityPageProps {
 }
 
 export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClose }) => {
-  const { createBooking, timeSlots, activities } = useAppContext();
+  const { createBooking, timeSlots, activities, razorpayKeyId } = useAppContext();
   const shootingActivity = activities.find(a => a.id === 'act-air-gun');
 
   const defaultPackages: ShootingPackage[] = [
@@ -45,8 +45,13 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
   const [selectedPackage, setSelectedPackage] = useState<ShootingPackage>(packages[0] || defaultPackages[0]);
 
   React.useEffect(() => {
-    if (packages.length > 0 && (!selectedPackage || !packages.some(p => p.id === selectedPackage.id))) {
-      setSelectedPackage(packages[0]);
+    if (packages.length > 0) {
+      const match = packages.find(p => p.id === selectedPackage?.id);
+      if (match) {
+        setSelectedPackage(match);
+      } else {
+        setSelectedPackage(packages[0]);
+      }
     }
   }, [packages]);
   const [packageQuantity, setPackageQuantity] = useState<number>(1);
@@ -198,7 +203,7 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
         body: JSON.stringify({ amount: bookingTotal, currency: 'INR' })
       }).then(res => res.json()).then(order => {
         const options = {
-          key: 'rzp_test_TI7eXiGfnUXpao',
+          key: razorpayKeyId || 'rzp_live_TYnsYBkCUZzRR3',
           amount: order.amount,
           currency: order.currency,
           name: 'Deuce Adventure Park',
@@ -532,7 +537,7 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
                       <div className="flex justify-between items-center border-t border-white/5 pt-2"><span className="text-[#9CA3AF] font-bold">Amount Due</span> <span className="font-black text-amber-400">₹{bookingTotal.toFixed(2)} (Cash)</span></div>
                     )}
                   </div>
-                  <div className="w-full md:w-32 flex flex-col justify-center items-center p-4 bg-white rounded-xl shadow-lg border-2 border-dashed border-gray-300">
+                  <div className="w-full md:w-32 flex flex-col justify-center items-center p-4 bg-white rounded-xl shadow-lg border-2 border-solid border-gray-300">
                     <svg className="w-full h-auto text-black" viewBox="0 0 100 100">
                        <path d="M5 5h30v30H5V5zm5 5v20h20V10H10zm55-5h30v30H65V5zm5 5v20h20V10H70zM5 65h30v30H5V65zm5 5v20h20V70H10z" fill="currentColor"/>
                        <path d="M45 10h10v10H45V10zm20 45h10v10H65V55zm15 15h15v15H80V70zm-15 15h10v10H65V85zm-20-20h10v10H45V65zm20-20h10v10H65V45zm-10 10h10v10H55V55z" fill="currentColor"/>
@@ -558,7 +563,7 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
 
                 <div className="space-y-2">
                   <label className="text-[#9CA3AF] font-black text-[9px] uppercase tracking-widest font-mono block text-center">Payment / Pass Option</label>
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-3 gap-1.5">
                     <button type="button" onClick={() => setPaymentMethod('upi')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'upi' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
                       <span className="font-black text-[10px] font-mono uppercase tracking-wider">UPI</span>
                     </button>
@@ -568,27 +573,30 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
                     <button type="button" onClick={() => setPaymentMethod('net_banking')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'net_banking' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
                       <span className="font-black text-[10px] font-mono uppercase tracking-wider">Bank</span>
                     </button>
-                    <button type="button" onClick={() => setPaymentMethod('complimentary')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'complimentary' ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-amber-400/50 hover:text-amber-300'}`}>
-                      <span className="font-black text-[9px] font-mono uppercase tracking-wider text-center">🎁 Comp</span>
-                    </button>
                   </div>
                 </div>
 
-                <div className="p-4 bg-[#050816] rounded-xl border border-white/10 flex justify-between items-center mt-4">
-                  <span className="text-[#9CA3AF] font-black text-[10px] uppercase tracking-widest font-mono">
-                    {paymentMethod === 'complimentary' ? 'VIP Status' : 'Total'}
-                  </span>
-                  <span className={`text-2xl font-black font-mono tracking-tighter ${paymentMethod === 'complimentary' ? 'text-amber-400' : 'text-[#14F1D9]'}`}>
-                    {paymentMethod === 'complimentary' ? '₹0.00 (FREE)' : `₹${bookingTotal.toFixed(2)}`}
-                  </span>
+                <div className="p-4 bg-[#050816] rounded-xl border border-white/10 space-y-2 mt-4 font-mono">
+                  <div className="flex justify-between items-center text-xs text-[#9CA3AF]">
+                    <span>Subtotal:</span>
+                    <span>₹{bookingTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs text-[#40E0D0]">
+                    <span>Razorpay Fee (2.36%):</span>
+                    <span>+ ₹{(bookingTotal * 0.0236).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center border-t border-white/10 pt-2">
+                    <span className="text-white font-black text-[10px] uppercase tracking-widest">
+                      Total Payable
+                    </span>
+                    <span className="text-2xl font-black tracking-tighter text-[#14F1D9]">
+                      ₹{(bookingTotal * 1.0236).toFixed(2)}
+                    </span>
+                  </div>
                 </div>
 
-                <button type="submit" className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-lg mt-4 ${
-                  paymentMethod === 'complimentary' 
-                    ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-black shadow-amber-500/20' 
-                    : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-[0_0_20px_rgba(168,85,247,0.3)]'
-                }`}>
-                  {paymentMethod === 'complimentary' ? '🎁 Issue Complimentary VIP Pass' : 'Pay with Razorpay'}
+                <button type="submit" className="w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-lg mt-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+                  Pay with Razorpay (₹{(bookingTotal * 1.0236).toFixed(2)})
                 </button>
               </form>
             )}

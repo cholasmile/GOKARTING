@@ -1147,12 +1147,13 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                     const pd = getPaymentDetails(confirmedBooking.id);
                     printTicket({
                       receiptId: `TKT-${confirmedBooking.id}`,
-                      activityName: combinedActivityNames,
+                      activityName: combinedActivityNames || confirmedBooking.activityName,
+                      packageName: confirmedBooking.details || 'Standard Package',
                       customerName: confirmedBooking.customerName,
                       customerPhone: confirmedBooking.customerPhone,
                       date: confirmedBooking.date,
                       slot: confirmedBooking.timeSlot,
-                      items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+                      items: [{ label: confirmedBooking.details || confirmedBooking.activityName, value: `₹${confirmedBooking.totalAmount.toFixed(2)}` }],
                       subtotalAmount: confirmedBooking.originalAmount || subtotalAmount,
                       discountPercentage: confirmedBooking.discountPercentage || activeDiscountPct,
                       discountAmount: confirmedBooking.discountAmount || discountAmount,
@@ -1166,7 +1167,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   }} className="btn-glow px-6 py-3 rounded-xl font-bold flex items-center gap-2">
                     <Printer className="w-4 h-4" /> Print Gate Pass & Receipt
                   </button>
-                  <button onClick={onCancel} className="bg-[#1C1C1C] hover:bg-[#2C2C2C] text-white px-6 py-3 rounded-xl font-bold">
+                  <button onClick={onCancel} className="bg-[#1C1C1C] hover:bg-[#2C2C2C] text-[#FFFFFF] px-6 py-3 rounded-xl font-bold">
                     New Booking
                   </button>
                 </div>
@@ -1186,11 +1187,11 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
             {/* Booking summary card */}
             <div className="max-w-md mx-auto mb-6 text-left bg-[#0A0A0A] border border-[#1C1C1C] rounded-2xl p-5 space-y-2">
               <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Booking ID</span><span className="font-mono text-[#00ABAB]">#{confirmedBooking.id.slice(-8).toUpperCase()}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Guest</span><span className="font-bold text-white">{confirmedBooking.customerName}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Activity</span><span className="text-white">{confirmedBooking.activityName}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Date</span><span className="text-white">{confirmedBooking.date}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Time Slot</span><span className="text-white">{confirmedBooking.timeSlot}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Package / Details</span><span className="text-white text-right max-w-[60%]">{confirmedBooking.details}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Guest</span><span className="font-bold text-[#FFFFFF]">{confirmedBooking.customerName}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Activity</span><span className="text-[#FFFFFF]">{confirmedBooking.activityName}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Date</span><span className="text-[#FFFFFF]">{confirmedBooking.date}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Time Slot</span><span className="text-[#FFFFFF]">{confirmedBooking.timeSlot}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-[#94A3B8]">Package / Details</span><span className="text-[#FFFFFF] text-right max-w-[60%]">{confirmedBooking.details}</span></div>
               <div className="flex justify-between text-sm border-t border-[#1C1C1C] pt-2 mt-2"><span className="text-[#94A3B8]">Total Paid</span><span className="text-emerald-400 font-black text-lg">₹{confirmedBooking.totalAmount}</span></div>
             </div>
 
@@ -1205,12 +1206,13 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                 const pd = getPaymentDetails(confirmedBooking.id);
                 printTicket({
                   receiptId: `TKT-${confirmedBooking.id}`,
-                  activityName: combinedActivityNames,
+                  activityName: combinedActivityNames || confirmedBooking.activityName,
+                  packageName: confirmedBooking.details || 'Standard Package',
                   customerName: confirmedBooking.customerName,
                   customerPhone: confirmedBooking.customerPhone,
                   date: confirmedBooking.date,
                   slot: confirmedBooking.timeSlot,
-                  items: activities.map(a => ({ label: a.name, value: `₹${a.adultPrice || 0}/Adult` })),
+                  items: [{ label: confirmedBooking.details || confirmedBooking.activityName, value: `₹${confirmedBooking.totalAmount.toFixed(2)}` }],
                   subtotalAmount: confirmedBooking.originalAmount || subtotalAmount,
                   discountPercentage: confirmedBooking.discountPercentage || activeDiscountPct,
                   discountAmount: confirmedBooking.discountAmount || discountAmount,

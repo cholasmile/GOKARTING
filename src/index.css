@@ -187,22 +187,29 @@ body {
   100% { transform: translateX(200%) skewX(12deg); }
 }
 
-/* ── 3-INCH BREADTH X 4-INCH HEIGHT THERMAL RECEIPT PRINT MEDIA RULES ── */
+/* ── 3-INCH BREADTH THERMAL RECEIPT PRINT MEDIA RULES (AUTO HEIGHT, ZERO TOP MARGIN) ── */
 @media print {
   @page {
-    size: 3in 4in;
-    margin: 1.5mm;
+    size: 3in auto;
+    margin: 0mm !important;
   }
   html, body {
     width: 3in !important;
     max-width: 3in !important;
-    max-height: 4in !important;
+    height: auto !important;
+    max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
-    overflow: hidden !important;
     background: #ffffff !important;
     color: #000000 !important;
-    font-family: 'Courier New', Courier, monospace !important;
-    font-size: 8px !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif, monospace !important;
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+    font-weight: 600 !important;
+    -webkit-font-smoothing: antialiased !important;
+  }
+  /* Ensure solid borders on print to eliminate dotted print artifacts */
+  * {
+    border-style: solid !important;
   }
 }

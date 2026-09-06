@@ -17,16 +17,24 @@ import {
   Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag
 } from 'lucide-react';
 import ActivityManagementPanel from './admin/ActivityManagementPanel';
+import { BulkAddMenuModal } from './BulkAddMenuModal';
+import { compressImageFile } from '../lib/imageUtils';
 
 
 export const AdminDashboard: React.FC = () => {
   const {
     users, updateUserRole,
     activities, vendors, bookings, orders, payments, tickets,
+    menuItems, deleteMenuItem, updateMenuItem,
     addActivity, updateActivity, deleteActivity,
     addVendor, updateVendor, deleteVendor, addUser,
     counterUpiId, setCounterUpiId
   } = useAppContext();
+
+  // Bulk add menu modal state
+  const [isBulkMenuModalOpen, setIsBulkMenuModalOpen] = useState(false);
+  const [adminMenuSearch, setAdminMenuSearch] = useState('');
+  const [adminVendorFilter, setAdminVendorFilter] = useState('all');
 
   // Payment settings local state
   const {
@@ -105,16 +113,18 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleActivityImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleActivityImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      setActivityForm(prev => ({ ...prev, image: result }));
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedDataUrl = await compressImageFile(file, 1000, 1000, 0.75);
+      if (compressedDataUrl) {
+        setActivityForm(prev => ({ ...prev, image: compressedDataUrl }));
+      }
+    } catch (err) {
+      console.error('Image compression failed:', err);
+    }
   };
 
   // Payment report filters
@@ -127,7 +137,7 @@ export const AdminDashboard: React.FC = () => {
   const [reconciliationTab, setReconciliationTab] = useState<'reports' | 'reconciliation'>('reports');
 
   // Active Admin Tabs
-  const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'users' | 'reports' | 'database' | 'payments' | 'pay_settings'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'database' | 'payments' | 'pay_settings'>('analytics');
   const [activeDbSubTab, setActiveDbSubTab] = useState<'schema' | 'rls' | 'hierarchy' | 'api_routes' | 'deploy'>('schema');
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -407,7 +417,7 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Admin Tabs */}
       <div className="flex border-b border-[#00ABAB]/30 gap-1 overflow-x-auto text-[#FFFFFF] pb-px">
-        {(['analytics', 'activities', 'activity_mgmt', 'vendors', 'users', 'reports', 'payments', 'pay_settings', 'database'] as const).map(tab => (
+        {(['analytics', 'activities', 'activity_mgmt', 'vendors', 'retail_menu', 'users', 'reports', 'payments', 'pay_settings', 'database'] as const).map(tab => (
           <button
             key={tab}
             id={`btn-admin-tab-${tab}`}
@@ -422,6 +432,7 @@ export const AdminDashboard: React.FC = () => {
             {tab === 'activities' && <Award className="h-4 w-4" />}
             {tab === 'activity_mgmt' && <ImageIcon className="h-4 w-4" />}
             {tab === 'vendors' && <Coffee className="h-4 w-4" />}
+            {tab === 'retail_menu' && <Utensils className="h-4 w-4" />}
             {tab === 'users' && <Users className="h-4 w-4" />}
             {tab === 'reports' && <FileText className="h-4 w-4" />}
             {tab === 'payments' && <IndianRupee className="h-4 w-4" />}
@@ -431,6 +442,7 @@ export const AdminDashboard: React.FC = () => {
               : tab === 'pay_settings' ? 'Pay Settings'
               : tab === 'payments' ? 'Pay Reports'
               : tab === 'activity_mgmt' ? 'Activity Mgmt'
+              : tab === 'retail_menu' ? 'Retail & Food Menu'
               : tab}
           </button>
         ))}
@@ -806,6 +818,132 @@ export const AdminDashboard: React.FC = () => {
             ))}
           </div>
 
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* RETAIL & FOOD MENU MANAGEMENT VIEW */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === 'retail_menu' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap justify-between items-center text-[#FFFFFF] gap-3">
+            <div>
+              <h3 className="font-bold text-lg text-[#FFFFFF] font-sans">Retail & Food Menu Management</h3>
+              <p className="text-xs text-[#9CA3AF] font-sans">Manage all food, beverage, gear, and retail store inventory across stalls.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                id="btn-bulk-add-menu-admin"
+                onClick={() => setIsBulkMenuModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold btn-glow text-[#0B0F14] rounded-xl hover:bg-[#00A99D] transition-all cursor-pointer shadow-lg"
+              >
+                <Plus className="h-4 w-4" /> ⚡ Bulk Add N Items
+              </button>
+            </div>
+          </div>
+
+          {/* Search and Filters */}
+          <div className="glass-panel border border-[#00ABAB]/30 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+              <Search className="h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search items by name, category, or description..."
+                value={adminMenuSearch}
+                onChange={(e) => setAdminMenuSearch(e.target.value)}
+                className="w-full bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-lg px-3 py-1.5 text-white font-sans focus:outline-none focus:border-[#40E0D0]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400 font-bold uppercase font-mono text-[10px]">Filter Stall:</span>
+              <select
+                value={adminVendorFilter}
+                onChange={(e) => setAdminVendorFilter(e.target.value)}
+                className="bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-lg px-2.5 py-1.5 text-white font-sans focus:outline-none focus:border-[#40E0D0]"
+              >
+                <option value="all">All Vendors & Retail Counters</option>
+                {vendors.map(v => (
+                  <option key={v.id} value={v.id}>{v.name} ({v.stallNumber})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Menu Items Table */}
+          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-[#FFFFFF]">
+                <thead>
+                  <tr className="bg-[#0A0A0A]/70 border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold">
+                    <th className="p-4">Item Name</th>
+                    <th className="p-4">Vendor / Stall</th>
+                    <th className="p-4">Category</th>
+                    <th className="p-4">Price (₹)</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-teal-100/20">
+                  {menuItems
+                    .filter(item => {
+                      const matchesSearch = item.name.toLowerCase().includes(adminMenuSearch.toLowerCase()) ||
+                                            item.category.toLowerCase().includes(adminMenuSearch.toLowerCase());
+                      const matchesVendor = adminVendorFilter === 'all' || item.vendorId === adminVendorFilter;
+                      return matchesSearch && matchesVendor;
+                    })
+                    .map(item => {
+                      const vendor = vendors.find(v => v.id === item.vendorId);
+                      return (
+                        <tr key={item.id} className="hover:bg-[#0A0A0A]/40 transition-colors">
+                          <td className="p-4 font-bold text-[#FFFFFF] flex items-center gap-3">
+                            <img src={item.image} alt={item.name} className="h-9 w-9 rounded-lg object-cover border border-[#00ABAB]/30" />
+                            <div>
+                              <div>{item.name}</div>
+                              <div className="text-[10px] text-gray-400 font-sans font-normal line-clamp-1">{item.description}</div>
+                            </div>
+                          </td>
+                          <td className="p-4 font-mono text-[#9CA3AF]">
+                            {vendor ? `${vendor.name} (${vendor.stallNumber})` : 'Central Store'}
+                          </td>
+                          <td className="p-4">
+                            <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#121A24] text-[#40E0D0] border border-[#00ABAB]/30">
+                              {item.category}
+                            </span>
+                          </td>
+                          <td className="p-4 font-mono font-extrabold text-[#40E0D0]">
+                            ₹{item.price.toFixed(2)}
+                          </td>
+                          <td className="p-4">
+                            <button
+                              onClick={() => updateMenuItem({ ...item, isAvailable: !item.isAvailable })}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border cursor-pointer ${
+                                item.isAvailable
+                                  ? 'bg-teal-950 text-[#40E0D0] border-[#00ABAB]'
+                                  : 'bg-red-950 text-red-400 border-red-800'
+                              }`}
+                            >
+                              {item.isAvailable ? 'In Stock' : 'Out of Stock'}
+                            </button>
+                          </td>
+                          <td className="p-4 text-right">
+                            <button
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
+                                  deleteMenuItem(item.id);
+                                }
+                              }}
+                              className="px-2.5 py-1 text-xs rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/40 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 inline" /> Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1351,7 +1489,7 @@ export const AdminDashboard: React.FC = () => {
                         type="text"
                         value={razorpayKeyIdInput}
                         onChange={e => setRazorpayKeyIdInput(e.target.value)}
-                        placeholder="rzp_test_..."
+                        placeholder="rzp_live_..."
                         className="w-full bg-[#1C1C1C] border border-[#1C1C1C] focus:border-[#00ABAB] rounded-xl px-4 py-2.5 text-white outline-none font-mono text-xs"
                       />
                     </div>
@@ -2215,6 +2353,11 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+      {/* BULK ADD MENU ITEMS MODAL */}
+      <BulkAddMenuModal
+        isOpen={isBulkMenuModalOpen}
+        onClose={() => setIsBulkMenuModalOpen(false)}
+      />
 
     </div>
   );

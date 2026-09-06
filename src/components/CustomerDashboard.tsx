@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAppContext } from '../context/AppContext';
 import { Activity, MenuItem, Booking, FoodOrder, User } from '../types';
 import { InvoiceModal } from './InvoiceModal';
+import { UnifiedLoginModal } from './UnifiedLoginModal';
 import { 
   Calendar as CalendarIcon, Clock, Users, Ticket, 
   ShoppingBag, Search, Plus, Minus, CreditCard, 
@@ -27,7 +28,7 @@ export const CustomerDashboard: React.FC = () => {
   const { 
     activities, vendors, menuItems, foodCart, timeSlots, bookings, orders, tickets,
     addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder, createBooking,
-    currentUser, setCurrentUser, users, addUser
+    currentUser, setCurrentUser, users, addUser, razorpayKeyId
   } = useAppContext();
 
   // Navigation Subtabs
@@ -39,15 +40,94 @@ export const CustomerDashboard: React.FC = () => {
   // -----------------------------------------------------------------
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [memberTab, setMemberTab] = useState<'login' | 'register'>('login');
-  const [loginEmail, setLoginEmail] = useState('');
+  const [loginEmailOrPhone, setLoginEmailOrPhone] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPhone, setRegPhone] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [memberAuthError, setMemberAuthError] = useState<string | null>(null);
 
   // History Tab Email Retrieval Search
   const [historySearchEmail, setHistorySearchEmail] = useState('');
+
+  const handleMemberLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setMemberAuthError(null);
+    const input = loginEmailOrPhone.trim();
+    if (!input) {
+      setMemberAuthError('Please enter your Cell No or Email ID.');
+      return;
+    }
+    if (!loginPassword) {
+      setMemberAuthError('Please enter your password.');
+      return;
+    }
+
+    const normalizedInput = input.toLowerCase();
+    const cleanInputDigits = input.replace(/\D/g, '');
+
+    const foundUser = users.find(u => {
+      const emailMatch = u.email.toLowerCase() === normalizedInput;
+      const phoneDigits = u.phone ? u.phone.replace(/\D/g, '') : '';
+      const phoneMatch = cleanInputDigits.length > 3 && phoneDigits.endsWith(cleanInputDigits);
+      return emailMatch || phoneMatch;
+    });
+
+    if (foundUser) {
+      // Validate password if user has set a password or for demo accounts
+      if (foundUser.password && foundUser.password !== loginPassword) {
+        setMemberAuthError('Invalid password. Please check your credentials.');
+        return;
+      }
+      setCurrentUser(foundUser);
+      setIsMemberModalOpen(false);
+    } else {
+      setMemberAuthError('Account not found with this Cell No or Email ID. Please register for a new account.');
+    }
+  };
+
+  const handleMemberRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    setMemberAuthError(null);
+    if (!regName.trim() || !regEmail.trim()) {
+      setMemberAuthError('Name and Email ID are required to register.');
+      return;
+    }
+    if (!regPassword) {
+      setMemberAuthError('Please set a password for your account.');
+      return;
+    }
+    if (regPassword !== regConfirmPassword) {
+      setMemberAuthError('Passwords do not match. Please verify your password.');
+      return;
+    }
+
+    const normalizedEmail = regEmail.trim().toLowerCase();
+    const existing = users.find(u => u.email.toLowerCase() === normalizedEmail);
+    if (existing) {
+      setMemberAuthError('An account with this Email ID already exists. Please log in with your credentials.');
+      return;
+    }
+
+    const newMember: User = {
+      id: `usr-cust-${Date.now()}`,
+      name: regName.trim(),
+      email: normalizedEmail,
+      phone: regPhone.trim() || undefined,
+      password: regPassword,
+      role: 'customer'
+    };
+    addUser(newMember);
+    setCurrentUser(newMember);
+    setIsMemberModalOpen(false);
+  };
+
+  const handleQuickDemoLogin = (user: User) => {
+    setCurrentUser(user);
+    setIsMemberModalOpen(false);
+  };
 
   // -----------------------------------------------------------------
   // 1. ACTIVITY BOOKING FLOW STATES
@@ -95,53 +175,6 @@ export const CustomerDashboard: React.FC = () => {
       setCustomerPhone(currentUser.phone || '');
     }
   }, [currentUser]);
-
-  const handleMemberLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setMemberAuthError(null);
-    if (!loginEmail) {
-      setMemberAuthError('Please enter your member email address.');
-      return;
-    }
-    const foundUser = users.find(u => u.email.toLowerCase() === loginEmail.trim().toLowerCase());
-    if (foundUser) {
-      setCurrentUser(foundUser);
-    } else {
-      const newMember: User = {
-        id: `usr-cust-${Date.now()}`,
-        name: loginEmail.split('@')[0],
-        email: loginEmail.trim(),
-        role: 'customer'
-      };
-      addUser(newMember);
-      setCurrentUser(newMember);
-    }
-    setIsMemberModalOpen(false);
-  };
-
-  const handleMemberRegister = (e: React.FormEvent) => {
-    e.preventDefault();
-    setMemberAuthError(null);
-    if (!regName || !regEmail) {
-      setMemberAuthError('Name and Email are required to register.');
-      return;
-    }
-    const newMember: User = {
-      id: `usr-cust-${Date.now()}`,
-      name: regName,
-      email: regEmail.trim(),
-      phone: regPhone,
-      role: 'customer'
-    };
-    addUser(newMember);
-    setCurrentUser(newMember);
-    setIsMemberModalOpen(false);
-  };
-
-  const handleQuickDemoLogin = (user: User) => {
-    setCurrentUser(user);
-    setIsMemberModalOpen(false);
-  };
 
   // Booking Checkout & Payment Modal
   const [isBookingPaymentOpen, setIsBookingPaymentOpen] = useState(false);
@@ -279,14 +312,14 @@ export const CustomerDashboard: React.FC = () => {
       const orderResponse = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, currency: 'USD' })
+        body: JSON.stringify({ amount, currency: 'INR' })
       });
       const order = await orderResponse.json();
 
 
       // 2. Open Razorpay Modal
       const options = {
-        key: 'rzp_test_TI7eXiGfnUXpao', // Using test key ID directly for frontend
+        key: razorpayKeyId || 'rzp_live_TYnsYBkCUZzRR3',
         amount: order.amount,
         currency: order.currency,
         name: 'Deuce Adventure Park',
@@ -666,48 +699,26 @@ export const CustomerDashboard: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Complimentary Ticket Option */}
-                    <div className="pt-2 border-t border-white/10 flex items-center justify-between">
-                      <label className="flex items-center gap-2 text-xs font-mono text-amber-400 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={isComplimentaryPass}
-                          onChange={e => setIsComplimentaryPass(e.target.checked)}
-                          className="w-4 h-4 rounded accent-amber-400 cursor-pointer"
-                        />
-                        <span className="font-bold">🎁 Complimentary VIP Pass</span>
-                      </label>
-                      {isComplimentaryPass && (
-                        <span className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                          100% OFF
-                        </span>
-                      )}
-                    </div>
-
                     <div className="pt-2 border-t border-white/10 flex justify-between items-center">
                       <span className="text-xs text-[#9CA3AF]">
-                        {isComplimentaryPass ? 'VIP Pricing' : 'Total'}
+                        Total
                       </span>
-                      <span className={`text-xl font-black font-mono ${isComplimentaryPass ? 'text-amber-400' : 'text-[#14F1D9]'}`}>
-                        {isComplimentaryPass ? '₹0.00 (FREE)' : `₹${(() => {
+                      <span className="text-xl font-black font-mono text-[#14F1D9]">
+                        ₹{(() => {
                           if (hasPackages) {
                             const p = dynamicAct.packages!.find(pkg => pkg.id === selectedPackageId) || dynamicAct.packages![0];
                             return p ? p.price * packageQuantity : 0;
                           }
                           return (adultCount * (dynamicAct.adultPrice || 0)) + (childCount * (dynamicAct.childPrice || 0));
-                        })()}`}
+                        })()}
                       </span>
                     </div>
 
                     <button
                       type="submit"
-                      className={`w-full py-3 font-black text-xs uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-all cursor-pointer shadow-lg ${
-                        isComplimentaryPass
-                          ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-black shadow-amber-500/20'
-                          : 'bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] shadow-[0_0_15px_rgba(20,241,217,0.3)]'
-                      }`}
+                      className="w-full py-3 font-black text-xs uppercase tracking-widest rounded-xl hover:scale-[1.02] transition-all cursor-pointer shadow-lg bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] shadow-[0_0_15px_rgba(20,241,217,0.3)]"
                     >
-                      {isComplimentaryPass ? '🎁 Issue Complimentary VIP Pass' : 'Confirm Booking'}
+                      Confirm Booking
                     </button>
                   </form>
                 </div>
@@ -937,15 +948,15 @@ export const CustomerDashboard: React.FC = () => {
               {memberTab === 'login' ? (
                 <form onSubmit={handleMemberLogin} className="space-y-4">
                   <div>
-                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Member Email</label>
+                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Cell No / Email ID</label>
                     <div className="relative">
                       <Mail className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-3" />
                       <input
-                        type="email"
+                        type="text"
                         required
-                        value={loginEmail}
-                        onChange={e => setLoginEmail(e.target.value)}
-                        placeholder="watson@baker.street"
+                        value={loginEmailOrPhone}
+                        onChange={e => setLoginEmailOrPhone(e.target.value)}
+                        placeholder="watson@baker.street or 9876543210"
                         className="w-full bg-[#050816] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
                       />
                     </div>
@@ -970,32 +981,8 @@ export const CustomerDashboard: React.FC = () => {
                     type="submit"
                     className="w-full py-3 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase tracking-widest hover:scale-[1.01] transition-all cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.3)]"
                   >
-                    Sign In & Sync Data
+                    Sign In
                   </button>
-
-                  {/* Demo Quick Logins */}
-                  <div className="pt-3 border-t border-white/10 space-y-2">
-                    <span className="text-[9px] uppercase font-mono font-bold text-[#9CA3AF] block text-center">Quick Demo Member Accounts</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleQuickDemoLogin({ id: 'usr-watson', name: 'John Watson', email: 'watson@baker.street', role: 'customer' })}
-                        className="p-2 bg-white/5 hover:bg-[#14F1D9]/20 hover:border-[#14F1D9]/50 border border-white/10 rounded-xl text-left text-xs transition-all cursor-pointer"
-                      >
-                        <div className="font-bold truncate text-white">John Watson</div>
-                        <div className="text-[9px] text-[#9CA3AF] font-mono truncate">watson@baker.street</div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleQuickDemoLogin({ id: 'usr-alex', name: 'Alex Mercer', email: 'alex@example.com', role: 'customer' })}
-                        className="p-2 bg-white/5 hover:bg-[#14F1D9]/20 hover:border-[#14F1D9]/50 border border-white/10 rounded-xl text-left text-xs transition-all cursor-pointer"
-                      >
-                        <div className="font-bold truncate text-white">Alex Mercer</div>
-                        <div className="text-[9px] text-[#9CA3AF] font-mono truncate">alex@example.com</div>
-                      </button>
-                    </div>
-                  </div>
                 </form>
               ) : (
                 <form onSubmit={handleMemberRegister} className="space-y-4">
@@ -1030,7 +1017,7 @@ export const CustomerDashboard: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Phone Number (Optional)</label>
+                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Cell No / Phone Number</label>
                     <div className="relative">
                       <Phone className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-3" />
                       <input
@@ -1038,6 +1025,36 @@ export const CustomerDashboard: React.FC = () => {
                         value={regPhone}
                         onChange={e => setRegPhone(e.target.value)}
                         placeholder="+91 9876543210"
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Set Password</label>
+                    <div className="relative">
+                      <Key className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-3" />
+                      <input
+                        type="password"
+                        required
+                        value={regPassword}
+                        onChange={e => setRegPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-[#050816] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-[#9CA3AF] font-mono uppercase font-bold block mb-1">Confirm Password</label>
+                    <div className="relative">
+                      <Key className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-3" />
+                      <input
+                        type="password"
+                        required
+                        value={regConfirmPassword}
+                        onChange={e => setRegConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
                         className="w-full bg-[#050816] border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
                       />
                     </div>

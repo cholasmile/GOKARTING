@@ -35,7 +35,7 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
       {/* ── PRINTABLE COMBINED PASS & RECEIPT CONTAINER ── */}
       <div 
         ref={printRef} 
-        className="bg-white text-black p-5 w-full mx-auto print:w-[2.85in] print:max-w-[2.85in] print:max-h-[3.85in] print:p-1.5 print:shadow-none print:m-0 print:border print:border-black print:rounded relative overflow-hidden font-mono text-xs leading-tight"
+        className="bg-white text-black p-5 w-full mx-auto print:w-[2.85in] print:max-w-[2.85in] print:h-auto print:p-1.5 print:mt-0 print:pt-1 print:shadow-none print:m-0 print:border print:border-black print:rounded-md relative overflow-hidden font-sans text-xs leading-normal"
       >
         {/* Background Watermark (hidden on print) */}
         <img 
@@ -45,75 +45,95 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
         />
         
         {/* ── HEADER ── */}
-        <div className="text-center pb-2 mb-2 border-b border-dashed border-gray-300 relative z-10 flex flex-col items-center print:pb-1 print:mb-1">
+        <div className="flex items-center justify-center gap-2.5 pb-2 mb-2 border-b border-solid border-black relative z-10 print:pb-1.5 print:mb-1.5">
           <img 
             src="/deuce-logo.jpg" 
             alt="Deuce Logo" 
-            className="w-10 h-10 rounded-xl object-cover mb-1 shadow-sm border border-gray-200 print:hidden" 
+            className="w-10 h-10 rounded-md object-cover shadow-sm border border-black flex-shrink-0 print:w-10 print:h-10" 
           />
-          <h1 className="text-lg font-black uppercase tracking-tight text-black print:text-[11px]">Deuce Adventure Park</h1>
-          <p className="text-gray-500 text-[10px] font-mono print:text-[7px]">Yelagiri Hills • GST: 33INYPK7449Q1ZL</p>
+          <div className="text-left">
+            <h1 className="text-xl font-bold uppercase tracking-tight text-black print:text-[17px] leading-none">DEUCE</h1>
+            <p className="text-black text-[10.5px] font-sans font-semibold uppercase print:text-[9.5px] mt-0.5">Yelagiri • GST: 33INYPK7449Q1ZL</p>
+          </div>
         </div>
 
         {/* ── PASS & TURNSTILE GATE QR SECTION ── */}
-        <div className="bg-gray-50 p-2 rounded-xl border border-gray-200 mb-2 text-center relative z-10 print:p-1 print:mb-1">
-          <div className="inline-block p-1 bg-white rounded-lg border border-gray-200 mb-1">
+        <div className="bg-white p-2 rounded-lg border border-black mb-2 text-center relative z-10 print:p-1.5 print:mb-1.5">
+          <div className="inline-block p-1 bg-white rounded border border-black mb-1">
             <QRCodeSVG 
               value={ticket.qrCodeValue || `DEUCE-PASS-${ticket.id}`} 
               size={100} 
               level="M" 
               includeMargin={false}
-              className="print:w-12 print:h-12 mx-auto"
+              className="print:w-14 print:h-14 mx-auto"
             />
           </div>
-          <p className="text-[10px] font-mono font-black text-black tracking-wider uppercase print:text-[8px]">
+          <p className="text-xs font-sans font-bold text-black tracking-wider uppercase print:text-[10px]">
             PASS ID: {ticket.id}
           </p>
         </div>
 
         {/* ── GUEST & SESSION DETAILS ── */}
-        <div className="grid grid-cols-2 gap-1.5 mb-2 pb-2 border-b border-dashed border-gray-300 font-sans text-[11px] print:text-[7.5px] print:gap-1 print:mb-1 print:pb-1">
+        <div className="grid grid-cols-2 gap-1.5 mb-2 pb-2 border-b border-solid border-black font-sans text-xs print:text-[11px] print:gap-1 print:mb-1.5 print:pb-1.5">
           <div>
-            <span className="text-[9px] text-gray-500 font-bold uppercase block print:text-[6.5px]">Guest Name</span>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Guest Name</span>
             <span className="font-bold text-black truncate block">{ticket.customerName}</span>
           </div>
           <div>
-            <span className="text-[9px] text-gray-500 font-bold uppercase block print:text-[6.5px]">Contact</span>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Contact</span>
             <span className="font-mono font-bold text-black truncate block">{ticket.customerPhone || 'Registered Guest'}</span>
           </div>
           <div>
-            <span className="text-[9px] text-gray-500 font-bold uppercase block print:text-[6.5px]">Activity</span>
-            <span className="font-black text-blue-700 truncate block print:text-black">{ticket.activityName}</span>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Activity</span>
+            <span className="font-bold text-black truncate block">{ticket.activityName}</span>
           </div>
           <div>
-            <span className="text-[9px] text-gray-500 font-bold uppercase block print:text-[6.5px]">Passes / Date</span>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Package</span>
+            <span className="font-bold text-black truncate block">{booking?.details || 'Standard Package'}</span>
+          </div>
+          <div>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Passes / Date</span>
             <span className="font-bold text-black">{ticket.quantity} Pax &bull; {ticket.date}</span>
           </div>
         </div>
 
         {/* ── COMBINED RECEIPT / TAX BREAKDOWN SECTION ── */}
-        <div className="mb-2 pb-2 border-b border-dashed border-gray-300 print:mb-1 print:pb-1">
-          <table className="w-full text-xs font-mono print:text-[7.5px]">
+        <div className="mb-2 pb-2 border-b border-solid border-black print:mb-1.5 print:pb-1.5">
+          <table className="w-full text-xs font-sans print:text-[11px]">
+            <thead>
+              <tr className="border-b border-black text-left font-bold">
+                <th className="py-0.5">Ticket Split Up</th>
+                <th className="py-0.5 text-right">Amount</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr className="border-b border-gray-100">
-                <td className="py-0.5 text-gray-600">{ticket.activityName} ({ticket.quantity}x)</td>
-                <td className="py-0.5 text-right font-bold text-black">₹{basePrice.toFixed(2)}</td>
+              <tr className="border-b border-gray-200">
+                <td className="py-0.5 font-semibold text-black">{ticket.activityName} ({ticket.quantity}x)</td>
+                <td className="py-0.5 text-right font-mono font-bold text-black">₹{totalAmount.toFixed(2)}</td>
               </tr>
-              <tr className="border-b border-gray-100 text-[10px] text-gray-500 print:text-[7px]">
-                <td className="py-0.5">GST (18%)</td>
-                <td className="py-0.5 text-right font-mono">₹{(cgst + sgst).toFixed(2)}</td>
-              </tr>
-              <tr className="text-xs font-black text-black print:text-[9px]">
+            </tbody>
+          </table>
+
+          {/* ── BASE AMOUNT, SGST AND CGST IN ONE LINE ── */}
+          <div className="text-[10px] font-sans font-bold border-t border-b border-black py-1 my-1.5 flex justify-between print:text-[9.5px]">
+            <span>Base: ₹{basePrice.toFixed(2)}</span>
+            <span>SGST (9%): ₹{sgst.toFixed(2)}</span>
+            <span>CGST (9%): ₹{cgst.toFixed(2)}</span>
+          </div>
+
+          <table className="w-full text-xs font-sans print:text-[11px]">
+            <tbody>
+              <tr className="text-sm font-bold text-black print:text-[12.5px]">
                 <td className="pt-1">GRAND TOTAL</td>
-                <td className="pt-1 text-right text-emerald-700 print:text-black">₹{totalAmount.toFixed(2)}</td>
+                <td className="pt-1 text-right text-black">₹{totalAmount.toFixed(2)}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         {/* ── TERMS & GATE INSTRUCTIONS FOOTER ── */}
-        <div className="text-center text-[9px] text-gray-500 leading-tight space-y-0.5 print:text-[6.5px]">
-          <p className="font-bold text-gray-700 print:text-black">Valid only for date printed. Present QR code at gate scanner.</p>
+        <div className="text-center text-xs text-black leading-tight space-y-1 print:text-[10px] font-bold">
+          <p className="font-black text-black">Valid only for date printed. Present QR code at gate scanner.</p>
         </div>
 
       </div>

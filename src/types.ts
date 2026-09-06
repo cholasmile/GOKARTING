@@ -11,6 +11,7 @@ export interface User {
   email: string;
   phone?: string;
   role: UserRole;
+  password?: string;
   vendorId?: string; // If role is 'food_vendor'
 }
 
@@ -56,6 +57,7 @@ export interface Activity {
   adultPrice?: number;
   childPrice?: number;
   image: string;
+  videoUrl?: string;
   dailyLimit: number;
   safetyInstructions: string[];
   packages?: ActivityPackage[];

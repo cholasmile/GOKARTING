@@ -144,6 +144,7 @@ interface AppContextProps {
 
   // Mutators - Menu Items
   addMenuItem: (item: Omit<MenuItem, 'id'>) => void;
+  addBulkMenuItems: (items: Array<Omit<MenuItem, 'id'>>) => void;
   updateMenuItem: (item: MenuItem) => void;
   deleteMenuItem: (id: string) => void;
 
@@ -214,7 +215,22 @@ const writeToLocalAndSync = (table: string, action: 'insert' | 'update' | 'delet
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUserRaw] = useState<User | null>(() => {
+    return localLoadHelper<User | null>('ap_current_user', null);
+  });
+
+  const setCurrentUser = (user: User | null) => {
+    setCurrentUserRaw(user);
+    if (user) {
+      try {
+        localStorage.setItem('ap_current_user', JSON.stringify(user));
+      } catch (err) {
+        console.warn('[frontend] Failed to save user session:', err);
+      }
+    } else {
+      localStorage.removeItem('ap_current_user');
+    }
+  };
 
   // Sync Status
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -282,7 +298,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.setItem('ap_counter_upi_id', id);
   };
 
-  const [razorpayKeyId, setRazorpayKeyId] = useState<string>('rzp_test_TI7eXiGfnUXpao');
+  const [razorpayKeyId, setRazorpayKeyId] = useState<string>(() => {
+    return (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_live_TYnsYBkCUZzRR3';
+  });
   const [posProvider, setPosProviderState] = useState<string>('mock_pos');
   const [posTerminalName, setPosTerminalNameState] = useState<string>('Deuce POS Terminal 1');
   const [posTerminalId, setPosTerminalIdState] = useState<string>('POS-TERM-001');
@@ -348,7 +366,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           supabase!.from('users').select('*')
         ]);
 
-        if (dbActivities && dbActivities.length > 0) { setActivities(dbActivities); db.activities.bulkPut(dbActivities); }
+        if (dbActivities && dbActivities.length > 0) {
+          setActivities(prev => {
+            const map = new Map<string, Activity>();
+            dbActivities.forEach((dba: Activity) => map.set(dba.id, dba));
+            prev.forEach(existing => {
+              const dba = map.get(existing.id);
+              if (dba) {
+                map.set(existing.id, {
+                  ...dba,
+                  ...existing,
+                  packages: (existing.packages && existing.packages.length > 0) ? existing.packages : (dba.packages || []),
+                  photos: (existing.photos && existing.photos.length > 0) ? existing.photos : (dba.photos || []),
+                  offers: (existing.offers && existing.offers.length > 0) ? existing.offers : (dba.offers || [])
+                });
+              } else {
+                map.set(existing.id, existing);
+              }
+            });
+            const mergedList = Array.from(map.values());
+            try {
+              localStorage.setItem('ap_activities', JSON.stringify(mergedList));
+            } catch (err) {}
+            db.activities.bulkPut(mergedList);
+            return mergedList;
+          });
+        }
         if (dbVendors && dbVendors.length > 0) { setVendors(dbVendors); db.vendors.bulkPut(dbVendors); }
         if (dbMenuItems && dbMenuItems.length > 0) { setMenuItems(dbMenuItems); db.menuItems.bulkPut(dbMenuItems); }
         if (dbInventory && dbInventory.length > 0) { setInventory(dbInventory); db.inventory.bulkPut(dbInventory); }
@@ -357,7 +400,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (dbOrders && dbOrders.length > 0) { setOrders(dbOrders); db.orders.bulkPut(dbOrders); }
         if (dbNotifications && dbNotifications.length > 0) { setNotifications(dbNotifications); db.notifications.bulkPut(dbNotifications); }
         if (dbPayments && dbPayments.length > 0) { setPayments(dbPayments); db.payments.bulkPut(dbPayments); }
-        if (dbUsers && dbUsers.length > 0) { setUsers(dbUsers); db.users.bulkPut(dbUsers); }
+        if (dbUsers && dbUsers.length > 0) {
+          const mergedUsers = [...dbUsers];
+          INITIAL_USERS.forEach(initUser => {
+            if (!mergedUsers.some(u => u.email.toLowerCase() === initUser.email.toLowerCase())) {
+              mergedUsers.push(initUser);
+            }
+          });
+          setUsers(mergedUsers);
+          db.users.bulkPut(mergedUsers);
+        }
       } catch (err) {
         console.error('Failed to load initial data from Supabase, using localStorage:', err);
       }
@@ -374,16 +426,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (Array.isArray(serverActivities) && serverActivities.length > 0) {
           setActivities(prev => {
             const map = new Map<string, Activity>();
-            prev.forEach(a => map.set(a.id, a));
-            serverActivities.forEach((sa: Activity) => {
-              const existing = map.get(sa.id);
-              if (existing) {
-                map.set(sa.id, { ...existing, ...sa });
+            serverActivities.forEach((sa: Activity) => map.set(sa.id, sa));
+            prev.forEach(existing => {
+              const serverAct = map.get(existing.id);
+              if (serverAct) {
+                map.set(existing.id, { 
+                  ...serverAct, 
+                  ...existing, // Local custom edits always take precedence!
+                  packages: (existing.packages && existing.packages.length > 0) ? existing.packages : (serverAct.packages || []),
+                  photos: (existing.photos && existing.photos.length > 0) ? existing.photos : (serverAct.photos || []),
+                  offers: (existing.offers && existing.offers.length > 0) ? existing.offers : (serverAct.offers || [])
+                });
               } else {
-                map.set(sa.id, sa);
+                map.set(existing.id, existing);
               }
             });
-            return Array.from(map.values());
+            const mergedList = Array.from(map.values());
+            try {
+              localStorage.setItem('ap_activities', JSON.stringify(mergedList));
+            } catch (err) {}
+            return mergedList;
           });
         }
       })
@@ -393,7 +455,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Save states on updates to localStorage and backend API
   useEffect(() => { localStorage.setItem('ap_users', JSON.stringify(users)); }, [users]);
   useEffect(() => { 
-    localStorage.setItem('ap_activities', JSON.stringify(activities));
+    try {
+      localStorage.setItem('ap_activities', JSON.stringify(activities));
+    } catch (err) {
+      console.warn('[frontend] localStorage quota exception for activities:', err);
+    }
     // Persist activities array to backend API
     fetch('/api/activities', {
       method: 'POST',
@@ -498,7 +564,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateActivity = (act: Activity) => {
-    setActivities(prev => prev.map(item => item.id === act.id ? act : item));
+    setActivities(prev => {
+      const updatedList = prev.map(item => item.id === act.id ? act : item);
+      try {
+        localStorage.setItem('ap_activities', JSON.stringify(updatedList));
+      } catch (err) {
+        console.warn('[frontend] localStorage quota exception on updateActivity:', err);
+      }
+      fetch('/api/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedList)
+      }).catch(() => {});
+      return updatedList;
+    });
 
     if (isSupabaseConfigured) {
       writeToLocalAndSync('activities', 'update', act);
@@ -630,13 +709,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const addUser = (userData: Omit<User, 'id'>) => {
+  const addUser = (userData: User | Omit<User, 'id'>) => {
     const newUser: User = {
       ...userData,
-      id: `user-${Date.now()}`
+      id: ('id' in userData && userData.id) ? userData.id : `usr-cust-${Date.now()}`
     };
-    setUsers(prev => [...prev, newUser]);
-    
+
+    setUsers(prev => {
+      const existsIndex = prev.findIndex(u => u.email.toLowerCase() === newUser.email.toLowerCase());
+      let updated: User[];
+      if (existsIndex >= 0) {
+        updated = [...prev];
+        updated[existsIndex] = { ...updated[existsIndex], ...newUser };
+      } else {
+        updated = [...prev, newUser];
+      }
+      try {
+        localStorage.setItem('ap_users', JSON.stringify(updated));
+      } catch (err) {
+        console.warn('[frontend] Failed to save users to localStorage:', err);
+      }
+      return updated;
+    });
+
     if (isSupabaseConfigured) {
       writeToLocalAndSync('users', 'insert', newUser);
     }
@@ -1204,12 +1299,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addMenuItem = (item: Omit<MenuItem, 'id'>) => {
     const newItem: MenuItem = {
       ...item,
-      id: `menu-dynamic-${Date.now()}`
+      id: `menu-dynamic-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     };
-    setMenuItems(prev => [...prev, newItem]);
+    setMenuItems(prev => {
+      const updated = [...prev, newItem];
+      try {
+        localStorage.setItem('ap_menu_items', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
 
     if (isSupabaseConfigured) {
       writeToLocalAndSync('menuItems', 'insert', newItem);
+    }
+  };
+
+  const addBulkMenuItems = (items: Array<Omit<MenuItem, 'id'>>) => {
+    const newItems: MenuItem[] = items.map((item, idx) => ({
+      ...item,
+      id: `menu-dynamic-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`
+    }));
+
+    setMenuItems(prev => {
+      const updated = [...prev, ...newItems];
+      try {
+        localStorage.setItem('ap_menu_items', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    if (isSupabaseConfigured) {
+      newItems.forEach(item => writeToLocalAndSync('menuItems', 'insert', item));
     }
   };
 
@@ -1531,6 +1651,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       deleteVendor,
 
       addMenuItem,
+      addBulkMenuItems,
       updateMenuItem,
       deleteMenuItem,
 

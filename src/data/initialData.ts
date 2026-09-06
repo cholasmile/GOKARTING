@@ -6,15 +6,15 @@
 import { User, Activity, FoodVendor, MenuItem, InventoryItem, Booking, FoodOrder, Ticket } from '../types';
 
 export const INITIAL_USERS: User[] = [
-  { id: 'usr-admin', name: 'Executive Director Cooper', email: 'admin@deucepark.com', role: 'super_admin' },
-  { id: 'usr-staff', name: 'Activity Ranger Smith', email: 'staff@deucepark.com', role: 'activity_staff' },
-  { id: 'usr-vendor', name: 'Sarah Jenkins', email: 'vendor@deucepark.com', role: 'food_vendor', vendorId: 'vendor-forest-cafe' },
-  { id: 'usr-cafe', name: 'Deuce Cafe Staff', email: 'cafe@deucepark.com', role: 'cafe_staff', vendorId: 'vendor-forest-cafe' },
-  { id: 'usr-gkm', name: 'Karting Manager', email: 'kartingmanager@deucepark.com', role: 'go_karting_manager' },
-  { id: 'usr-gks', name: 'Karting Staff', email: 'kartingstaff@deucepark.com', role: 'go_karting_staff' },
-  { id: 'usr-hrs', name: 'Horse Riding Arena Staff', email: 'horseriding@deucepark.com', role: 'horse_riding_staff' },
-  { id: 'usr-sht', name: 'Precision Shooting Range Staff', email: 'shooting@deucepark.com', role: 'shooting_staff' },
-  { id: 'usr-tcs', name: 'Ticket Counter Staff', email: 'ticketing@deucepark.com', role: 'ticket_counter_staff' },
+  { id: 'usr-admin', name: 'Executive Director Cooper', email: 'admin@deucepark.com', password: 'admin', role: 'super_admin' },
+  { id: 'usr-staff', name: 'Activity Ranger Smith', email: 'staff@deucepark.com', password: 'staff', role: 'activity_staff' },
+  { id: 'usr-vendor', name: 'Sarah Jenkins', email: 'vendor@deucepark.com', password: 'vendor', role: 'food_vendor', vendorId: 'vendor-forest-cafe' },
+  { id: 'usr-cafe', name: 'Deuce Cafe Staff', email: 'cafe@deucepark.com', password: 'cafe', role: 'cafe_staff', vendorId: 'vendor-forest-cafe' },
+  { id: 'usr-gkm', name: 'Karting Manager', email: 'kartingmanager@deucepark.com', password: 'manager', role: 'go_karting_manager' },
+  { id: 'usr-gks', name: 'Karting Staff', email: 'kartingstaff@deucepark.com', password: 'staff', role: 'go_karting_staff' },
+  { id: 'usr-hrs', name: 'Horse Riding Arena Staff', email: 'horseriding@deucepark.com', password: 'staff', role: 'horse_riding_staff' },
+  { id: 'usr-sht', name: 'Precision Shooting Range Staff', email: 'shooting@deucepark.com', password: 'staff', role: 'shooting_staff' },
+  { id: 'usr-tcs', name: 'Ticket Counter Staff', email: 'ticketing@deucepark.com', password: 'staff', role: 'ticket_counter_staff' },
   { id: 'usr-customer-watson', name: 'John Watson', email: 'watson@baker.street', role: 'customer' }
 ];
 
