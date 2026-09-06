@@ -105,8 +105,10 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
 
   const priceAdult = horseActivity?.adultPrice ?? 45;
   const priceChild = horseActivity?.childPrice ?? 25;
+  const totalRiders = Math.max(1, adultCount + childCount);
+
   const bookingTotal = paymentMethod === 'complimentary' ? 0 : (selectedPkg 
-    ? selectedPkg.price 
+    ? selectedPkg.price * totalRiders
     : (adultCount * priceAdult) + (childCount * priceChild));
 
   const feedTreat = () => {
@@ -151,18 +153,20 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
       return;
     }
 
-    const details = `Horse: ${selectedHorse.name} (${selectedHorse.type}) | Route: ${selectedRoute.name}`;
+    const details = selectedPkg 
+      ? `Package: ${selectedPkg.name} | Horse: ${selectedHorse.name} (${selectedHorse.type}) | Route: ${selectedRoute.name}`
+      : `Horse: ${selectedHorse.name} (${selectedHorse.type}) | Route: ${selectedRoute.name} (${adultCount} Adult, ${childCount} Child)`;
 
     const finalizeBooking = () => {
       const result = createBooking({
         customerName, customerEmail, customerPhone,
         activityId: 'act-horse-riding',
-        activityName: 'Royal Horse Riding',
+        activityName: horseActivity?.name || 'Royal Horse Riding',
         date: bookingDate,
         timeSlot: selectedSlot,
-        ticketType: paymentMethod === 'complimentary' ? 'Complimentary VIP Pass' : 'standard',
+        ticketType: selectedPkg ? 'package' : 'standard',
         details,
-        quantity: adultCount + childCount,
+        quantity: totalRiders,
         totalAmount: paymentMethod === 'complimentary' ? 0 : bookingTotal,
         paymentMethod
       });
@@ -431,6 +435,37 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
             <form className="flex-1 flex flex-col justify-between" onSubmit={(e) => e.preventDefault()}>
               
               <div className="space-y-3">
+                {/* HORSE RIDING PACKAGE SELECTION */}
+                {packages.length > 0 && (
+                  <div className="space-y-2 mb-2">
+                    <label className="text-[10px] uppercase font-mono font-bold text-[#14F1D9] block">
+                      🎟️ Select Riding Package
+                    </label>
+                    <div className="grid grid-cols-1 gap-2">
+                      {packages.map(pkg => (
+                        <button
+                          key={pkg.id}
+                          type="button"
+                          onClick={() => setSelectedPkgId(pkg.id)}
+                          className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
+                            selectedPkgId === pkg.id
+                              ? 'bg-[#14F1D9]/10 border-[#14F1D9] text-white shadow-[0_0_10px_rgba(20,241,217,0.2)]'
+                              : 'bg-[#050816] border-white/5 text-white/70 hover:border-white/20'
+                          }`}
+                        >
+                          <div>
+                            <div className="font-bold text-xs text-white">{pkg.name}</div>
+                            <div className="text-[9px] text-[#9CA3AF] line-clamp-1">{pkg.description}</div>
+                          </div>
+                          <div className="text-right flex-shrink-0 ml-2">
+                            <div className="font-black text-xs text-[#14F1D9] font-mono">₹{pkg.price}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
                   <div className="flex-1 flex items-center justify-between p-2 bg-[#050816] rounded-xl border border-white/5">
                     <span className="font-bold text-[#9CA3AF] text-[10px] uppercase tracking-wider font-mono">Adult</span>
