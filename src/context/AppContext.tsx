@@ -565,19 +565,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
+  const persistActivities = (updatedList: Activity[]) => {
+    try {
+      localStorage.setItem('ap_activities', JSON.stringify(updatedList));
+    } catch (err) {
+      console.warn('[frontend] localStorage quota exception on persistActivities:', err);
+    }
+    fetch('/api/activities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedList)
+    }).catch(err => console.warn('[frontend] Failed to sync activities to backend:', err));
+  };
+
   const updateActivity = (act: Activity) => {
     setActivities(prev => {
       const updatedList = prev.map(item => item.id === act.id ? act : item);
-      try {
-        localStorage.setItem('ap_activities', JSON.stringify(updatedList));
-      } catch (err) {
-        console.warn('[frontend] localStorage quota exception on updateActivity:', err);
-      }
-      fetch('/api/activities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedList)
-      }).catch(() => {});
+      persistActivities(updatedList);
       return updatedList;
     });
 
@@ -587,7 +591,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteActivity = (id: string) => {
-    setActivities(prev => prev.filter(item => item.id !== id));
+    setActivities(prev => {
+      const updatedList = prev.filter(item => item.id !== id);
+      persistActivities(updatedList);
+      return updatedList;
+    });
 
     if (isSupabaseConfigured) {
       writeToLocalAndSync('activities', 'delete', { id });
@@ -599,108 +607,144 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // ==========================================
 
   const addActivityPhoto = (activityId: string, photo: Omit<ActivityPhoto, 'id' | 'uploadedAt' | 'order'>) => {
-    setActivities(prev => prev.map(act => {
-      if (act.id !== activityId) return act;
-      const existingPhotos = act.photos || [];
-      const newPhoto: ActivityPhoto = {
-        ...photo,
-        id: `photo-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        uploadedAt: new Date().toISOString(),
-        order: existingPhotos.length
-      };
-      const updated = { ...act, photos: [...existingPhotos, newPhoto] };
-      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
-      return updated;
-    }));
+    setActivities(prev => {
+      const updatedList = prev.map(act => {
+        if (act.id !== activityId) return act;
+        const existingPhotos = act.photos || [];
+        const newPhoto: ActivityPhoto = {
+          ...photo,
+          id: `photo-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          uploadedAt: new Date().toISOString(),
+          order: existingPhotos.length
+        };
+        const updated = { ...act, photos: [...existingPhotos, newPhoto] };
+        if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        return updated;
+      });
+      persistActivities(updatedList);
+      return updatedList;
+    });
   };
 
   const removeActivityPhoto = (activityId: string, photoId: string) => {
-    setActivities(prev => prev.map(act => {
-      if (act.id !== activityId) return act;
-      const filtered = (act.photos || []).filter(p => p.id !== photoId);
-      const reordered = filtered.map((p, idx) => ({ ...p, order: idx }));
-      const updated = {
-        ...act,
-        photos: reordered,
-        coverPhotoId: act.coverPhotoId === photoId ? undefined : act.coverPhotoId
-      };
-      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
-      return updated;
-    }));
+    setActivities(prev => {
+      const updatedList = prev.map(act => {
+        if (act.id !== activityId) return act;
+        const filtered = (act.photos || []).filter(p => p.id !== photoId);
+        const reordered = filtered.map((p, idx) => ({ ...p, order: idx }));
+        const updated = {
+          ...act,
+          photos: reordered,
+          coverPhotoId: act.coverPhotoId === photoId ? undefined : act.coverPhotoId
+        };
+        if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        return updated;
+      });
+      persistActivities(updatedList);
+      return updatedList;
+    });
   };
 
   const reorderActivityPhotos = (activityId: string, reorderedPhotos: ActivityPhoto[]) => {
-    setActivities(prev => prev.map(act => {
-      if (act.id !== activityId) return act;
-      const updated = { ...act, photos: reorderedPhotos.map((p, idx) => ({ ...p, order: idx })) };
-      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
-      return updated;
-    }));
+    setActivities(prev => {
+      const updatedList = prev.map(act => {
+        if (act.id !== activityId) return act;
+        const updated = { ...act, photos: reorderedPhotos.map((p, idx) => ({ ...p, order: idx })) };
+        if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        return updated;
+      });
+      persistActivities(updatedList);
+      return updatedList;
+    });
   };
 
   const setCoverPhoto = (activityId: string, photoId: string) => {
-    setActivities(prev => prev.map(act => {
-      if (act.id !== activityId) return act;
-      const photo = (act.photos || []).find(p => p.id === photoId);
-      const updated = {
-        ...act,
-        coverPhotoId: photoId,
-        // Also update the main image to the selected cover photo
-        image: photo ? photo.url : act.image
-      };
-      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
-      return updated;
-    }));
+    setActivities(prev => {
+      const updatedList = prev.map(act => {
+        if (act.id !== activityId) return act;
+        const photo = (act.photos || []).find(p => p.id === photoId);
+        const updated = {
+          ...act,
+          coverPhotoId: photoId,
+          // Also update the main image to the selected cover photo
+          image: photo ? photo.url : act.image
+        };
+        if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        return updated;
+      });
+      persistActivities(updatedList);
+      return updatedList;
+    });
   };
 
   const updateActivityExtended = (activityId: string, fields: Partial<Pick<Activity, 'shortDescription' | 'detailedDescription' | 'duration' | 'ageRequirement' | 'rules' | 'isActive' | 'displayOrder'>>) => {
-    setActivities(prev => prev.map(act => {
-      if (act.id !== activityId) return act;
-      const updated = { ...act, ...fields };
-      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
-      return updated;
-    }));
+    setActivities(prev => {
+      const updatedList = prev.map(act => {
+        if (act.id !== activityId) return act;
+        const updated = { ...act, ...fields };
+        if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        return updated;
+      });
+      persistActivities(updatedList);
+      return updatedList;
+    });
   };
 
   const addActivityOffer = (activityId: string, offer: Omit<ActivityOffer, 'id' | 'createdAt'>) => {
-    setActivities(prev => prev.map(act => {
-      if (act.id !== activityId) return act;
-      const newOffer: ActivityOffer = {
-        ...offer,
-        id: `offer-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        createdAt: new Date().toISOString()
-      };
-      const updated = { ...act, offers: [...(act.offers || []), newOffer] };
-      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
-      return updated;
-    }));
+    setActivities(prev => {
+      const updatedList = prev.map(act => {
+        if (act.id !== activityId) return act;
+        const newOffer: ActivityOffer = {
+          ...offer,
+          id: `offer-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          createdAt: new Date().toISOString()
+        };
+        const updated = { ...act, offers: [...(act.offers || []), newOffer] };
+        if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        return updated;
+      });
+      persistActivities(updatedList);
+      return updatedList;
+    });
   };
 
   const updateActivityOffer = (activityId: string, offer: ActivityOffer) => {
-    setActivities(prev => prev.map(act => {
-      if (act.id !== activityId) return act;
-      const updated = { ...act, offers: (act.offers || []).map(o => o.id === offer.id ? offer : o) };
-      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
-      return updated;
-    }));
+    setActivities(prev => {
+      const updatedList = prev.map(act => {
+        if (act.id !== activityId) return act;
+        const updated = { ...act, offers: (act.offers || []).map(o => o.id === offer.id ? offer : o) };
+        if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        return updated;
+      });
+      persistActivities(updatedList);
+      return updatedList;
+    });
   };
 
   const deleteActivityOffer = (activityId: string, offerId: string) => {
-    setActivities(prev => prev.map(act => {
-      if (act.id !== activityId) return act;
-      const updated = { ...act, offers: (act.offers || []).filter(o => o.id !== offerId) };
-      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
-      return updated;
-    }));
+    setActivities(prev => {
+      const updatedList = prev.map(act => {
+        if (act.id !== activityId) return act;
+        const updated = { ...act, offers: (act.offers || []).filter(o => o.id !== offerId) };
+        if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        return updated;
+      });
+      persistActivities(updatedList);
+      return updatedList;
+    });
   };
 
   const setOfferActive = (activityId: string, offerId: string, active: boolean) => {
-    setActivities(prev => prev.map(act => {
-      if (act.id !== activityId) return act;
-      const updated = { ...act, offers: (act.offers || []).map(o => o.id === offerId ? { ...o, isActive: active } : o) };
-      if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
-      return updated;
-    }));
+    setActivities(prev => {
+      const updatedList = prev.map(act => {
+        if (act.id !== activityId) return act;
+        const updated = { ...act, offers: (act.offers || []).map(o => o.id === offerId ? { ...o, isActive: active } : o) };
+        if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        return updated;
+      });
+      persistActivities(updatedList);
+      return updatedList;
+    });
   };
 
   // User Management
