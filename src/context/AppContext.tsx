@@ -461,25 +461,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     loadDataFromSupabase();
   }, []);
 
-  // Fetch backend persisted domain stores on startup
+  // Fetch backend persisted domain stores on startup (only if Supabase is NOT configured)
   useEffect(() => {
-    fetch('/api/activities')
-      .then(res => res.json())
-      .then(serverActivities => {
-        if (Array.isArray(serverActivities) && serverActivities.length > 0) {
-          setActivities(prev => {
-            const map = new Map<string, Activity>();
-            prev.forEach(existing => map.set(existing.id, existing));
-            serverActivities.forEach((sa: Activity) => map.set(sa.id, sa));
-            const mergedList = Array.from(map.values());
-            try {
-              localStorage.setItem('ap_activities', JSON.stringify(mergedList));
-            } catch (err) {}
-            return mergedList;
-          });
-        }
-      })
-      .catch(err => console.warn('[frontend] Backend activities sync not available:', err));
+    if (!isSupabaseConfigured) {
+      fetch('/api/activities')
+        .then(res => res.json())
+        .then(serverActivities => {
+          if (Array.isArray(serverActivities) && serverActivities.length > 0) {
+            setActivities(prev => {
+              const map = new Map<string, Activity>();
+              prev.forEach(existing => map.set(existing.id, existing));
+              serverActivities.forEach((sa: Activity) => map.set(sa.id, sa));
+              const mergedList = Array.from(map.values());
+              try {
+                localStorage.setItem('ap_activities', JSON.stringify(mergedList));
+              } catch (err) {}
+              return mergedList;
+            });
+          }
+        })
+        .catch(err => console.warn('[frontend] Backend activities sync not available:', err));
+    }
 
     fetch('/api/menu-items')
       .then(res => res.json())
@@ -623,7 +625,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ...act,
       id: `act-dynamic-${Date.now()}`
     };
-    setActivities(prev => [...prev, newAct]);
+    setActivities(prev => {
+      const updatedList = [...prev, newAct];
+      persistActivities(updatedList);
+      return updatedList;
+    });
 
     if (isSupabaseConfigured) {
       writeToLocalAndSync('activities', 'insert', newAct);
