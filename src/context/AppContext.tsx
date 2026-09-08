@@ -667,33 +667,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       // 2. Fetch current record to audit price changes
       const { data: oldDbAct } = await supabase!.from('activities').select('*').eq('id', act.id).single();
 
-      // 3. Write directly to Supabase and await database confirmation
+      // 3. Write directly to Supabase using UPSERT (handles existing rows and missing rows seamlessly)
+      const strictBasePayload = {
+        id: act.id,
+        name: act.name,
+        description: act.description,
+        adultPrice: act.adultPrice,
+        childPrice: act.childPrice,
+        image: act.image,
+        dailyLimit: act.dailyLimit,
+        safetyInstructions: act.safetyInstructions,
+        packages: act.packages,
+        type: act.type
+      };
+
       let { data: updatedDbRow, error } = await supabase!
         .from('activities')
-        .update(act)
-        .eq('id', act.id)
+        .upsert(act, { onConflict: 'id' })
         .select()
         .single();
 
-      // If full payload fails due to schema/column mismatch, fall back immediately to strict base columns
+      // If full payload fails due to schema/column mismatch or constraint, fall back to strict base columns with upsert
       if (error) {
-        console.warn('[updateActivity] Full update failed, falling back to strict base columns:', error.message);
-        const strictBasePayload = {
-          id: act.id,
-          name: act.name,
-          description: act.description,
-          adultPrice: act.adultPrice,
-          childPrice: act.childPrice,
-          image: act.image,
-          dailyLimit: act.dailyLimit,
-          safetyInstructions: act.safetyInstructions,
-          packages: act.packages,
-          type: act.type
-        };
+        console.warn('[updateActivity] Full upsert failed, falling back to strict base columns:', error.message);
         const fallbackRes = await supabase!
           .from('activities')
-          .update(strictBasePayload)
-          .eq('id', act.id)
+          .upsert(strictBasePayload, { onConflict: 'id' })
           .select()
           .single();
         
@@ -702,7 +701,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       if (error) {
-        console.error('[updateActivity] Database update failed:', error);
+        console.error('[updateActivity] Database upsert failed:', error);
         throw new Error(`Failed to save package changes to database: ${error.message}`);
       }
 
