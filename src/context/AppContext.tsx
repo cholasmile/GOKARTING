@@ -668,12 +668,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const { data: oldDbAct } = await supabase!.from('activities').select('*').eq('id', act.id).single();
 
       // 3. Write directly to Supabase and await database confirmation
-      const { data: updatedDbRow, error } = await supabase!
+      let { data: updatedDbRow, error } = await supabase!
         .from('activities')
         .update(act)
         .eq('id', act.id)
         .select()
         .single();
+
+      if (error && (error.message.includes('column') || error.message.includes('schema cache'))) {
+        console.warn('[updateActivity] Extended columns missing in Supabase schema, falling back to base columns:', error.message);
+        const basePayload = {
+          id: act.id,
+          name: act.name,
+          description: act.description,
+          adultPrice: act.adultPrice,
+          childPrice: act.childPrice,
+          image: act.image,
+          dailyLimit: act.dailyLimit,
+          safetyInstructions: act.safetyInstructions,
+          packages: act.packages,
+          type: act.type
+        };
+        const fallbackRes = await supabase!
+          .from('activities')
+          .update(basePayload)
+          .eq('id', act.id)
+          .select()
+          .single();
+        
+        updatedDbRow = fallbackRes.data;
+        error = fallbackRes.error;
+      }
 
       if (error) {
         console.error('[updateActivity] Database update failed:', error);
