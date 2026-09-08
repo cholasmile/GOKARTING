@@ -283,8 +283,21 @@ export const AdminDashboard: React.FC = () => {
   // -----------------------------------------------------------------
   // HANDLERS FOR CRUD
   // -----------------------------------------------------------------
-  const handleSaveActivity = (e: React.FormEvent) => {
+  const handleSaveActivity = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Package Validation
+    for (const pkg of activityForm.packages) {
+      if (!pkg.name || !pkg.name.trim()) {
+        alert("Package name cannot be empty.");
+        return;
+      }
+      if (typeof pkg.price !== 'number' || !Number.isFinite(pkg.price) || pkg.price < 0) {
+        alert(`Invalid price for package "${pkg.name}". Price must be a non-negative number.`);
+        return;
+      }
+    }
+
     const safety = activityForm.safetyInstructionsString
       .split('\n')
       .map(s => s.trim())
@@ -294,45 +307,49 @@ export const AdminDashboard: React.FC = () => {
       ? activityForm.image.trim()
       : 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80';
 
-    if (editingActivity) {
-      updateActivity({
-        ...editingActivity,
-        name: activityForm.name,
-        description: activityForm.description,
-        adultPrice: Number(activityForm.adultPrice),
-        childPrice: Number(activityForm.childPrice),
-        dailyLimit: Number(activityForm.dailyLimit),
-        image: defaultImage,
-        safetyInstructions: safety,
-        packages: activityForm.packages
-      });
-    } else {
-      addActivity({
-        name: activityForm.name,
-        description: activityForm.description,
-        adultPrice: Number(activityForm.adultPrice),
-        childPrice: Number(activityForm.childPrice),
-        dailyLimit: Number(activityForm.dailyLimit),
-        image: defaultImage,
-        safetyInstructions: safety,
-        type: 'dynamic',
-        packages: activityForm.packages
-      });
-    }
+    try {
+      if (editingActivity) {
+        await updateActivity({
+          ...editingActivity,
+          name: activityForm.name,
+          description: activityForm.description,
+          adultPrice: Number(activityForm.adultPrice),
+          childPrice: Number(activityForm.childPrice),
+          dailyLimit: Number(activityForm.dailyLimit),
+          image: defaultImage,
+          safetyInstructions: safety,
+          packages: activityForm.packages
+        });
+      } else {
+        addActivity({
+          name: activityForm.name,
+          description: activityForm.description,
+          adultPrice: Number(activityForm.adultPrice),
+          childPrice: Number(activityForm.childPrice),
+          dailyLimit: Number(activityForm.dailyLimit),
+          image: defaultImage,
+          safetyInstructions: safety,
+          type: 'dynamic',
+          packages: activityForm.packages
+        });
+      }
 
-    setIsActivityModalOpen(false);
-    setEditingActivity(null);
-    setActivityForm({
-      name: '',
-      description: '',
-      adultPrice: 30,
-      childPrice: 15,
-      dailyLimit: 50,
-      image: '',
-      type: 'dynamic',
-      safetyInstructionsString: '',
-      packages: []
-    });
+      setIsActivityModalOpen(false);
+      setEditingActivity(null);
+      setActivityForm({
+        name: '',
+        description: '',
+        adultPrice: 30,
+        childPrice: 15,
+        dailyLimit: 50,
+        image: '',
+        type: 'dynamic',
+        safetyInstructionsString: '',
+        packages: []
+      });
+    } catch (err: any) {
+      alert(`Failed to save package price: ${err.message || String(err)}`);
+    }
   };
 
   const handleEditActivityClick = (act: Activity) => {

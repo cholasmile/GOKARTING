@@ -133,6 +133,18 @@ export const CustomerDashboard: React.FC = () => {
   // 1. ACTIVITY BOOKING FLOW STATES
   // -----------------------------------------------------------------
   const [selectedActivity, setSelectedActivity] = useState<Activity>(activities[0] || null);
+
+  useEffect(() => {
+    if (selectedActivity) {
+      const updated = activities.find(a => a.id === selectedActivity.id);
+      if (updated) {
+        setSelectedActivity(updated);
+      }
+    } else if (activities.length > 0) {
+      setSelectedActivity(activities[0]);
+    }
+  }, [activities]);
+
   const [bookingDate, setBookingDate] = useState<string>(() => getTodayDateString());
   
   const availableSlots = getAvailableTimeSlots(bookingDate);
@@ -271,7 +283,8 @@ export const CustomerDashboard: React.FC = () => {
       details: isComplimentaryPass ? `${details} (VIP Compliment)` : details,
       quantity: qty,
       totalAmount: isComplimentaryPass ? 0 : bookingTotal,
-      paymentMethod: isComplimentaryPass ? 'complimentary' : paymentMethod
+      paymentMethod: isComplimentaryPass ? 'complimentary' : paymentMethod,
+      packageId: bookingType === 'package' ? selectedPackageId : undefined
     });
 
     if (typeof result === 'string') {

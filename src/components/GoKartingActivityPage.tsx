@@ -41,18 +41,10 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
     { id: 'kart-volt', name: 'Storm Volt Electric', engine: 'Dual Lithium High-Torque', topSpeed: 82, accel: 3.7, desc: 'Eco-friendly hyper-acceleration with boost buttons and computerized vectoring.', image: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=400&q=80' }
   ];
 
-  const defaultPackages: KartPackage[] = [
-    { id: 'pkg-kart-single', name: 'Single Rider Experience (10 Mins)', price: 100, description: 'Classic single-seat session. Includes complete electronic lap-time reporting.' },
-    { id: 'pkg-kart-double', name: 'Double Co-Pilot Ride (10 Mins)', price: 150, description: 'Twin-seater kart. Great for parent and child side-by-side racing.' },
-    { id: 'pkg-kart-race', name: 'Grand Prix Tournament (30 Mins)', price: 250, description: 'Warm-up lap, 5-minute qualification round, and 12-lap medal grand finale.' }
-  ];
-
-  const packages: KartPackage[] = (kartingActivity?.packages && kartingActivity.packages.length > 0)
-    ? kartingActivity.packages
-    : defaultPackages;
+  const packages: KartPackage[] = kartingActivity?.packages || [];
 
   const [selectedKart, setSelectedKart] = useState<KartType>(karts[0]);
-  const [selectedPackage, setSelectedPackage] = useState<KartPackage>(packages[0] || defaultPackages[0]);
+  const [selectedPackage, setSelectedPackage] = useState<KartPackage | null>(packages[0] || null);
 
   React.useEffect(() => {
     if (packages.length > 0) {
@@ -62,6 +54,8 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
       } else {
         setSelectedPackage(packages[0]);
       }
+    } else {
+      setSelectedPackage(null);
     }
   }, [packages]);
   const [bookingQuantity, setBookingQuantity] = useState<number>(1);
@@ -97,7 +91,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successBooking, setSuccessBooking] = useState<any | null>(null);
 
-  const bookingTotal = paymentMethod === 'complimentary' ? 0 : selectedPackage.price * bookingQuantity;
+  const bookingTotal = (paymentMethod === 'complimentary' || !selectedPackage) ? 0 : selectedPackage.price * bookingQuantity;
 
   const calculateTuningSpecs = () => {
     let topSpeed = selectedKart.topSpeed;
@@ -151,6 +145,11 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
     setErrorMessage(null);
     setSuccessBooking(null);
 
+    if (!selectedPackage) {
+      setErrorMessage('No package selected or package pricing unavailable.');
+      return;
+    }
+
     if (!customerName.trim() || !customerPhone.trim()) {
       setErrorMessage('Full Name and Phone Number are required.');
       return;
@@ -166,12 +165,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
       return;
     }
 
-    if (bookingTotal <= 0) {
-      setErrorMessage('Please select a valid tournament package.');
-      return;
-    }
-
-    const details = `Kart: ${selectedKart.name} | Setup: ${tireCompound.toUpperCase()} Tires, ${aeroWing.toUpperCase()} Wing | Pkg: ${selectedPackage.name}`;
+    const details = `Setup: ${tireCompound.toUpperCase()} Tires, ${aeroWing.toUpperCase()} Wing | Pkg: ${selectedPackage.name}`;
 
     const finalizeBooking = () => {
       const result = createBooking({
@@ -184,7 +178,8 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
         details,
         quantity: bookingQuantity,
         totalAmount: paymentMethod === 'complimentary' ? 0 : bookingTotal,
-        paymentMethod
+        paymentMethod,
+        packageId: selectedPackage.id
       });
   
       if (typeof result === 'string') {
@@ -266,64 +261,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
         {/* LEFT COLUMN: KARTS, TUNING, SIMULATOR */}
         <div className="flex-1 min-w-0 flex flex-col justify-between gap-5 h-full overflow-y-auto pr-2 custom-scrollbar">
           
-          {/* 1. ACTIVITY PHOTO GALLERY (If uploaded by Admin) */}
-          {kartingActivity?.photos && kartingActivity.photos.length > 0 && (
-            <section className="flex-shrink-0 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1.5 h-4 bg-[#14F1D9] rounded-full shadow-[0_0_5px_#14F1D9]"></div>
-                <h2 className="text-lg font-black text-white tracking-tight">Official Track Gallery</h2>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {kartingActivity.photos.map((photo) => (
-                  <div key={photo.id} className="relative rounded-xl overflow-hidden group border border-white/10 h-28 bg-[#050816]">
-                    <img src={photo.url} alt={photo.caption || 'Track Photo'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                    {photo.caption && (
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2 opacity-90">
-                        <span className="text-[10px] text-white font-medium truncate">{photo.caption}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
 
-          {/* 2. KART SELECTION */}
-          <section className="flex-shrink-0">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-1.5 h-4 bg-[#14F1D9] rounded-full shadow-[0_0_5px_#14F1D9]"></div>
-              <h2 className="text-lg font-black text-white tracking-tight">Select Chassis</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {karts.map((kart) => (
-                <motion.div 
-                  key={kart.id}
-                  whileHover={{ y: -2 }}
-                  onClick={() => setSelectedKart(kart)}
-                  className={`relative rounded-xl overflow-hidden cursor-pointer transition-all duration-300 ${
-                    selectedKart.id === kart.id 
-                      ? 'ring-2 ring-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.2)]' 
-                      : 'ring-1 ring-white/10 hover:ring-white/30'
-                  }`}
-                >
-                  <div className="h-28 w-full relative">
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] to-transparent z-10"></div>
-                    <img src={kart.image} alt={kart.name} className="w-full h-full object-cover filter saturate-150" />
-                    <div className="absolute top-2 right-2 z-20">
-                      <span className="px-1.5 py-0.5 bg-[#050816]/80 backdrop-blur-sm border border-[#14F1D9]/50 rounded text-[9px] font-mono font-black text-[#14F1D9]">
-                        {kart.topSpeed} KM/H
-                      </span>
-                    </div>
-                  </div>
-                  <div className={`p-3 bg-[#0B1120] h-full ${selectedKart.id === kart.id ? 'bg-gradient-to-b from-[#0B1120] to-[#14F1D9]/10' : ''}`}>
-                    <h3 className="font-black text-sm text-white mb-0.5 tracking-tight">{kart.name}</h3>
-                    <p className="text-[9px] text-[#00B4FF] font-mono font-bold uppercase tracking-wider mb-1.5">{kart.engine}</p>
-                    <p className="text-[10px] text-[#9CA3AF] leading-snug line-clamp-2">{kart.desc}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </section>
 
           {/* 3. TUNING & TELEMETRY */}
           <section className="flex-shrink-0">
@@ -622,26 +560,32 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
               <Award className="w-4 h-4 text-[#FFB703]" /> Select Package
             </h3>
             <div className="space-y-2">
-              {packages.map(pkg => (
-                <button
-                  key={pkg.id}
-                  onClick={() => setSelectedPackage(pkg)}
-                  className={`w-full text-left p-3 rounded-xl transition-all duration-300 border relative overflow-hidden group cursor-pointer ${
-                    selectedPackage.id === pkg.id 
-                      ? 'bg-[#FFB703]/10 border-[#FFB703]/50 shadow-[0_0_15px_rgba(255,183,3,0.15)]' 
-                      : 'bg-[#050816] border-white/5 hover:border-white/20'
-                  }`}
-                >
-                  {selectedPackage.id === pkg.id && (
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-[#FFB703]/20 rounded-full blur-[20px] pointer-events-none"></div>
-                  )}
-                  <div className="flex justify-between items-start mb-1 relative z-10">
-                    <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
-                    <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
-                  </div>
-                  <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1">{pkg.description}</p>
-                </button>
-              ))}
+              {packages.length === 0 ? (
+                <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs font-semibold text-center">
+                  No packages configured for this activity in the database.
+                </div>
+              ) : (
+                packages.map(pkg => (
+                  <button
+                    key={pkg.id}
+                    onClick={() => setSelectedPackage(pkg)}
+                    className={`w-full text-left p-3 rounded-xl transition-all duration-300 border relative overflow-hidden group cursor-pointer ${
+                      selectedPackage?.id === pkg.id 
+                        ? 'bg-[#FFB703]/10 border-[#FFB703]/50 shadow-[0_0_15px_rgba(255,183,3,0.15)]' 
+                        : 'bg-[#050816] border-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    {selectedPackage?.id === pkg.id && (
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-[#FFB703]/20 rounded-full blur-[20px] pointer-events-none"></div>
+                    )}
+                    <div className="flex justify-between items-start mb-1 relative z-10">
+                      <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage?.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
+                      <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
+                    </div>
+                    <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1">{pkg.description}</p>
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
@@ -789,7 +733,6 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                   <div className="flex-1 p-5 bg-[#050816] rounded-xl border border-white/10 text-xs text-white text-left space-y-3 font-mono shadow-inner">
                     <div className="flex justify-between items-center border-b border-white/5 pb-2"><span className="text-[#9CA3AF] font-bold">Ticket ID</span> <span className="font-black text-[#14F1D9]">TKT-{successBooking.booking.id}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Activity</span> <span className="font-bold">Pro Go-Karting</span></div>
-                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Chassis</span> <span className="font-bold truncate max-w-[120px] text-right">{selectedKart.name}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Racers</span> <span className="font-bold">{bookingQuantity}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Session</span> <span className="font-bold">{bookingDate} @ {selectedSlot}</span></div>
                     {successBooking.booking.paymentStatus === 'pending' && (

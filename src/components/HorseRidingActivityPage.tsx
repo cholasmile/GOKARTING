@@ -65,19 +65,11 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
     { id: 'route-river', name: 'Riverfront Canopy', duration: '1.0 Hr', difficulty: 'Easy', description: 'A completely flat route exploring the scenic wetlands.', scenicPoints: ['Heron Flat', 'Sandy Shallows'] }
   ];
 
-  const defaultPackages: HorsePackage[] = [
-    { id: 'pkg-horse-pony', name: 'Pony Walk (15 Mins)', price: 25, description: 'Gentle pony lead walk on flat trails — perfect for young children.' },
-    { id: 'pkg-horse-guided', name: 'Guided Trail Ride (30 Mins)', price: 45, description: 'Scenic guided nature trail ride with an experienced handler.' },
-    { id: 'pkg-horse-advanced', name: 'Advanced Forest Trek (60 Mins)', price: 80, description: 'Full forest trail with trotting/cantering for confident riders.' }
-  ];
-
-  const packages: HorsePackage[] = (horseActivity?.packages && horseActivity.packages.length > 0)
-    ? horseActivity.packages
-    : defaultPackages;
+  const packages: HorsePackage[] = horseActivity?.packages || [];
 
   const [selectedHorse, setSelectedHorse] = useState<HorseBreed>(horses[0]);
   const [selectedRoute, setSelectedRoute] = useState<TrailRoute>(routes[0]);
-  const [selectedPackage, setSelectedPackage] = useState<HorsePackage>(packages[0] || defaultPackages[0]);
+  const [selectedPackage, setSelectedPackage] = useState<HorsePackage | null>(packages[0] || null);
 
   React.useEffect(() => {
     if (packages.length > 0) {
@@ -87,6 +79,8 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
       } else {
         setSelectedPackage(packages[0]);
       }
+    } else {
+      setSelectedPackage(null);
     }
   }, [packages]);
 
@@ -138,10 +132,15 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
     }, 5500);
   };
 
-  const handleBookingSubmit = (e: React.FormEvent) => {
+  const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessBooking(null);
+
+    if (!selectedPackage) {
+      setErrorMessage('No package selected or package pricing unavailable.');
+      return;
+    }
 
     if (!customerName.trim() || !customerPhone.trim()) {
       setErrorMessage('Full Name and Phone Number are required.');
@@ -163,7 +162,7 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
       return;
     }
 
-    const details = `Package: ${selectedPackage.name} | Horse: ${selectedHorse.name} (${selectedHorse.type}) | Route: ${selectedRoute.name}`;
+    const details = `Package: ${selectedPackage.name} | Route: ${selectedRoute.name}`;
 
     const finalizeBooking = () => {
       const result = createBooking({
@@ -176,7 +175,8 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
         details,
         quantity: packageQuantity,
         totalAmount: paymentMethod === 'complimentary' ? 0 : bookingTotal,
-        paymentMethod
+        paymentMethod,
+        packageId: selectedPackage.id
       });
   
       if (typeof result === 'string') {
@@ -246,68 +246,9 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
         {/* LEFT COLUMN: HORSES, BONDING, SIMULATOR */}
         <div className="flex-1 min-w-0 flex flex-col justify-between gap-5 h-full overflow-y-auto pr-2 custom-scrollbar">
           
-          {/* 1. ACTIVITY PHOTO GALLERY (If uploaded by Admin) */}
-          {horseActivity?.photos && horseActivity.photos.length > 0 && (
-            <section className="flex-shrink-0 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1.5 h-4 bg-[#14F1D9] rounded-full shadow-[0_0_5px_#14F1D9]"></div>
-                <h2 className="text-lg font-black text-white tracking-tight">Equestrian Trail Gallery</h2>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {horseActivity.photos.map((photo) => (
-                  <div key={photo.id} className="relative rounded-xl overflow-hidden group border border-white/10 h-28 bg-[#050816]">
-                    <img src={photo.url} alt={photo.caption || 'Trail Photo'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                    {photo.caption && (
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2 opacity-90">
-                        <span className="text-[10px] text-white font-medium truncate">{photo.caption}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
 
-          {/* 2. COMPANION SELECTION */}
-          <section className="flex-shrink-0">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-1.5 h-4 bg-[#14F1D9] rounded-full shadow-[0_0_5px_#14F1D9]"></div>
-              <h2 className="text-lg font-black text-white tracking-tight">Select Companion</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {horses.map((horse) => (
-                <motion.div 
-                  key={horse.id}
-                  whileHover={{ y: -2 }}
-                  onClick={() => {
-                    setSelectedHorse(horse);
-                    setBondLevel(40 + Math.floor(Math.random() * 15));
-                    setBondState(`You met ${horse.name}. Feed it!`);
-                  }}
-                  className={`relative rounded-xl overflow-hidden cursor-pointer transition-all duration-300 ${
-                    selectedHorse.id === horse.id 
-                      ? 'ring-2 ring-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.2)]' 
-                      : 'ring-1 ring-white/10 hover:ring-white/30'
-                  }`}
-                >
-                  <div className="h-28 w-full relative">
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] to-transparent z-10"></div>
-                    <img src={horse.image} alt={horse.name} className="w-full h-full object-cover filter saturate-150" />
-                    <div className="absolute top-2 right-2 z-20">
-                      <span className="px-1.5 py-0.5 bg-[#050816]/80 backdrop-blur-sm border border-[#14F1D9]/50 rounded text-[9px] font-mono font-black text-[#14F1D9] uppercase">
-                        {horse.spirit}
-                      </span>
-                    </div>
-                  </div>
-                  <div className={`p-3 bg-[#0B1120] h-full ${selectedHorse.id === horse.id ? 'bg-gradient-to-b from-[#0B1120] to-[#14F1D9]/10' : ''}`}>
-                    <h3 className="font-black text-sm text-white mb-0.5 tracking-tight truncate">{horse.name}</h3>
-                    <p className="text-[9px] text-[#00B4FF] font-mono font-bold uppercase tracking-wider mb-1.5 truncate">{horse.type}</p>
-                    <p className="text-[10px] text-[#9CA3AF] leading-snug line-clamp-2 truncate">{horse.temperament}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </section>
+
+
 
           {/* 3. STABLE PROFILE & BONDING */}
           <section className="flex-shrink-0">
@@ -406,29 +347,35 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
               <Compass className="w-4 h-4 text-[#FFB703]" /> Select Riding Package
             </h3>
             <div className="space-y-2">
-              {packages.map(pkg => (
-                <button
-                  key={pkg.id}
-                  onClick={() => setSelectedPackage(pkg)}
-                  className={`w-full text-left p-3 rounded-xl transition-all duration-300 border relative overflow-hidden group cursor-pointer ${
-                    selectedPackage.id === pkg.id 
-                      ? 'bg-[#FFB703]/10 border-[#FFB703]/50 shadow-[0_0_15px_rgba(255,183,3,0.15)]' 
-                      : 'bg-[#050816] border-white/5 hover:border-white/20'
-                  }`}
-                >
-                  {selectedPackage.id === pkg.id && (
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-[#FFB703]/20 rounded-full blur-[20px] pointer-events-none"></div>
-                  )}
-                  <div className="flex justify-between items-start mb-1 relative z-10">
-                    <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
-                    <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
-                  </div>
-                  <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1 mb-1.5">{pkg.description}</p>
-                  <div className="text-[9px] font-mono text-[#14F1D9] relative z-10 uppercase font-bold">
-                    <span>🐎 Includes Guided Handler & Riding Gear</span>
-                  </div>
-                </button>
-              ))}
+              {packages.length === 0 ? (
+                <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs font-semibold text-center">
+                  No packages configured for this activity in the database.
+                </div>
+              ) : (
+                packages.map(pkg => (
+                  <button
+                    key={pkg.id}
+                    onClick={() => setSelectedPackage(pkg)}
+                    className={`w-full text-left p-3 rounded-xl transition-all duration-300 border relative overflow-hidden group cursor-pointer ${
+                      selectedPackage?.id === pkg.id 
+                        ? 'bg-[#FFB703]/10 border-[#FFB703]/50 shadow-[0_0_15px_rgba(255,183,3,0.15)]' 
+                        : 'bg-[#050816] border-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    {selectedPackage?.id === pkg.id && (
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-[#FFB703]/20 rounded-full blur-[20px] pointer-events-none"></div>
+                    )}
+                    <div className="flex justify-between items-start mb-1 relative z-10">
+                      <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage?.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
+                      <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
+                    </div>
+                    <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1 mb-1.5">{pkg.description}</p>
+                    <div className="text-[9px] font-mono text-[#14F1D9] relative z-10 uppercase font-bold">
+                      <span>🐎 Includes Guided Handler & Riding Gear</span>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
@@ -574,7 +521,7 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
                     <div className="flex justify-between items-center border-b border-white/5 pb-2"><span className="text-[#9CA3AF] font-bold">Ticket ID</span> <span className="font-black text-[#14F1D9]">TKT-{successBooking.booking.id}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Activity</span> <span className="font-bold">Royal Trails</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Trail</span> <span className="font-bold truncate max-w-[120px] text-right">{selectedRoute.name}</span></div>
-                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Riders</span> <span className="font-bold">{adultCount + childCount}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Riders</span> <span className="font-bold">{packageQuantity}</span></div>
                     <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Session</span> <span className="font-bold">{bookingDate} @ {selectedSlot}</span></div>
                     {successBooking.booking.paymentStatus === 'pending' && (
                       <div className="flex justify-between items-center border-t border-white/5 pt-2"><span className="text-[#9CA3AF] font-bold">Amount Due</span> <span className="font-black text-amber-400">₹{bookingTotal.toFixed(2)} (Cash)</span></div>

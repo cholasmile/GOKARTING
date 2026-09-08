@@ -492,6 +492,71 @@ app.get('/api/razorpay/payments', async (req, res) => {
   }
 });
 
+// ─── DOMAIN STORES PERSISTENCE ─────────────────────────────────────────
+const createJsonStore = (filename, defaultVal = []) => {
+  const filePath = path.join(__dirname, filename);
+  const tmpPath = path.join('/tmp', filename);
+  let memoryCache = null;
+  return {
+    get: () => {
+      if (memoryCache && memoryCache.length > 0) return memoryCache;
+      try {
+        if (fs.existsSync(filePath)) {
+          memoryCache = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          return memoryCache;
+        }
+        if (fs.existsSync(tmpPath)) {
+          memoryCache = JSON.parse(fs.readFileSync(tmpPath, 'utf8'));
+          return memoryCache;
+        }
+      } catch (e) {
+        console.error(`[backend] Failed reading ${filename}:`, e);
+      }
+      return defaultVal;
+    },
+    set: (data) => {
+      if (!Array.isArray(data)) return false;
+      memoryCache = data;
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+      } catch (e) {}
+      try {
+        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+      } catch (e) {}
+      return true;
+    }
+  };
+};
+
+const menuItemsStore = createJsonStore('menu_items_store.json', []);
+const vendorsStore = createJsonStore('vendors_store.json', []);
+const inventoryStore = createJsonStore('inventory_store.json', []);
+const usersStore = createJsonStore('users_store.json', []);
+
+app.get('/api/menu-items', (req, res) => res.json(menuItemsStore.get()));
+app.post('/api/menu-items', (req, res) => {
+  if (menuItemsStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
+app.get('/api/vendors', (req, res) => res.json(vendorsStore.get()));
+app.post('/api/vendors', (req, res) => {
+  if (vendorsStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
+app.get('/api/inventory', (req, res) => res.json(inventoryStore.get()));
+app.post('/api/inventory', (req, res) => {
+  if (inventoryStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
+app.get('/api/users', (req, res) => res.json(usersStore.get()));
+app.post('/api/users', (req, res) => {
+  if (usersStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
 // ─── ACTIVITIES BACKEND PERSISTENCE ─────────────────────────────────────────
 const persistentActivitiesFile = path.join(__dirname, 'activities_store.json');
 const tmpActivitiesPath = path.join('/tmp', 'activities.json');
@@ -522,6 +587,18 @@ app.post('/api/activities', (req, res) => {
   try {
     const activities = req.body;
     if (Array.isArray(activities) && activities.length > 0) {
+      for (const act of activities) {
+        if (Array.isArray(act.packages)) {
+          for (const pkg of act.packages) {
+            if (!pkg.name || typeof pkg.name !== 'string' || !pkg.name.trim()) {
+              return res.status(400).json({ success: false, message: `Package name is required for activity ${act.name || act.id}` });
+            }
+            if (typeof pkg.price !== 'number' || !Number.isFinite(pkg.price) || pkg.price < 0) {
+              return res.status(400).json({ success: false, message: `Invalid package price (${pkg.price}) for ${pkg.name}` });
+            }
+          }
+        }
+      }
       inMemoryActivities = activities;
       try {
         fs.writeFileSync(persistentActivitiesFile, JSON.stringify(activities, null, 2), 'utf8');

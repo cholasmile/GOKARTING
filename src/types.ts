@@ -83,7 +83,7 @@ export interface Booking {
   activityName: string;
   date: string;
   timeSlot: string;
-  ticketType: 'standard' | 'package';
+  ticketType: 'standard' | 'package' | string;
   details: string; // e.g. "2x Adult, 1x Child" or "Package: Sharp Shooter (25 shots)"
   quantity: number;
   totalAmount: number;
@@ -99,6 +99,9 @@ export interface Booking {
   paymentStatus: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded';
   bookingDate: string;
   status?: 'confirmed' | 'reserved' | 'cancelled';
+  packageId?: string;
+  packageName?: string;
+  unitPrice?: number;
 }
 
 export interface Ticket {
@@ -120,6 +123,9 @@ export interface Ticket {
   refundedBy?: string;
   scannedAt?: string;
   scannedBy?: string;
+  packageId?: string;
+  packageName?: string;
+  unitPrice?: number;
 }
 
 export interface FoodVendor {
@@ -179,7 +185,7 @@ export interface Payment {
   orderId?: string;
   bookingId?: string;
   amount: number;
-  method: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay';
+  method: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay' | 'complimentary';
   status: 'success' | 'failed' | 'pending' | 'processing' | 'paid' | 'cancelled' | 'refunded';
   transactionId: string;
   timestamp: string;

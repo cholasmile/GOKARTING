@@ -32,17 +32,9 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
   const { createBooking, timeSlots, activities, razorpayKeyId } = useAppContext();
   const shootingActivity = activities.find(a => a.id === 'act-air-gun');
 
-  const defaultPackages: ShootingPackage[] = [
-    { id: 'pkg-shoot-1', name: 'Starter Aim (15 Shots)', price: 15, description: 'Perfect for beginners learning basic trigger control.', shots: 15 },
-    { id: 'pkg-shoot-2', name: 'Sharp Shooter (30 Shots)', price: 25, description: 'Most popular. Includes electronic reactive target mode.', shots: 30 },
-    { id: 'pkg-shoot-3', name: 'Marksman Elite (50 Shots)', price: 35, description: 'Advanced targets, competition grade pellets, full telemetry analysis.', shots: 50 }
-  ];
+  const packages: ShootingPackage[] = shootingActivity?.packages || [];
 
-  const packages: ShootingPackage[] = (shootingActivity?.packages && shootingActivity.packages.length > 0)
-    ? shootingActivity.packages
-    : defaultPackages;
-
-  const [selectedPackage, setSelectedPackage] = useState<ShootingPackage>(packages[0] || defaultPackages[0]);
+  const [selectedPackage, setSelectedPackage] = useState<ShootingPackage | null>(packages[0] || null);
 
   React.useEffect(() => {
     if (packages.length > 0) {
@@ -52,6 +44,8 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
       } else {
         setSelectedPackage(packages[0]);
       }
+    } else {
+      setSelectedPackage(null);
     }
   }, [packages]);
   const [packageQuantity, setPackageQuantity] = useState<number>(1);
@@ -139,10 +133,15 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
     setLastFeedback('Target wiped clean. Ready.');
   };
 
-  const handleBookingSubmit = (e: React.FormEvent) => {
+  const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessBooking(null);
+
+    if (!selectedPackage) {
+      setErrorMessage('No package selected or package pricing unavailable.');
+      return;
+    }
 
     if (!customerName.trim() || !customerPhone.trim()) {
       setErrorMessage('Full Name and Phone Number are required.');
@@ -159,11 +158,6 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
       return;
     }
 
-    if (bookingTotal <= 0 && paymentMethod !== 'complimentary') {
-      setErrorMessage('Please select a valid range package.');
-      return;
-    }
-
     const details = `Package: ${selectedPackage.name} | Qty: ${packageQuantity} | Ammo: 4.5mm Pro Match`;
 
     const finalizeBooking = () => {
@@ -177,7 +171,8 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
         details,
         quantity: packageQuantity,
         totalAmount: paymentMethod === 'complimentary' ? 0 : bookingTotal,
-        paymentMethod
+        paymentMethod,
+        packageId: selectedPackage.id
       });
   
       if (typeof result === 'string') {
@@ -383,29 +378,37 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
               <Target className="w-4 h-4 text-[#FFB703]" /> Select Ammunition Package
             </h3>
             <div className="space-y-2">
-              {packages.map(pkg => (
-                <button
-                  key={pkg.id}
-                  onClick={() => setSelectedPackage(pkg)}
-                  className={`w-full text-left p-3 rounded-xl transition-all duration-300 border relative overflow-hidden group cursor-pointer ${
-                    selectedPackage.id === pkg.id 
-                      ? 'bg-[#FFB703]/10 border-[#FFB703]/50 shadow-[0_0_15px_rgba(255,183,3,0.15)]' 
-                      : 'bg-[#050816] border-white/5 hover:border-white/20'
-                  }`}
-                >
-                  {selectedPackage.id === pkg.id && (
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-[#FFB703]/20 rounded-full blur-[20px] pointer-events-none"></div>
-                  )}
-                  <div className="flex justify-between items-start mb-1 relative z-10">
-                    <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
-                    <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
-                  </div>
-                  <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1 mb-1.5">{pkg.description}</p>
-                  <div className="text-[9px] font-mono text-[#14F1D9] relative z-10 uppercase font-bold">
-                    <span>⚡ Includes {pkg.shots} Pro Match Pellets</span>
-                  </div>
-                </button>
-              ))}
+              {packages.length === 0 ? (
+                <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs font-semibold text-center">
+                  No packages configured for this activity in the database.
+                </div>
+              ) : (
+                packages.map(pkg => (
+                  <button
+                    key={pkg.id}
+                    onClick={() => setSelectedPackage(pkg)}
+                    className={`w-full text-left p-3 rounded-xl transition-all duration-300 border relative overflow-hidden group cursor-pointer ${
+                      selectedPackage?.id === pkg.id 
+                        ? 'bg-[#FFB703]/10 border-[#FFB703]/50 shadow-[0_0_15px_rgba(255,183,3,0.15)]' 
+                        : 'bg-[#050816] border-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    {selectedPackage?.id === pkg.id && (
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-[#FFB703]/20 rounded-full blur-[20px] pointer-events-none"></div>
+                    )}
+                    <div className="flex justify-between items-start mb-1 relative z-10">
+                      <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage?.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
+                      <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
+                    </div>
+                    <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1 mb-1.5">{pkg.description}</p>
+                    {pkg.shots && (
+                      <div className="text-[9px] font-mono text-[#14F1D9] relative z-10 uppercase font-bold">
+                        <span>⚡ Includes {pkg.shots} Pro Match Pellets</span>
+                      </div>
+                    )}
+                  </button>
+                ))
+              )}
             </div>
           </div>
 

@@ -1,6 +1,7 @@
 -- Supabase Schema & Seed Data for Adventure Park Dashboard
 
 -- Drop tables if they exist (for easy re-running)
+DROP TABLE IF EXISTS "package_price_history";
 DROP TABLE IF EXISTS "payments";
 DROP TABLE IF EXISTS "tickets";
 DROP TABLE IF EXISTS "bookings";
@@ -135,6 +136,18 @@ CREATE TABLE "notifications" (
   "sentAt" TEXT NOT NULL
 );
 
+-- 10. Package Price Audit History Table
+CREATE TABLE "package_price_history" (
+  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "activity_id" TEXT NOT NULL,
+  "package_id" TEXT NOT NULL,
+  "package_name" TEXT NOT NULL,
+  "old_price" NUMERIC(12,2),
+  "new_price" NUMERIC(12,2) NOT NULL,
+  "changed_by" TEXT,
+  "changed_at" TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- Enable RLS (Row Level Security) and add policies allowing anonymous operations for this shared demo dashboard
 ALTER TABLE "users" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "activities" ENABLE ROW LEVEL SECURITY;
@@ -146,6 +159,11 @@ ALTER TABLE "tickets" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "food_orders" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "payments" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "notifications" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "package_price_history" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow anonymous read" ON "package_price_history" FOR SELECT USING (true);
+CREATE POLICY "Allow anonymous insert" ON "package_price_history" FOR INSERT WITH CHECK (true);
+
 
 CREATE POLICY "Allow anonymous read" ON "users" FOR SELECT USING (true);
 CREATE POLICY "Allow anonymous insert" ON "users" FOR INSERT WITH CHECK (true);

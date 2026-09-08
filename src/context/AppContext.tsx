@@ -55,8 +55,9 @@ interface AppContextProps {
 
   // Mutators - Activities
   addActivity: (activity: Omit<Activity, 'id'>) => void;
-  updateActivity: (activity: Activity) => void;
+  updateActivity: (activity: Activity) => Promise<Activity>;
   deleteActivity: (id: string) => void;
+  refetchActivitiesFromDatabase: () => Promise<Activity[]>;
 
   // Mutators - Activity Management Enhancement (photos + offers)
   addActivityPhoto: (activityId: string, photo: Omit<ActivityPhoto, 'id' | 'uploadedAt' | 'order'>) => void;
@@ -81,16 +82,17 @@ interface AppContextProps {
     activityName: string;
     date: string;
     timeSlot: string;
-    ticketType: 'standard' | 'package';
+    ticketType: 'standard' | 'package' | string;
     details: string;
     quantity: number;
     totalAmount: number;
-    paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay';
+    paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay' | 'complimentary';
     paymentStatus?: 'pending' | 'processing' | 'paid' | 'failed' | 'cancelled' | 'refunded';
     status?: 'confirmed' | 'reserved';
     razorpayOrderId?: string;
     razorpayPaymentId?: string;
     gateway?: string;
+    packageId?: string;
   }) => { booking: Booking; ticket?: Ticket; payment: Payment } | string;
 
   markBookingAsPaid: (bookingId: string, staffName: string) => { success: boolean; message: string; ticket?: Ticket };
@@ -227,6 +229,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } catch (err) {
         console.warn('[frontend] Failed to save user session:', err);
       }
+      refetchActivitiesFromDatabase();
     } else {
       localStorage.removeItem('ap_current_user');
     }
@@ -335,6 +338,58 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   // -----------------------------------------------------------------
+  // REFETCH ACTIVITIES FROM DATABASE (SINGLE SOURCE OF TRUTH)
+  // -----------------------------------------------------------------
+  const refetchActivitiesFromDatabase = async (): Promise<Activity[]> => {
+    let freshList: Activity[] = [];
+    if (isSupabaseConfigured) {
+      try {
+        const { data: dbActivities, error } = await supabase!.from('activities').select('*');
+        if (!error && dbActivities && dbActivities.length > 0) {
+          freshList = dbActivities;
+          setActivities(prev => {
+            const map = new Map<string, Activity>();
+            prev.forEach(existing => map.set(existing.id, existing));
+            dbActivities.forEach((dba: Activity) => map.set(dba.id, dba));
+            const mergedList = Array.from(map.values());
+            try {
+              localStorage.setItem('ap_activities', JSON.stringify(mergedList));
+            } catch (err) {}
+            db.activities.bulkPut(mergedList);
+            return mergedList;
+          });
+          return freshList;
+        }
+      } catch (err) {
+        console.error('[frontend] Error refetching activities from Supabase:', err);
+      }
+    }
+
+    try {
+      const res = await fetch('/api/activities');
+      const serverActivities = await res.json();
+      if (Array.isArray(serverActivities) && serverActivities.length > 0) {
+        freshList = serverActivities;
+        setActivities(prev => {
+          const map = new Map<string, Activity>();
+          prev.forEach(existing => map.set(existing.id, existing));
+          serverActivities.forEach((sa: Activity) => map.set(sa.id, sa));
+          const mergedList = Array.from(map.values());
+          try {
+            localStorage.setItem('ap_activities', JSON.stringify(mergedList));
+          } catch (err) {}
+          return mergedList;
+        });
+        return freshList;
+      }
+    } catch (err) {
+      console.warn('[frontend] Backend activities sync not available:', err);
+    }
+
+    return freshList;
+  };
+
+  // -----------------------------------------------------------------
   // SUPABASE INITIAL LOAD & AUTOMATIC SYNC
   // -----------------------------------------------------------------
   useEffect(() => {
@@ -369,21 +424,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (dbActivities && dbActivities.length > 0) {
           setActivities(prev => {
             const map = new Map<string, Activity>();
+            prev.forEach(existing => map.set(existing.id, existing));
+            // DATABASE IS SINGLE SOURCE OF TRUTH — dba strictly overrides existing!
             dbActivities.forEach((dba: Activity) => map.set(dba.id, dba));
-            prev.forEach(existing => {
-              const dba = map.get(existing.id);
-              if (dba) {
-                map.set(existing.id, {
-                  ...dba,
-                  ...existing,
-                  packages: (existing.packages && existing.packages.length > 0) ? existing.packages : (dba.packages || []),
-                  photos: (existing.photos && existing.photos.length > 0) ? existing.photos : (dba.photos || []),
-                  offers: (existing.offers && existing.offers.length > 0) ? existing.offers : (dba.offers || [])
-                });
-              } else {
-                map.set(existing.id, existing);
-              }
-            });
             const mergedList = Array.from(map.values());
             try {
               localStorage.setItem('ap_activities', JSON.stringify(mergedList));
@@ -418,7 +461,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     loadDataFromSupabase();
   }, []);
 
-  // Fetch backend persisted activities on startup
+  // Fetch backend persisted domain stores on startup
   useEffect(() => {
     fetch('/api/activities')
       .then(res => res.json())
@@ -426,23 +469,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (Array.isArray(serverActivities) && serverActivities.length > 0) {
           setActivities(prev => {
             const map = new Map<string, Activity>();
-            // Load server activities first
+            prev.forEach(existing => map.set(existing.id, existing));
             serverActivities.forEach((sa: Activity) => map.set(sa.id, sa));
-            // Merge with local state to preserve un-synced edits
-            prev.forEach(existing => {
-              const serverAct = map.get(existing.id);
-              if (serverAct) {
-                map.set(existing.id, {
-                  ...serverAct,
-                  ...existing, // Local Admin edits ALWAYS take precedence!
-                  packages: (existing.packages && existing.packages.length > 0) ? existing.packages : (serverAct.packages || []),
-                  photos: (existing.photos && existing.photos.length > 0) ? existing.photos : (serverAct.photos || []),
-                  offers: (existing.offers && existing.offers.length > 0) ? existing.offers : (serverAct.offers || [])
-                });
-              } else {
-                map.set(existing.id, existing);
-              }
-            });
             const mergedList = Array.from(map.values());
             try {
               localStorage.setItem('ap_activities', JSON.stringify(mergedList));
@@ -452,10 +480,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       })
       .catch(err => console.warn('[frontend] Backend activities sync not available:', err));
+
+    fetch('/api/menu-items')
+      .then(res => res.json())
+      .then(items => { if (Array.isArray(items) && items.length > 0) setMenuItems(items); })
+      .catch(() => {});
+
+    fetch('/api/vendors')
+      .then(res => res.json())
+      .then(v => { if (Array.isArray(v) && v.length > 0) setVendors(v); })
+      .catch(() => {});
+
+    fetch('/api/inventory')
+      .then(res => res.json())
+      .then(inv => { if (Array.isArray(inv) && inv.length > 0) setInventory(inv); })
+      .catch(() => {});
+
+    fetch('/api/users')
+      .then(res => res.json())
+      .then(u => {
+        if (Array.isArray(u) && u.length > 0) {
+          setUsers(prev => {
+            const mergedUsers = [...u];
+            prev.forEach(pu => {
+              if (!mergedUsers.some(mu => mu.email.toLowerCase() === pu.email.toLowerCase())) {
+                mergedUsers.push(pu);
+              }
+            });
+            return mergedUsers;
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Save states on updates to localStorage and backend API
-  useEffect(() => { localStorage.setItem('ap_users', JSON.stringify(users)); }, [users]);
+  useEffect(() => { 
+    localStorage.setItem('ap_users', JSON.stringify(users));
+    fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(users) }).catch(() => {});
+  }, [users]);
   useEffect(() => { 
     try {
       localStorage.setItem('ap_activities', JSON.stringify(activities));
@@ -469,9 +532,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       body: JSON.stringify(activities)
     }).catch(() => {});
   }, [activities]);
-  useEffect(() => { localStorage.setItem('ap_vendors', JSON.stringify(vendors)); }, [vendors]);
-  useEffect(() => { localStorage.setItem('ap_menu_items', JSON.stringify(menuItems)); }, [menuItems]);
-  useEffect(() => { localStorage.setItem('ap_inventory', JSON.stringify(inventory)); }, [inventory]);
+  useEffect(() => { 
+    localStorage.setItem('ap_vendors', JSON.stringify(vendors));
+    fetch('/api/vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(vendors) }).catch(() => {});
+  }, [vendors]);
+  useEffect(() => { 
+    localStorage.setItem('ap_menu_items', JSON.stringify(menuItems));
+    fetch('/api/menu-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(menuItems) }).catch(() => {});
+  }, [menuItems]);
+  useEffect(() => { 
+    localStorage.setItem('ap_inventory', JSON.stringify(inventory));
+    fetch('/api/inventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inventory) }).catch(() => {});
+  }, [inventory]);
   useEffect(() => { localStorage.setItem('ap_bookings', JSON.stringify(bookings)); }, [bookings]);
   useEffect(() => { localStorage.setItem('ap_tickets', JSON.stringify(tickets)); }, [tickets]);
   useEffect(() => { localStorage.setItem('ap_orders', JSON.stringify(orders)); }, [orders]);
@@ -578,16 +650,74 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }).catch(err => console.warn('[frontend] Failed to sync activities to backend:', err));
   };
 
-  const updateActivity = (act: Activity) => {
+  const updateActivity = async (act: Activity): Promise<Activity> => {
+    // 1. Validate packages input
+    if (act.packages && Array.isArray(act.packages)) {
+      for (const pkg of act.packages) {
+        if (!pkg.name || !pkg.name.trim()) {
+          throw new Error('Package name is required.');
+        }
+        if (typeof pkg.price !== 'number' || !Number.isFinite(pkg.price) || pkg.price < 0) {
+          throw new Error(`Invalid price for package "${pkg.name}". Price must be a non-negative number.`);
+        }
+      }
+    }
+
+    if (isSupabaseConfigured) {
+      // 2. Fetch current record to audit price changes
+      const { data: oldDbAct } = await supabase!.from('activities').select('*').eq('id', act.id).single();
+
+      // 3. Write directly to Supabase and await database confirmation
+      const { data: updatedDbRow, error } = await supabase!
+        .from('activities')
+        .update(act)
+        .eq('id', act.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[updateActivity] Database update failed:', error);
+        throw new Error(`Failed to save package changes to database: ${error.message}`);
+      }
+
+      // 4. Audit Log price modifications
+      if (oldDbAct && act.packages && oldDbAct.packages) {
+        const oldPackagesMap = new Map<string, number>();
+        (oldDbAct.packages as ActivityPackage[]).forEach((p: ActivityPackage) => oldPackagesMap.set(p.id, p.price));
+
+        for (const pkg of act.packages) {
+          const oldPrice = oldPackagesMap.get(pkg.id);
+          if (oldPrice !== undefined && oldPrice !== pkg.price) {
+            try {
+              await supabase!.from('package_price_history').insert({
+                activity_id: act.id,
+                package_id: pkg.id,
+                package_name: pkg.name,
+                old_price: oldPrice,
+                new_price: pkg.price,
+                changed_by: currentUser?.name || currentUser?.email || 'admin',
+                changed_at: new Date().toISOString()
+              });
+            } catch (e) {
+              console.warn('[audit-log] Price history insert error:', e);
+            }
+          }
+        }
+      }
+
+      // 5. Refetch fresh data from DB to confirm application state
+      await refetchActivitiesFromDatabase();
+      return updatedDbRow || act;
+    }
+
+    // Local server mode fallback
     setActivities(prev => {
       const updatedList = prev.map(item => item.id === act.id ? act : item);
       persistActivities(updatedList);
       return updatedList;
     });
 
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('activities', 'update', act);
-    }
+    return act;
   };
 
   const deleteActivity = (id: string) => {
@@ -790,16 +920,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     activityName: string;
     date: string;
     timeSlot: string;
-    ticketType: 'standard' | 'package';
+    ticketType: 'standard' | 'package' | string;
     details: string;
     quantity: number;
     totalAmount: number;
-    paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay';
+    paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay' | 'complimentary';
     paymentStatus?: 'pending' | 'processing' | 'paid' | 'failed' | 'cancelled' | 'refunded';
     status?: 'confirmed' | 'reserved';
     razorpayOrderId?: string;
     razorpayPaymentId?: string;
     gateway?: string;
+    packageId?: string;
   }) => {
     // Duplicate Protection: check if this Razorpay Order ID was already processed
     if (data.razorpayOrderId) {
@@ -811,12 +942,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
-    // 1. Validation: Capacity checks
+    // 1. Validation: Capacity checks & DB Package Price Enforcement
     // activityId may be a comma-separated list of IDs (counter multi-activity bookings)
     const activityIds = data.activityId.split(',').map(id => id.trim()).filter(Boolean);
     const primaryActivityId = activityIds[0];
     const targetActivity = activities.find(a => a.id === primaryActivityId);
-    if (!targetActivity) return 'Activity not found';
+    if (!targetActivity) return 'Activity not found in database.';
+
+    let enforcedTotalAmount = data.totalAmount;
+    let selectedPackageId = data.packageId;
+    let selectedPackageName = '';
+    let selectedUnitPrice: number | undefined = undefined;
+
+    if (data.ticketType === 'package' || selectedPackageId) {
+      if (!targetActivity.packages || targetActivity.packages.length === 0) {
+        return 'No packages are configured for this activity in the database. Ticket purchase is not allowed.';
+      }
+
+      let selectedPkg: ActivityPackage | undefined;
+      if (selectedPackageId) {
+        selectedPkg = targetActivity.packages.find(p => p.id === selectedPackageId);
+      }
+      if (!selectedPkg && data.details) {
+        selectedPkg = targetActivity.packages.find(p => data.details.includes(p.name));
+      }
+      if (!selectedPkg && targetActivity.packages.length > 0) {
+        selectedPkg = targetActivity.packages[0];
+      }
+
+      if (!selectedPkg) {
+        return 'Selected package was not found in database.';
+      }
+
+      selectedUnitPrice = Number(selectedPkg.price);
+      selectedPackageName = selectedPkg.name;
+      selectedPackageId = selectedPkg.id;
+
+      // Fail-Safe: Calculate ticket total using database package price
+      enforcedTotalAmount = data.paymentMethod === 'complimentary' ? 0 : selectedUnitPrice * data.quantity;
+    }
 
     // Count existing confirmed/reserved bookings for this date only (daily limit, not per-slot)
     const existingDailyCount = bookings
@@ -846,7 +1010,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const statusVal = data.status || (isPending ? 'reserved' : 'confirmed');
     const paymentStatusVal = data.paymentStatus === 'processing' ? 'pending' : (data.paymentStatus || (isPending ? 'pending' : 'paid'));
 
-    // 2. Create Booking
+    const detailsStr = selectedPackageName 
+      ? `Package: ${selectedPackageName} | Price: ₹${selectedUnitPrice} | Qty: ${data.quantity}`
+      : data.details;
+
+    // 2. Create Booking (with snapshotted package price)
     const newBooking: Booking = {
       id: bookingId,
       customerName: data.customerName,
@@ -857,12 +1025,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       date: data.date,
       timeSlot: data.timeSlot,
       ticketType: data.ticketType,
-      details: data.details,
+      details: detailsStr,
       quantity: data.quantity,
-      totalAmount: data.totalAmount,
+      totalAmount: enforcedTotalAmount,
       paymentStatus: paymentStatusVal,
       status: statusVal,
-      bookingDate: timestamp
+      bookingDate: timestamp,
+      packageId: selectedPackageId,
+      packageName: selectedPackageName,
+      unitPrice: selectedUnitPrice
     };
 
     // 3. Create Ticket (Only if NOT pending!)
@@ -878,18 +1049,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         activityName: data.activityName,
         date: data.date,
         timeSlot: data.timeSlot,
-        ticketType: data.details,
+        ticketType: selectedPackageName || detailsStr,
         quantity: data.quantity,
         qrCodeValue: `adventure-park-ticket-${bookingId}`,
-        status: 'valid'
+        status: 'valid',
+        packageId: selectedPackageId,
+        packageName: selectedPackageName,
+        unitPrice: selectedUnitPrice
       };
     }
 
-    // 4. Create Payment
+    // 4. Create Payment (with snapshotted package price)
     const newPayment: Payment = {
       id: `pay-${Date.now()}`,
       bookingId: bookingId,
-      amount: data.totalAmount,
+      amount: enforcedTotalAmount,
       method: data.paymentMethod === 'razorpay' ? 'razorpay' : data.paymentMethod,
       status: isPending ? 'pending' : 'paid',
       transactionId: txId,
@@ -1665,6 +1839,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       addActivity,
       updateActivity,
       deleteActivity,
+      refetchActivitiesFromDatabase,
       addActivityPhoto,
       removeActivityPhoto,
       reorderActivityPhotos,
