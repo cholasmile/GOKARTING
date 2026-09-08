@@ -675,9 +675,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         .select()
         .single();
 
-      if (error && (error.message.includes('column') || error.message.includes('schema cache'))) {
-        console.warn('[updateActivity] Extended columns missing in Supabase schema, falling back to base columns:', error.message);
-        const basePayload = {
+      // If full payload fails due to schema/column mismatch, fall back immediately to strict base columns
+      if (error) {
+        console.warn('[updateActivity] Full update failed, falling back to strict base columns:', error.message);
+        const strictBasePayload = {
           id: act.id,
           name: act.name,
           description: act.description,
@@ -691,7 +692,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
         const fallbackRes = await supabase!
           .from('activities')
-          .update(basePayload)
+          .update(strictBasePayload)
           .eq('id', act.id)
           .select()
           .single();
