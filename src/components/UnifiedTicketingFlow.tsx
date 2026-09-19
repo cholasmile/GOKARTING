@@ -65,6 +65,19 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
     return defaults;
   });
 
+  // Second package selection for 2-package billing (e.g. Go-Karting combo billing)
+  const [secondSelectedPackages, setSecondSelectedPackages] = useState<Record<string, string>>(() => {
+    const defaults: Record<string, string> = {};
+    activities.forEach(act => {
+      if (act.packages && act.packages.length > 1) {
+        defaults[act.id] = act.packages[1].id;
+      }
+    });
+    return defaults;
+  });
+
+  const [enableSecondPackage, setEnableSecondPackage] = useState<Record<string, boolean>>({});
+
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
@@ -87,27 +100,36 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
   const [tempBooking, setTempBooking] = useState<Booking | null>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
-  // Helper: get selected package object for an activity
+  // Helper: get primary selected package object for an activity
   const getSelectedPackage = (actId: string) => {
     const act = activities.find(a => a.id === actId);
     if (!act?.packages?.length) return null;
     return act.packages.find(p => p.id === selectedPackages[actId]) || act.packages[0];
   };
 
+  // Helper: get secondary selected package object for an activity
+  const getSecondSelectedPackage = (actId: string) => {
+    const act = activities.find(a => a.id === actId);
+    if (!act?.packages?.length || !enableSecondPackage[actId]) return null;
+    return act.packages.find(p => p.id === secondSelectedPackages[actId]) || act.packages[1] || null;
+  };
+
   // ── Discount & Tiered Promotional Rules ──
   const [discountType, setDiscountType] = useState<'none' | 'individual_5' | 'group_10' | 'group_15' | 'bulk_30' | 'custom'>('none');
   const [customDiscountPct, setCustomDiscountPct] = useState<number>(0);
 
-  // Compute raw subtotal from packages or adult/child pricing
+  const totalQuantity = adultCount + childCount;
+
+  // Compute raw subtotal from packages (including 2nd package if enabled) or adult/child pricing
   const subtotalAmount = activities.reduce((sum, act) => {
-    const pkg = getSelectedPackage(act.id);
-    if (pkg) {
-      return sum + pkg.price * (adultCount + childCount);
+    const pkg1 = getSelectedPackage(act.id);
+    const pkg2 = getSecondSelectedPackage(act.id);
+    if (pkg1) {
+      const combinedPkgPrice = pkg1.price + (pkg2 ? pkg2.price : 0);
+      return sum + combinedPkgPrice * totalQuantity;
     }
     return sum + (act.adultPrice || 0) * adultCount + (act.childPrice || 0) * childCount;
   }, 0);
-
-  const totalQuantity = adultCount + childCount;
 
   // Active discount percentage
   const activeDiscountPct = 
@@ -123,8 +145,13 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
   // Human-readable details string that includes package names
   const buildDetailsString = () => {
     const parts = activities.map(act => {
-      const pkg = getSelectedPackage(act.id);
-      if (pkg) return `${act.name}: ${pkg.name}`;
+      const pkg1 = getSelectedPackage(act.id);
+      const pkg2 = getSecondSelectedPackage(act.id);
+      if (pkg1 && pkg2) {
+        return `${act.name}: 2 Packages [${pkg1.name} (₹${pkg1.price}) + ${pkg2.name} (₹${pkg2.price})]`;
+      } else if (pkg1) {
+        return `${act.name}: ${pkg1.name}`;
+      }
       return `${act.name}: ${adultCount}x Adult${childCount > 0 ? `, ${childCount}x Child` : ''}`;
     });
     return parts.join(' | ');
@@ -578,28 +605,84 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                 {activities.map(act => {
                   const hasPkgs = act.packages && act.packages.length > 0;
                   const selPkg = getSelectedPackage(act.id);
+                  const secondSelPkg = getSecondSelectedPackage(act.id);
+                  const isSecondEnabled = !!enableSecondPackage[act.id];
+                  const isGoKarting = act.type === 'go_karting' || act.id === 'act-go-karting';
+
                   return (
-                    <div key={act.id} className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] hover:border-[#00ABAB]/40 transition-colors">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-2 h-2 rounded-full bg-[#00ABAB]" />
-                        <span className="font-semibold text-sm text-white">{act.name}</span>
+                    <div key={act.id} className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] hover:border-[#00ABAB]/40 transition-colors space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-[#00ABAB]" />
+                          <span className="font-semibold text-sm text-white">{act.name}</span>
+                        </div>
+                        {isSecondEnabled && (
+                          <span className="text-[10px] font-mono font-bold bg-[#00ABAB]/20 text-[#00ABAB] px-2 py-0.5 rounded border border-[#00ABAB]/40">
+                            2 Packages Billed
+                          </span>
+                        )}
                       </div>
+
                       {hasPkgs ? (
                         <>
-                          <label className="block text-[#94A3B8] text-xs mb-1 font-mono">Select Package</label>
-                          <select
-                            value={selectedPackages[act.id] || ''}
-                            onChange={e => setSelectedPackages(prev => ({ ...prev, [act.id]: e.target.value }))}
-                            className="w-full bg-[#111] border border-[#2C2C2C] rounded-lg p-2 text-sm focus:border-[#00ABAB] outline-none mb-2"
-                          >
-                            {act.packages!.map(pkg => (
-                              <option key={pkg.id} value={pkg.id}>
-                                {pkg.name} — ₹{pkg.price}/person
-                              </option>
-                            ))}
-                          </select>
-                          {selPkg && (
-                            <p className="text-xs text-[#94A3B8] italic">{selPkg.description}</p>
+                          <div>
+                            <label className="block text-[#94A3B8] text-xs mb-1 font-mono">
+                              Package 1 {hasPkgs && act.packages!.length > 1 ? '(Primary)' : ''}
+                            </label>
+                            <select
+                              value={selectedPackages[act.id] || ''}
+                              onChange={e => setSelectedPackages(prev => ({ ...prev, [act.id]: e.target.value }))}
+                              className="w-full bg-[#111] border border-[#2C2C2C] rounded-lg p-2 text-sm focus:border-[#00ABAB] outline-none mb-1"
+                            >
+                              {act.packages!.map(pkg => (
+                                <option key={pkg.id} value={pkg.id}>
+                                  {pkg.name} — ₹{pkg.price}/person
+                                </option>
+                              ))}
+                            </select>
+                            {selPkg && (
+                              <p className="text-xs text-[#94A3B8] italic">{selPkg.description}</p>
+                            )}
+                          </div>
+
+                          {/* 2-Package Selection option (especially for Go-Karting) */}
+                          {act.packages!.length > 1 && (
+                            <div className="pt-2 border-t border-[#1C1C1C]">
+                              <label className="flex items-center gap-2 cursor-pointer text-xs font-mono font-bold text-[#00ABAB] hover:text-[#40E0D0] transition-colors mb-2">
+                                <input
+                                  type="checkbox"
+                                  checked={isSecondEnabled}
+                                  onChange={e => setEnableSecondPackage(prev => ({ ...prev, [act.id]: e.target.checked }))}
+                                  className="w-4 h-4 accent-[#00ABAB] rounded cursor-pointer"
+                                />
+                                <span>+ Add 2nd Package to Bill {isGoKarting ? '(Go-Karting Combo)' : ''}</span>
+                              </label>
+
+                              {isSecondEnabled && (
+                                <div className="p-3 bg-[#111] rounded-lg border border-[#00ABAB]/30 space-y-2 animate-fade-in">
+                                  <label className="block text-[#94A3B8] text-xs font-mono">
+                                    Package 2 (Second Package)
+                                  </label>
+                                  <select
+                                    value={secondSelectedPackages[act.id] || ''}
+                                    onChange={e => setSecondSelectedPackages(prev => ({ ...prev, [act.id]: e.target.value }))}
+                                    className="w-full bg-[#0A0A0A] border border-[#2C2C2C] rounded-lg p-2 text-sm focus:border-[#00ABAB] outline-none"
+                                  >
+                                    {act.packages!.map(pkg => (
+                                      <option key={pkg.id} value={pkg.id} disabled={pkg.id === selectedPackages[act.id]}>
+                                        {pkg.name} — ₹{pkg.price}/person {pkg.id === selectedPackages[act.id] ? '(Already Pkg 1)' : ''}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {secondSelPkg && (
+                                    <p className="text-xs text-[#94A3B8] italic">{secondSelPkg.description}</p>
+                                  )}
+                                  <div className="text-xs font-mono text-[#00ABAB] font-bold pt-1">
+                                    Combined Package Price: ₹{(selPkg?.price || 0) + (secondSelPkg?.price || 0)}/person
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </>
                       ) : (

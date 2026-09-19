@@ -139,6 +139,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
     price: 4.5,
     category: 'Coffee',
     isAvailable: true,
+    stockQuantity: 50,
     image: 'https://images.unsplash.com/photo-1510972527409-cef1903972fa?auto=format&fit=crop&w=300&q=80'
   },
   {
@@ -149,6 +150,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
     price: 5.5,
     category: 'Coffee',
     isAvailable: true,
+    stockQuantity: 40,
     image: 'https://images.unsplash.com/photo-1570968915860-54d5c301fc9f?auto=format&fit=crop&w=300&q=80'
   },
   {
@@ -159,6 +161,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
     price: 3.5,
     category: 'Bakery',
     isAvailable: true,
+    stockQuantity: 25,
     image: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=300&q=80'
   },
 
@@ -171,6 +174,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
     price: 12.5,
     category: 'Burgers',
     isAvailable: true,
+    stockQuantity: 65,
     image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=300&q=80'
   },
   {
@@ -181,6 +185,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
     price: 15.0,
     category: 'Pizza',
     isAvailable: true,
+    stockQuantity: 30,
     image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=300&q=80'
   },
   {
@@ -191,6 +196,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
     price: 7.0,
     category: 'Sides',
     isAvailable: true,
+    stockQuantity: 50,
     image: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=300&q=80'
   },
 
@@ -203,6 +209,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
     price: 6.5,
     category: 'Cold Juices',
     isAvailable: true,
+    stockQuantity: 20,
     image: 'https://images.unsplash.com/photo-1610970881699-44a5587caaec?auto=format&fit=crop&w=300&q=80'
   },
   {
@@ -213,6 +220,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
     price: 7.5,
     category: 'Shakes',
     isAvailable: true,
+    stockQuantity: 35,
     image: 'https://images.unsplash.com/photo-1553787499-6f9133860278?auto=format&fit=crop&w=300&q=80'
   },
 
@@ -225,6 +233,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
     price: 8.5,
     category: 'Sundaes',
     isAvailable: true,
+    stockQuantity: 15,
     image: 'https://images.unsplash.com/photo-1504113888839-1c8003672244?auto=format&fit=crop&w=300&q=80'
   },
   {
@@ -235,6 +244,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
     price: 5.0,
     category: 'Scoops',
     isAvailable: true,
+    stockQuantity: 45,
     image: 'https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=300&q=80'
   }
 ];

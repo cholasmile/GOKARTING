@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { MenuItem, FoodOrder } from '../types';
 import { 
-  Coffee, Utensils, ShoppingBag, Search, Plus, Minus, 
+  Coffee, Utensils, ShoppingBag, Search, Plus, Minus, Edit,
   Trash2, ArrowRight, CheckCircle2, Clock, Sparkles, X, 
   CreditCard, Flame, ChevronRight, Ticket
 } from 'lucide-react';
@@ -16,12 +16,105 @@ import { Link } from 'react-router-dom';
 export const DeuceCafePage: React.FC = () => {
   const { 
     menuItems, vendors, foodCart, addToFoodCart, removeFromFoodCart, 
-    clearFoodCart, submitFoodOrder, currentUser 
+    clearFoodCart, submitFoodOrder, currentUser, addMenuItem, updateMenuItem, deleteMenuItem, orders 
   } = useAppContext();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVendorFilter, setSelectedVendorFilter] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
+
+  // Extract repeat / frequently ordered items
+  const repeatOrderItems = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (orders && orders.length > 0) {
+      orders.forEach(o => {
+        o.items?.forEach(i => {
+          counts[i.menuItemId] = (counts[i.menuItemId] || 0) + i.quantity;
+        });
+      });
+    }
+    const sortedIds = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => id);
+
+    const items = menuItems.filter(m => sortedIds.includes(m.id));
+    return items.length > 0 ? items.slice(0, 8) : menuItems.slice(0, 5);
+  }, [orders, menuItems]);
+
+  // Staff / Admin Menu Management State
+  const isStaffOrAdmin = Boolean(currentUser && ['super_admin', 'food_vendor', 'cafe_staff'].includes(currentUser.role));
+  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
+  const [editingMenuItem, setEditingMenuItem] = useState<MenuItem | null>(null);
+  const [menuForm, setMenuForm] = useState({
+    name: '',
+    description: '',
+    price: 5.0,
+    category: 'Beverages',
+    vendorId: vendors[0]?.id || 'vendor-forest-cafe',
+    image: '',
+    stockQuantity: 50,
+    isAvailable: true
+  });
+
+  const handleSaveMenu = (e: React.FormEvent) => {
+    e.preventDefault();
+    const defaultImage = menuForm.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=300&q=80';
+    const targetVendorId = menuForm.vendorId || (vendors[0]?.id || 'vendor-forest-cafe');
+    const qty = Number(menuForm.stockQuantity) || 0;
+
+    if (editingMenuItem) {
+      updateMenuItem({
+        ...editingMenuItem,
+        name: menuForm.name,
+        description: menuForm.description,
+        price: Number(menuForm.price),
+        category: menuForm.category,
+        vendorId: targetVendorId,
+        image: defaultImage,
+        stockQuantity: qty,
+        isAvailable: qty > 0 ? menuForm.isAvailable : false
+      });
+    } else {
+      addMenuItem({
+        vendorId: targetVendorId,
+        name: menuForm.name,
+        description: menuForm.description,
+        price: Number(menuForm.price),
+        category: menuForm.category,
+        image: defaultImage,
+        stockQuantity: qty,
+        isAvailable: qty > 0 ? menuForm.isAvailable : false
+      });
+    }
+
+    setIsMenuModalOpen(false);
+    setEditingMenuItem(null);
+    setMenuForm({
+      name: '',
+      description: '',
+      price: 5.0,
+      category: 'Beverages',
+      vendorId: vendors[0]?.id || 'vendor-forest-cafe',
+      image: '',
+      stockQuantity: 50,
+      isAvailable: true
+    });
+  };
+
+  const handleEditClick = (item: MenuItem) => {
+    setEditingMenuItem(item);
+    setMenuForm({
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      category: item.category,
+      vendorId: item.vendorId,
+      image: item.image,
+      stockQuantity: item.stockQuantity ?? 50,
+      isAvailable: item.isAvailable
+    });
+    setIsMenuModalOpen(true);
+  };
 
   // Checkout modal state
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -82,6 +175,26 @@ export const DeuceCafePage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
+            {isStaffOrAdmin && (
+              <button
+                onClick={() => {
+                  setEditingMenuItem(null);
+                  setMenuForm({
+                    name: '',
+                    description: '',
+                    price: 5.0,
+                    category: 'Beverages',
+                    vendorId: vendors[0]?.id || 'vendor-forest-cafe',
+                    image: '',
+                    isAvailable: true
+                  });
+                  setIsMenuModalOpen(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-2 transition-all hover:scale-105 cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.3)]"
+              >
+                <Plus className="w-4 h-4" /> Add Menu Item
+              </button>
+            )}
             <Link 
               to="/" 
               className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-2 transition-all hover:border-[#14F1D9]"
@@ -139,47 +252,135 @@ export const DeuceCafePage: React.FC = () => {
         
         {/* Left Column: Menu Items Grid (2 Cols) */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex justify-between items-center mb-2">
+          {/* Repeat / Frequently Ordered Items (First Menu Section) */}
+          <div className="bg-[#0B1120]/90 p-4 border border-[#14F1D9]/30 rounded-2xl space-y-3 shadow-[0_0_20px_rgba(20,241,217,0.08)]">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#14F1D9] flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-400 animate-pulse" /> Repeat Orders & Favorites (Quick Re-Order)
+              </h3>
+              <span className="text-[10px] text-[#9CA3AF] font-mono">1-Tap Quick Add</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2.5">
+              {repeatOrderItems.map(item => {
+                const isOutOfStock = (item.stockQuantity ?? 50) <= 0 || !item.isAvailable;
+                return (
+                  <div
+                    key={`repeat-${item.id}`}
+                    className="group relative bg-[#050816] border border-white/10 hover:border-[#14F1D9] rounded-xl p-2 flex flex-col justify-between aspect-square overflow-hidden transition-all duration-300 hover:shadow-[0_0_15px_rgba(20,241,217,0.2)]"
+                  >
+                    <div className="relative w-full h-3/5 rounded-lg overflow-hidden mb-1">
+                      <img 
+                        src={item.image} 
+                        alt={item.name} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        referrerPolicy="no-referrer"
+                      />
+                      <span className="absolute top-1 left-1 px-1.5 py-0.5 bg-[#050816]/90 border border-amber-400/40 text-[8px] font-mono font-bold text-amber-300 rounded uppercase">
+                        Repeat Item
+                      </span>
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                      <div>
+                        <h4 className="font-bold text-[10px] text-white truncate leading-tight group-hover:text-[#14F1D9]">{item.name}</h4>
+                        <div className="font-mono text-[10px] font-black text-[#14F1D9]">₹{item.price.toFixed(2)}</div>
+                      </div>
+
+                      <button
+                        onClick={() => addToFoodCart(item, 1)}
+                        disabled={isOutOfStock}
+                        className="w-full py-1 mt-1 rounded-lg bg-[#14F1D9]/15 hover:bg-[#14F1D9] text-[#14F1D9] hover:text-[#050816] font-mono font-black text-[9px] uppercase tracking-wider flex items-center justify-center gap-0.5 transition-all border border-[#14F1D9]/40 cursor-pointer disabled:opacity-40"
+                      >
+                        <Plus className="w-3 h-3" /> Re-Order
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Full Menu Grid (Square Cards) */}
+          <div className="flex justify-between items-center mb-2 pt-2">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <Utensils className="w-4 h-4 text-[#14F1D9]" /> Menu Selection ({filteredMenuItems.length})
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {filteredMenuItems.map(item => {
               const vendor = vendors.find(v => v.id === item.vendorId);
-              
+              const stockQty = item.stockQuantity ?? 50;
+              const isOutOfStock = stockQty <= 0 || !item.isAvailable;
+
               return (
                 <div 
                   key={item.id}
-                  className="glass-panel p-4 border border-white/10 hover:border-[#14F1D9]/50 rounded-2xl flex flex-col justify-between transition-all duration-300 group hover:shadow-[0_0_20px_rgba(20,241,217,0.1)] bg-[#0B1120]/80"
+                  className="glass-panel p-2.5 border border-white/10 hover:border-[#14F1D9]/50 rounded-2xl flex flex-col justify-between transition-all duration-300 group hover:shadow-[0_0_20px_rgba(20,241,217,0.15)] bg-[#0B1120]/80 aspect-square"
                 >
-                  <div>
-                    <div className="relative h-36 rounded-xl overflow-hidden mb-3 border border-white/5">
-                      <img 
-                        src={item.image} 
-                        alt={item.name} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        referrerPolicy="no-referrer"
-                      />
-                      <span className="absolute top-2 left-2 px-2 py-0.5 bg-[#050816]/90 border border-white/10 text-[9px] font-mono font-bold text-[#14F1D9] rounded uppercase">
-                        {vendor?.name || item.category}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between items-start mb-1">
-                      <h3 className="font-bold text-sm text-white group-hover:text-[#14F1D9] transition-colors">{item.name}</h3>
-                      <span className="font-mono text-sm font-black text-[#14F1D9]">₹{item.price.toFixed(2)}</span>
-                    </div>
-                    <p className="text-[11px] text-[#9CA3AF] line-clamp-2 leading-relaxed mb-3">{item.description}</p>
+                  <div className="relative w-full h-1/2 rounded-xl overflow-hidden mb-1.5 border border-white/5 shrink-0">
+                    <img 
+                      src={item.image} 
+                      alt={item.name} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <span className="absolute top-1 left-1 px-1.5 py-0.5 bg-[#050816]/90 border border-white/10 text-[8px] font-mono font-bold text-[#14F1D9] rounded uppercase truncate max-w-[70%]">
+                      {vendor?.name || item.category}
+                    </span>
+                    <span className={`absolute top-1 right-1 px-1.5 py-0.5 border text-[8px] font-mono font-bold rounded uppercase ${
+                      stockQty > 10
+                        ? 'bg-[#050816]/90 border-emerald-500/30 text-emerald-400'
+                        : stockQty > 0
+                        ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                        : 'bg-rose-500/20 border-rose-500/40 text-rose-400'
+                    }`}>
+                      {stockQty > 0 ? `Stock: ${stockQty}` : 'Sold Out'}
+                    </span>
                   </div>
 
-                  <button
-                    onClick={() => addToFoodCart(item, 1)}
-                    className="w-full py-2 rounded-xl bg-white/5 hover:bg-[#14F1D9] hover:text-[#050816] text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-white/10 hover:border-[#14F1D9] shadow-sm"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add to Order
-                  </button>
+                  <div className="flex-1 flex flex-col justify-between min-w-0">
+                    <div>
+                      <div className="flex justify-between items-start gap-1">
+                        <h3 className="font-bold text-xs text-white truncate group-hover:text-[#14F1D9] transition-colors">{item.name}</h3>
+                        <span className="font-mono text-xs font-black text-[#14F1D9] shrink-0">₹{item.price.toFixed(2)}</span>
+                      </div>
+                      <p className="text-[10px] text-[#9CA3AF] line-clamp-1 leading-snug mt-0.5">{item.description}</p>
+                    </div>
+
+                    <div className="flex gap-1 mt-1">
+                      <button
+                        onClick={() => addToFoodCart(item, 1)}
+                        disabled={isOutOfStock}
+                        className="flex-1 py-1 rounded-lg bg-white/5 hover:bg-[#14F1D9] hover:text-[#050816] text-white font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1 transition-all cursor-pointer border border-white/10 hover:border-[#14F1D9] shadow-sm disabled:opacity-40"
+                      >
+                        <Plus className="w-3 h-3" /> Add
+                      </button>
+                      {isStaffOrAdmin && (
+                        <>
+                          <button
+                            onClick={() => handleEditClick(item)}
+                            className="p-1 rounded-lg bg-white/5 hover:bg-amber-500/20 text-amber-300 border border-white/10 hover:border-amber-400 text-xs font-bold transition-all cursor-pointer"
+                            title="Edit Item"
+                          >
+                            <Edit className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
+                                deleteMenuItem(item.id);
+                              }
+                            }}
+                            className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer"
+                            title="Delete Item"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -375,6 +576,158 @@ export const DeuceCafePage: React.FC = () => {
             >
               Close & Order More
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Staff / Admin Add/Edit Menu Item Modal */}
+      {isMenuModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="glass-panel w-full max-w-lg p-6 rounded-3xl border border-white/10 relative animate-fade-in bg-[#0B1120] text-white">
+            <button 
+              onClick={() => {
+                setIsMenuModalOpen(false);
+                setEditingMenuItem(null);
+              }}
+              className="absolute top-4 right-4 text-white/50 hover:text-white p-1 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-xl font-black text-white mb-1 flex items-center gap-2">
+              <Coffee className="w-5 h-5 text-[#14F1D9]" />
+              {editingMenuItem ? 'Edit Cafe Menu Item' : 'Add New Cafe Menu Item'}
+            </h3>
+            <p className="text-xs text-[#9CA3AF] mb-4">
+              {editingMenuItem ? 'Modify item details, pricing, and outlet assignment.' : 'Add a delicious item to the live cafe menu.'}
+            </p>
+
+            <form onSubmit={handleSaveMenu} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Item Name</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={menuForm.name}
+                  onChange={e => setMenuForm({...menuForm, name: e.target.value})}
+                  className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none"
+                  placeholder="e.g. Espresso Romano, Truffle Pizza"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Description</label>
+                <textarea 
+                  required 
+                  rows={2}
+                  value={menuForm.description}
+                  onChange={e => setMenuForm({...menuForm, description: e.target.value})}
+                  className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none"
+                  placeholder="Short appetizing description..."
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Price (₹)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    min="0"
+                    required 
+                    value={menuForm.price}
+                    onChange={e => setMenuForm({...menuForm, price: parseFloat(e.target.value) || 0})}
+                    className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Stock Entries</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    required 
+                    value={menuForm.stockQuantity}
+                    onChange={e => setMenuForm({...menuForm, stockQuantity: parseInt(e.target.value) || 0})}
+                    className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs font-bold text-[#14F1D9] focus:border-[#14F1D9] focus:outline-none font-mono"
+                    placeholder="e.g. 50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Category</label>
+                  <select
+                    value={menuForm.category}
+                    onChange={e => setMenuForm({...menuForm, category: e.target.value})}
+                    className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none cursor-pointer"
+                  >
+                    <option value="Beverages">Beverages</option>
+                    <option value="Wood-Fired Pizza">Wood-Fired Pizza</option>
+                    <option value="Smash Burgers">Smash Burgers</option>
+                    <option value="Starters & Sides">Starters & Sides</option>
+                    <option value="Desserts & Shakes">Desserts & Shakes</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Stall / Vendor</label>
+                  <select
+                    value={menuForm.vendorId}
+                    onChange={e => setMenuForm({...menuForm, vendorId: e.target.value})}
+                    className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none cursor-pointer"
+                  >
+                    {vendors.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Image URL (Optional)</label>
+                  <input 
+                    type="url" 
+                    value={menuForm.image}
+                    onChange={e => setMenuForm({...menuForm, image: e.target.value})}
+                    className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none"
+                    placeholder="https://images.unsplash.com/..."
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input 
+                  type="checkbox"
+                  id="isAvailableCheckbox"
+                  checked={menuForm.isAvailable}
+                  onChange={e => setMenuForm({...menuForm, isAvailable: e.target.checked})}
+                  className="w-4 h-4 rounded border-white/10 accent-[#14F1D9] cursor-pointer"
+                />
+                <label htmlFor="isAvailableCheckbox" className="text-xs text-white cursor-pointer select-none">
+                  Available in Live Menu
+                </label>
+              </div>
+
+              <div className="pt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuModalOpen(false);
+                    setEditingMenuItem(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer border border-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] font-black text-xs uppercase tracking-wider hover:scale-[1.02] transition-all cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.3)]"
+                >
+                  {editingMenuItem ? 'Save Changes' : 'Add Item'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

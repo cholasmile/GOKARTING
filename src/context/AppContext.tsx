@@ -52,6 +52,7 @@ interface AppContextProps {
   isOnline: boolean;
   syncStatus: SyncStatus;
   pendingSyncCount: number;
+  isRealtimeActive: boolean;
 
   // Mutators - Activities
   addActivity: (activity: Omit<Activity, 'id'>) => void;
@@ -239,6 +240,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [isRealtimeActive, setIsRealtimeActive] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -246,15 +248,102 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     
-    const unsubscribe = syncEngine.subscribe((status, count) => {
+    const unsubscribe = syncEngine.subscribe((status, count, realtimeActive) => {
       setSyncStatus(status);
       setPendingSyncCount(count);
+      setIsRealtimeActive(realtimeActive);
+    });
+
+    const unsubscribeChanges = syncEngine.subscribeToChanges((event) => {
+      const { table, eventType, record } = event;
+      if (!record || !record.id) return;
+
+      if (table === 'activities') {
+        setActivities(prev => {
+          if (eventType === 'DELETE') return prev.filter(a => a.id !== record.id);
+          const exists = prev.some(a => a.id === record.id);
+          return exists ? prev.map(a => a.id === record.id ? record : a) : [record, ...prev];
+        });
+      } else if (table === 'bookings') {
+        setBookings(prev => {
+          if (eventType === 'DELETE') return prev.filter(b => b.id !== record.id);
+          const exists = prev.some(b => b.id === record.id);
+          return exists ? prev.map(b => b.id === record.id ? record : b) : [record, ...prev];
+        });
+      } else if (table === 'tickets') {
+        setTickets(prev => {
+          if (eventType === 'DELETE') return prev.filter(t => t.id !== record.id);
+          const exists = prev.some(t => t.id === record.id);
+          return exists ? prev.map(t => t.id === record.id ? record : t) : [record, ...prev];
+        });
+      } else if (table === 'food_orders') {
+        setOrders(prev => {
+          if (eventType === 'DELETE') return prev.filter(o => o.id !== record.id);
+          const exists = prev.some(o => o.id === record.id);
+          return exists ? prev.map(o => o.id === record.id ? record : o) : [record, ...prev];
+        });
+      } else if (table === 'payments') {
+        setPayments(prev => {
+          if (eventType === 'DELETE') return prev.filter(p => p.id !== record.id);
+          const exists = prev.some(p => p.id === record.id);
+          return exists ? prev.map(p => p.id === record.id ? record : p) : [record, ...prev];
+        });
+      } else if (table === 'users') {
+        setUsers(prev => {
+          if (eventType === 'DELETE') return prev.filter(u => u.id !== record.id);
+          const exists = prev.some(u => u.id === record.id);
+          return exists ? prev.map(u => u.id === record.id ? record : u) : [record, ...prev];
+        });
+      } else if (table === 'karts') {
+        setKarts(prev => {
+          if (eventType === 'DELETE') return prev.filter(k => k.id !== record.id);
+          const exists = prev.some(k => k.id === record.id);
+          return exists ? prev.map(k => k.id === record.id ? record : k) : [record, ...prev];
+        });
+      } else if (table === 'sessions') {
+        setSessions(prev => {
+          if (eventType === 'DELETE') return prev.filter(s => s.id !== record.id);
+          const exists = prev.some(s => s.id === record.id);
+          return exists ? prev.map(s => s.id === record.id ? record : s) : [record, ...prev];
+        });
+      } else if (table === 'lap_records') {
+        setLapRecords(prev => {
+          if (eventType === 'DELETE') return prev.filter(l => l.id !== record.id);
+          const exists = prev.some(l => l.id === record.id);
+          return exists ? prev.map(l => l.id === record.id ? record : l) : [record, ...prev];
+        });
+      } else if (table === 'waivers') {
+        setWaivers(prev => {
+          if (eventType === 'DELETE') return prev.filter(w => w.id !== record.id);
+          const exists = prev.some(w => w.id === record.id);
+          return exists ? prev.map(w => w.id === record.id ? record : w) : [record, ...prev];
+        });
+      } else if (table === 'menu_items') {
+        setMenuItems(prev => {
+          if (eventType === 'DELETE') return prev.filter(m => m.id !== record.id);
+          const exists = prev.some(m => m.id === record.id);
+          return exists ? prev.map(m => m.id === record.id ? record : m) : [record, ...prev];
+        });
+      } else if (table === 'inventory') {
+        setInventory(prev => {
+          if (eventType === 'DELETE') return prev.filter(i => i.id !== record.id);
+          const exists = prev.some(i => i.id === record.id);
+          return exists ? prev.map(i => i.id === record.id ? record : i) : [record, ...prev];
+        });
+      } else if (table === 'food_vendors') {
+        setVendors(prev => {
+          if (eventType === 'DELETE') return prev.filter(v => v.id !== record.id);
+          const exists = prev.some(v => v.id === record.id);
+          return exists ? prev.map(v => v.id === record.id ? record : v) : [record, ...prev];
+        });
+      }
     });
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       unsubscribe();
+      unsubscribeChanges();
     };
   }, []);
 
@@ -1708,7 +1797,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     writeToLocalAndSync('payments', 'insert', newPayment);
     }
 
-    // Reduce inventory stocks for standard ordering simulation
+    // Reduce inventory stocks & direct menu item stock quantity for ordering simulation
+    setMenuItems(prev => prev.map(m => {
+      const cartItem = foodCart.find(ci => ci.menuItemId === m.id);
+      if (cartItem && m.stockQuantity !== undefined) {
+        const newQty = Math.max(0, m.stockQuantity - cartItem.quantity);
+        return {
+          ...m,
+          stockQuantity: newQty,
+          isAvailable: newQty > 0 ? m.isAvailable : false
+        };
+      }
+      return m;
+    }));
+
     foodCart.forEach(cartItem => {
       // Find matches in inventory (fuzzy lookup name or category)
       const matchingIngredients = inventory.filter(inv => 
@@ -1850,6 +1952,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       isOnline,
       syncStatus,
       pendingSyncCount,
+      isRealtimeActive,
       currentUser,
       setCurrentUser,
       selectedVendorId,

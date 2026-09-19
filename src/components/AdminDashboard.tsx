@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Activity, FoodVendor, ActivityPackage } from '../types';
+import { Activity, FoodVendor, ActivityPackage, MenuItem } from '../types';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
@@ -25,16 +25,88 @@ export const AdminDashboard: React.FC = () => {
   const {
     users, updateUserRole,
     activities, vendors, bookings, orders, payments, tickets,
-    menuItems, deleteMenuItem, updateMenuItem,
+    menuItems, deleteMenuItem, updateMenuItem, addMenuItem,
     addActivity, updateActivity, deleteActivity,
     addVendor, updateVendor, deleteVendor, addUser,
     counterUpiId, setCounterUpiId
   } = useAppContext();
 
-  // Bulk add menu modal state
+  // Bulk & Single add menu modal state
   const [isBulkMenuModalOpen, setIsBulkMenuModalOpen] = useState(false);
+  const [isAdminMenuModalOpen, setIsAdminMenuModalOpen] = useState(false);
+  const [editingAdminMenuItem, setEditingAdminMenuItem] = useState<MenuItem | null>(null);
+  const [adminMenuForm, setAdminMenuForm] = useState({
+    name: '',
+    description: '',
+    price: 5.0,
+    category: 'Beverages',
+    vendorId: '',
+    image: '',
+    stockQuantity: 50,
+    isAvailable: true
+  });
   const [adminMenuSearch, setAdminMenuSearch] = useState('');
   const [adminVendorFilter, setAdminVendorFilter] = useState('all');
+
+  const handleSaveAdminMenu = (e: React.FormEvent) => {
+    e.preventDefault();
+    const defaultImage = adminMenuForm.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=300&q=80';
+    const targetVendorId = adminMenuForm.vendorId || (vendors[0]?.id || 'vendor-forest-cafe');
+    const qty = Number(adminMenuForm.stockQuantity) || 0;
+
+    if (editingAdminMenuItem) {
+      updateMenuItem({
+        ...editingAdminMenuItem,
+        name: adminMenuForm.name,
+        description: adminMenuForm.description,
+        price: Number(adminMenuForm.price),
+        category: adminMenuForm.category,
+        vendorId: targetVendorId,
+        image: defaultImage,
+        stockQuantity: qty,
+        isAvailable: qty > 0 ? adminMenuForm.isAvailable : false
+      });
+    } else {
+      addMenuItem({
+        vendorId: targetVendorId,
+        name: adminMenuForm.name,
+        description: adminMenuForm.description,
+        price: Number(adminMenuForm.price),
+        category: adminMenuForm.category,
+        image: defaultImage,
+        stockQuantity: qty,
+        isAvailable: qty > 0 ? adminMenuForm.isAvailable : false
+      });
+    }
+
+    setIsAdminMenuModalOpen(false);
+    setEditingAdminMenuItem(null);
+    setAdminMenuForm({
+      name: '',
+      description: '',
+      price: 5.0,
+      category: 'Beverages',
+      vendorId: '',
+      image: '',
+      stockQuantity: 50,
+      isAvailable: true
+    });
+  };
+
+  const handleEditAdminMenuClick = (item: MenuItem) => {
+    setEditingAdminMenuItem(item);
+    setAdminMenuForm({
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      category: item.category,
+      vendorId: item.vendorId,
+      image: item.image,
+      stockQuantity: item.stockQuantity ?? 50,
+      isAvailable: item.isAvailable
+    });
+    setIsAdminMenuModalOpen(true);
+  };
 
   // Payment settings local state
   const {
@@ -850,6 +922,25 @@ export const AdminDashboard: React.FC = () => {
             </div>
             <div className="flex items-center gap-2">
               <button
+                id="btn-add-single-menu-admin"
+                onClick={() => {
+                  setEditingAdminMenuItem(null);
+                  setAdminMenuForm({
+                    name: '',
+                    description: '',
+                    price: 5.0,
+                    category: 'Beverages',
+                    vendorId: vendors[0]?.id || 'vendor-forest-cafe',
+                    image: '',
+                    isAvailable: true
+                  });
+                  setIsAdminMenuModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold border border-[#00ABAB]/40 text-[#FFFFFF] rounded-xl hover:bg-[#0A0A0A] transition-all cursor-pointer"
+              >
+                <Plus className="h-4 w-4" /> Single Menu Item
+              </button>
+              <button
                 id="btn-bulk-add-menu-admin"
                 onClick={() => setIsBulkMenuModalOpen(true)}
                 className="flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold btn-glow text-[#0B0F14] rounded-xl hover:bg-[#00A99D] transition-all cursor-pointer shadow-lg"
@@ -896,6 +987,7 @@ export const AdminDashboard: React.FC = () => {
                     <th className="p-4">Vendor / Stall</th>
                     <th className="p-4">Category</th>
                     <th className="p-4">Price (₹)</th>
+                    <th className="p-4">Stock Entries</th>
                     <th className="p-4">Status</th>
                     <th className="p-4 text-right">Action</th>
                   </tr>
@@ -930,6 +1022,17 @@ export const AdminDashboard: React.FC = () => {
                           <td className="p-4 font-mono font-extrabold text-[#40E0D0]">
                             ₹{item.price.toFixed(2)}
                           </td>
+                          <td className="p-4 font-mono font-bold">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
+                              (item.stockQuantity ?? 50) > 10
+                                ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
+                                : (item.stockQuantity ?? 50) > 0
+                                ? 'bg-amber-950/60 text-amber-300 border-amber-800/60'
+                                : 'bg-red-950/60 text-red-400 border-red-800/60'
+                            }`}>
+                              {item.stockQuantity ?? 50} units
+                            </span>
+                          </td>
                           <td className="p-4">
                             <button
                               onClick={() => updateMenuItem({ ...item, isAvailable: !item.isAvailable })}
@@ -943,6 +1046,12 @@ export const AdminDashboard: React.FC = () => {
                             </button>
                           </td>
                           <td className="p-4 text-right">
+                            <button
+                              onClick={() => handleEditAdminMenuClick(item)}
+                              className="px-2.5 py-1 text-xs rounded-lg border border-[#00ABAB]/30 hover:bg-[#0A0A0A] text-[#FFFFFF] transition-colors cursor-pointer mr-1.5"
+                            >
+                              <Edit className="h-3.5 w-3.5 inline" /> Edit
+                            </button>
                             <button
                               onClick={() => {
                                 if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
@@ -2368,6 +2477,140 @@ export const AdminDashboard: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* ADMIN SINGLE MENU ITEM MODAL */}
+      {isAdminMenuModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <form onSubmit={handleSaveAdminMenu} className="glass-panel border border-[#00ABAB]/30 p-6 rounded-2xl shadow-2xl max-w-md w-full space-y-4">
+            <h3 className="font-bold text-lg text-[#FFFFFF] font-sans">
+              {editingAdminMenuItem ? 'Edit Menu Item' : 'Create New Menu Item'}
+            </h3>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Item Name</label>
+                <input
+                  type="text"
+                  required
+                  id="input-admin-menu-name"
+                  value={adminMenuForm.name}
+                  onChange={e => setAdminMenuForm({...adminMenuForm, name: e.target.value})}
+                  className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
+                  placeholder="e.g., Ice Cold Brew"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Description</label>
+                <textarea
+                  required
+                  id="input-admin-menu-desc"
+                  value={adminMenuForm.description}
+                  onChange={e => setAdminMenuForm({...adminMenuForm, description: e.target.value})}
+                  className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
+                  rows={2}
+                  placeholder="Briefly describe the item ingredients..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Vendor Stall / Outlet</label>
+                <select
+                  id="select-admin-menu-vendor"
+                  value={adminMenuForm.vendorId}
+                  onChange={e => setAdminMenuForm({...adminMenuForm, vendorId: e.target.value})}
+                  className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF] cursor-pointer"
+                >
+                  {vendors.map(v => (
+                    <option key={v.id} value={v.id}>{v.name} ({v.stallNumber})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Price (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    id="input-admin-menu-price"
+                    value={adminMenuForm.price}
+                    onChange={e => setAdminMenuForm({...adminMenuForm, price: Number(e.target.value)})}
+                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
+                    min={0}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Stock Entries</label>
+                  <input
+                    type="number"
+                    required
+                    id="input-admin-menu-stock"
+                    value={adminMenuForm.stockQuantity}
+                    onChange={e => setAdminMenuForm({...adminMenuForm, stockQuantity: Number(e.target.value)})}
+                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#40E0D0] font-mono font-bold"
+                    min={0}
+                    placeholder="e.g. 50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Category</label>
+                  <input
+                    type="text"
+                    required
+                    id="input-admin-menu-category"
+                    value={adminMenuForm.category}
+                    onChange={e => setAdminMenuForm({...adminMenuForm, category: e.target.value})}
+                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
+                    placeholder="e.g. Burgers, Beverages"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Promo Image URL</label>
+                <input
+                  type="url"
+                  id="input-admin-menu-image"
+                  value={adminMenuForm.image}
+                  onChange={e => setAdminMenuForm({...adminMenuForm, image: e.target.value})}
+                  className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
+                  placeholder="https://images.unsplash.com..."
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="input-admin-menu-available"
+                  checked={adminMenuForm.isAvailable}
+                  onChange={e => setAdminMenuForm({...adminMenuForm, isAvailable: e.target.checked})}
+                  className="h-4 w-4 rounded text-[#40E0D0] focus:ring-teal-900 cursor-pointer"
+                />
+                <label htmlFor="input-admin-menu-available" className="text-slate-100/75 font-bold cursor-pointer">Immediately list as Available (In Stock)</label>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end border-t border-[#007B8B]/10 pt-4">
+              <button
+                type="button"
+                id="btn-cancel-admin-menu"
+                onClick={() => setIsAdminMenuModalOpen(false)}
+                className="px-4 py-2 border border-[#007B8B]/25 text-slate-100 rounded-xl font-bold text-xs hover:bg-[#007B8B]/5 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                id="btn-save-admin-menu-form"
+                className="px-4 py-2 bg-gradient-to-r from-[#007B8B] to-[#134E4A] text-[#0B0F14] rounded-xl font-bold text-xs hover:bg-[#134E4A] cursor-pointer"
+              >
+                Save Item
+              </button>
+            </div>
+          </form>
         </div>
       )}
       {/* BULK ADD MENU ITEMS MODAL */}

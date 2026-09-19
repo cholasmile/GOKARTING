@@ -1,0 +1,34 @@
+[
+  {
+    "id": "vendor-forest-cafe",
+    "name": "The Forest Cafe",
+    "type": "cafe",
+    "image": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
+    "ownerName": "Sarah Jenkins",
+    "stallNumber": "Stall F-01"
+  },
+  {
+    "id": "vendor-adventure-grill",
+    "name": "Adventure Grill & Fast Food",
+    "type": "fast_food",
+    "image": "https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=800&q=80",
+    "ownerName": "Marcus Broadus",
+    "stallNumber": "Stall F-02"
+  },
+  {
+    "id": "vendor-citrus-splash",
+    "name": "Citrus Splash Juice Bar",
+    "type": "juice",
+    "image": "https://images.unsplash.com/photo-1534353436294-0dbd4bdac845?auto=format&fit=crop&w=800&q=80",
+    "ownerName": "Elena Rostova",
+    "stallNumber": "Stall F-03"
+  },
+  {
+    "id": "vendor-golden-scoop",
+    "name": "Golden Scoop Artisanal Desserts",
+    "type": "ice_cream",
+    "image": "https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=800&q=80",
+    "ownerName": "Oliver Chen",
+    "stallNumber": "Stall F-04"
+  }
+]

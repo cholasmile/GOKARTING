@@ -1,0 +1,98 @@
+[
+  {
+    "id": "inv-coffee-beans",
+    "vendorId": "vendor-forest-cafe",
+    "name": "Arabica Coffee Beans (kg)",
+    "currentStock": 25,
+    "minStockLevel": 5,
+    "unit": "kg"
+  },
+  {
+    "id": "inv-whole-milk",
+    "vendorId": "vendor-forest-cafe",
+    "name": "Organic Whole Milk (Liters)",
+    "currentStock": 4,
+    "minStockLevel": 10,
+    "unit": "L"
+  },
+  {
+    "id": "inv-croissant-dough",
+    "vendorId": "vendor-forest-cafe",
+    "name": "Croissant Dough Pre-rolls",
+    "currentStock": 40,
+    "minStockLevel": 15,
+    "unit": "pcs"
+  },
+  {
+    "id": "inv-beef-patties",
+    "vendorId": "vendor-adventure-grill",
+    "name": "Angus Beef Patties",
+    "currentStock": 65,
+    "minStockLevel": 20,
+    "unit": "pcs"
+  },
+  {
+    "id": "inv-buns",
+    "vendorId": "vendor-adventure-grill",
+    "name": "Brioche Burger Buns",
+    "currentStock": 12,
+    "minStockLevel": 30,
+    "unit": "pcs"
+  },
+  {
+    "id": "inv-pepperoni",
+    "vendorId": "vendor-adventure-grill",
+    "name": "Sliced Italian Pepperoni (kg)",
+    "currentStock": 8,
+    "minStockLevel": 2,
+    "unit": "kg"
+  },
+  {
+    "id": "inv-fries-frozen",
+    "vendorId": "vendor-adventure-grill",
+    "name": "Frozen Potato Sticks (kg)",
+    "currentStock": 35,
+    "minStockLevel": 10,
+    "unit": "kg"
+  },
+  {
+    "id": "inv-spinach",
+    "vendorId": "vendor-citrus-splash",
+    "name": "Fresh Spinach leaves (kg)",
+    "currentStock": 1.5,
+    "minStockLevel": 3,
+    "unit": "kg"
+  },
+  {
+    "id": "inv-ginger",
+    "vendorId": "vendor-citrus-splash",
+    "name": "Fresh Ginger Root (kg)",
+    "currentStock": 4,
+    "minStockLevel": 1,
+    "unit": "kg"
+  },
+  {
+    "id": "inv-berries-frozen",
+    "vendorId": "vendor-citrus-splash",
+    "name": "Assorted Frozen Berries (kg)",
+    "currentStock": 12,
+    "minStockLevel": 4,
+    "unit": "kg"
+  },
+  {
+    "id": "inv-cream",
+    "vendorId": "vendor-golden-scoop",
+    "name": "Whipping Cream (Liters)",
+    "currentStock": 30,
+    "minStockLevel": 8,
+    "unit": "L"
+  },
+  {
+    "id": "inv-marshmallows",
+    "vendorId": "vendor-golden-scoop",
+    "name": "Marshmallows Bag (500g)",
+    "currentStock": 2,
+    "minStockLevel": 5,
+    "unit": "bags"
+  }
+]

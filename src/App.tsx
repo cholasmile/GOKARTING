@@ -14,6 +14,7 @@ import { NotificationToast } from './components/NotificationToast';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ProtectedLayout } from './components/ProtectedLayout';
 import { SyncStatusIndicator } from './components/SyncStatusIndicator';
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { CustomerMobileRaceView } from './components/karting/timingSystem/CustomerMobileRaceView';
 import { CustomerTvDisplayView } from './components/karting/timingSystem/CustomerTvDisplayView';
 import { RaceTimingMaster } from './components/karting/timingSystem/RaceTimingMaster';
@@ -356,6 +357,9 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <SyncStatusIndicator />
+        <div className="fixed top-4 right-4 z-50">
+          <PWAInstallPrompt />
+        </div>
       </BrowserRouter>
     </AppProvider>
   );

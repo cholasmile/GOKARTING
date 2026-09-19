@@ -146,6 +146,7 @@ export interface MenuItem {
   category: string;
   isAvailable: boolean;
   image: string;
+  stockQuantity?: number;
 }
 
 export interface FoodOrderItem {

@@ -3,10 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"tsx api/index.js\" \"vite --port=3000 --host=0.0.0.0\"",
     "build": "vite build",
-    "preview": "vite preview",
+    "preview": "vite preview --port=3000 --host=0.0.0.0",
+    "app:start": "concurrently \"tsx api/index.js\" \"vite preview --port=3000 --host=0.0.0.0\"",
+    "desktop": "electron .",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },

@@ -1,0 +1,102 @@
+[
+  {
+    "id": "menu-espresso",
+    "vendorId": "vendor-forest-cafe",
+    "name": "Double Shot Espresso",
+    "description": "Freshly ground premium organic Arabica beans pulled to perfection.",
+    "price": 4.5,
+    "category": "Coffee",
+    "isAvailable": true,
+    "image": "https://images.unsplash.com/photo-1510972527409-cef1903972fa?auto=format&fit=crop&w=300&q=80"
+  },
+  {
+    "id": "menu-latte",
+    "vendorId": "vendor-forest-cafe",
+    "name": "Adventure Vanilla Latte",
+    "description": "Rich espresso with steamed milk, creamy microfoam, and custom organic Madagascar vanilla syrup.",
+    "price": 5.5,
+    "category": "Coffee",
+    "isAvailable": true,
+    "image": "https://images.unsplash.com/photo-1570968915860-54d5c301fc9f?auto=format&fit=crop&w=300&q=80"
+  },
+  {
+    "id": "menu-croissant",
+    "vendorId": "vendor-forest-cafe",
+    "name": "Butter Croissant",
+    "description": "Warm, flaky, golden French pastry baked fresh every morning.",
+    "price": 3.5,
+    "category": "Bakery",
+    "isAvailable": true,
+    "image": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=300&q=80"
+  },
+  {
+    "id": "menu-burger",
+    "vendorId": "vendor-adventure-grill",
+    "name": "Double Smash Ranger Burger",
+    "description": "Two grass-fed angus beef patties, melted sharp cheddar, wild caramelized onions, and house burger sauce.",
+    "price": 12.5,
+    "category": "Burgers",
+    "isAvailable": true,
+    "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=300&q=80"
+  },
+  {
+    "id": "menu-pizza",
+    "vendorId": "vendor-adventure-grill",
+    "name": "Smoked Woodfire Pepperoni Pizza",
+    "description": "Tangy tomato sauce, premium mozzarella, spicy beef pepperoni, drizzled with sweet hot honey.",
+    "price": 15,
+    "category": "Pizza",
+    "isAvailable": true,
+    "image": "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=300&q=80"
+  },
+  {
+    "id": "menu-fries",
+    "vendorId": "vendor-adventure-grill",
+    "name": "Loaded Truffle Fries",
+    "description": "Golden-crispy double-cooked potato fries tossed in truffle oil, parmesan, and fresh parsley.",
+    "price": 7,
+    "category": "Sides",
+    "isAvailable": true,
+    "image": "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=300&q=80"
+  },
+  {
+    "id": "menu-juice-green",
+    "vendorId": "vendor-citrus-splash",
+    "name": "Wild Green Energy Smoothie",
+    "description": "A cold-pressed blend of crisp green apple, fresh spinach, celery, ginger root, and raw honey.",
+    "price": 6.5,
+    "category": "Cold Juices",
+    "isAvailable": true,
+    "image": "https://images.unsplash.com/photo-1610970881699-44a5587caaec?auto=format&fit=crop&w=300&q=80"
+  },
+  {
+    "id": "menu-shake-berry",
+    "vendorId": "vendor-citrus-splash",
+    "name": "Mountain Berry Blast Milkshake",
+    "description": "Thick creamy milkshake loaded with fresh strawberries, blueberries, raspberries, and greek yogurt.",
+    "price": 7.5,
+    "category": "Shakes",
+    "isAvailable": true,
+    "image": "https://images.unsplash.com/photo-1553787499-6f9133860278?auto=format&fit=crop&w=300&q=80"
+  },
+  {
+    "id": "menu-ice-waffle",
+    "vendorId": "vendor-golden-scoop",
+    "name": "Campfire Waffle Sundae",
+    "description": "A warm waffle topped with two scoops of chocolate ice cream, toasted marshmallows, and chocolate syrup.",
+    "price": 8.5,
+    "category": "Sundaes",
+    "isAvailable": true,
+    "image": "https://images.unsplash.com/photo-1504113888839-1c8003672244?auto=format&fit=crop&w=300&q=80"
+  },
+  {
+    "id": "menu-scoop-pistachio",
+    "vendorId": "vendor-golden-scoop",
+    "name": "Roasted Pistachio Ice Cream",
+    "description": "One double-scoop waffle cone of premium home-churned Sicilian pistachio ice cream.",
+    "price": 5,
+    "category": "Scoops",
+    "isAvailable": true,
+    "image": "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=300&q=80"
+  }
+]

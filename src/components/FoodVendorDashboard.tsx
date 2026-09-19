@@ -55,6 +55,7 @@ export const FoodVendorDashboard: React.FC = () => {
     price: 5.0,
     category: '',
     image: '',
+    stockQuantity: 50,
     isAvailable: true
   });
 
@@ -162,6 +163,7 @@ export const FoodVendorDashboard: React.FC = () => {
   const handleSaveMenu = (e: React.FormEvent) => {
     e.preventDefault();
     const defaultImage = menuForm.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=300&q=80';
+    const qty = Number(menuForm.stockQuantity) || 0;
 
     if (editingMenuItem) {
       updateMenuItem({
@@ -171,7 +173,8 @@ export const FoodVendorDashboard: React.FC = () => {
         price: Number(menuForm.price),
         category: menuForm.category,
         image: defaultImage,
-        isAvailable: menuForm.isAvailable
+        stockQuantity: qty,
+        isAvailable: qty > 0 ? menuForm.isAvailable : false
       });
     } else {
       if (!currentVendor) return;
@@ -182,7 +185,8 @@ export const FoodVendorDashboard: React.FC = () => {
         price: Number(menuForm.price),
         category: menuForm.category,
         image: defaultImage,
-        isAvailable: menuForm.isAvailable
+        stockQuantity: qty,
+        isAvailable: qty > 0 ? menuForm.isAvailable : false
       });
     }
 
@@ -194,6 +198,7 @@ export const FoodVendorDashboard: React.FC = () => {
       price: 5.0,
       category: '',
       image: '',
+      stockQuantity: 50,
       isAvailable: true
     });
   };
@@ -206,6 +211,7 @@ export const FoodVendorDashboard: React.FC = () => {
       price: item.price,
       category: item.category,
       image: item.image,
+      stockQuantity: item.stockQuantity ?? 50,
       isAvailable: item.isAvailable
     });
     setIsMenuModalOpen(true);
@@ -371,34 +377,38 @@ export const FoodVendorDashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8 gap-2.5">
               {filteredPosMenuItems.map(item => (
                 <div 
                   key={item.id}
-                  className="glass-panel p-3.5 border border-[#00ABAB]/20 hover:border-[#14F1D9]/50 rounded-2xl flex gap-3 bg-[#0B1120] transition-all group"
+                  className="glass-panel p-2 border border-[#00ABAB]/20 hover:border-[#14F1D9]/50 rounded-xl flex flex-col justify-between bg-[#0B1120] transition-all group aspect-square"
                 >
-                  <img 
-                    src={item.image} 
-                    alt={item.name} 
-                    className="w-20 h-20 rounded-xl object-cover border border-white/10" 
-                    referrerPolicy="no-referrer"
-                  />
+                  <div className="relative w-full h-1/2 rounded-lg overflow-hidden mb-1">
+                    <img 
+                      src={item.image} 
+                      alt={item.name} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                      referrerPolicy="no-referrer"
+                    />
+                    <span className="absolute top-1 left-1 px-1 py-0.5 bg-[#050816]/90 border border-white/5 text-[7px] font-mono font-bold text-[#14F1D9] rounded uppercase truncate max-w-[80%]">
+                      {item.category}
+                    </span>
+                  </div>
+
                   <div className="flex-1 flex flex-col justify-between min-w-0">
                     <div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-[9px] uppercase font-mono font-bold text-[#14F1D9] bg-[#050816] px-1.5 py-0.5 rounded border border-white/5">{item.category}</span>
-                        <span className="font-mono text-xs font-black text-white">₹{item.price.toFixed(2)}</span>
+                      <div className="flex justify-between items-start gap-1">
+                        <h4 className="font-bold text-[10px] text-white truncate group-hover:text-[#14F1D9] transition-colors">{item.name}</h4>
+                        <span className="font-mono text-[10px] font-black text-white shrink-0">₹{item.price.toFixed(2)}</span>
                       </div>
-                      <h4 className="font-bold text-xs text-white truncate mt-1 group-hover:text-[#14F1D9] transition-colors">{item.name}</h4>
-                      <p className="text-[9px] text-[#9CA3AF] line-clamp-1 mt-0.5">{item.description}</p>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => addToPosCart(item)}
-                      className="mt-2 self-end px-3 py-1.5 rounded-lg bg-[#14F1D9]/10 hover:bg-[#14F1D9] hover:text-[#0B1120] text-[#14F1D9] font-black text-[9px] uppercase tracking-widest flex items-center gap-1 cursor-pointer transition-all border border-[#14F1D9]/30"
+                      className="w-full py-1 mt-1 rounded-lg bg-[#14F1D9]/10 hover:bg-[#14F1D9] hover:text-[#0B1120] text-[#14F1D9] font-black text-[8px] uppercase tracking-widest flex items-center justify-center gap-0.5 cursor-pointer transition-all border border-[#14F1D9]/30"
                     >
-                      <Plus className="h-3 w-3" /> Add to Cart
+                      <Plus className="h-2.5 w-2.5" /> Add
                     </button>
                   </div>
                 </div>
@@ -707,7 +717,12 @@ export const FoodVendorDashboard: React.FC = () => {
                   </div>
 
                   <div className="flex items-center justify-between border-t border-[#00ABAB]/30 pt-3">
-                    <span className="font-bold text-sm font-mono text-[#FFFFFF]">₹{item.price.toFixed(2)}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm font-mono text-[#FFFFFF]">₹{item.price.toFixed(2)}</span>
+                      <span className="text-[10px] font-mono text-[#40E0D0] bg-[#0A0A0A] px-2 py-0.5 rounded border border-[#00ABAB]/30 font-bold">
+                        Stock: {item.stockQuantity ?? 50}
+                      </span>
+                    </div>
                     
                     <div className="flex items-center gap-2">
                       {/* Availability Switch */}

@@ -45,6 +45,8 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
 
   const [selectedKart, setSelectedKart] = useState<KartType>(karts[0]);
   const [selectedPackage, setSelectedPackage] = useState<KartPackage | null>(packages[0] || null);
+  const [secondaryPackage, setSecondaryPackage] = useState<KartPackage | null>(packages[1] || null);
+  const [enableSecondPkg, setEnableSecondPkg] = useState<boolean>(false);
 
   React.useEffect(() => {
     if (packages.length > 0) {
@@ -54,8 +56,12 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
       } else {
         setSelectedPackage(packages[0]);
       }
+      if (packages.length > 1) {
+        setSecondaryPackage(packages[1]);
+      }
     } else {
       setSelectedPackage(null);
+      setSecondaryPackage(null);
     }
   }, [packages]);
   const [bookingQuantity, setBookingQuantity] = useState<number>(1);
@@ -91,7 +97,8 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successBooking, setSuccessBooking] = useState<any | null>(null);
 
-  const bookingTotal = (paymentMethod === 'complimentary' || !selectedPackage) ? 0 : selectedPackage.price * bookingQuantity;
+  const combinedPerPersonPrice = (selectedPackage?.price || 0) + (enableSecondPkg && secondaryPackage ? secondaryPackage.price : 0);
+  const bookingTotal = (paymentMethod === 'complimentary' || !selectedPackage) ? 0 : combinedPerPersonPrice * bookingQuantity;
 
   const calculateTuningSpecs = () => {
     let topSpeed = selectedKart.topSpeed;
@@ -165,7 +172,10 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
       return;
     }
 
-    const details = `Setup: ${tireCompound.toUpperCase()} Tires, ${aeroWing.toUpperCase()} Wing | Pkg: ${selectedPackage.name}`;
+    const pkgText = enableSecondPkg && secondaryPackage 
+      ? `2 Packages [${selectedPackage.name} + ${secondaryPackage.name}]` 
+      : selectedPackage.name;
+    const details = `Setup: ${tireCompound.toUpperCase()} Tires, ${aeroWing.toUpperCase()} Wing | Pkg: ${pkgText}`;
 
     const finalizeBooking = () => {
       const result = createBooking({
@@ -565,26 +575,71 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                   No packages configured for this activity in the database.
                 </div>
               ) : (
-                packages.map(pkg => (
-                  <button
-                    key={pkg.id}
-                    onClick={() => setSelectedPackage(pkg)}
-                    className={`w-full text-left p-3 rounded-xl transition-all duration-300 border relative overflow-hidden group cursor-pointer ${
-                      selectedPackage?.id === pkg.id 
-                        ? 'bg-[#FFB703]/10 border-[#FFB703]/50 shadow-[0_0_15px_rgba(255,183,3,0.15)]' 
-                        : 'bg-[#050816] border-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    {selectedPackage?.id === pkg.id && (
-                      <div className="absolute top-0 right-0 w-16 h-16 bg-[#FFB703]/20 rounded-full blur-[20px] pointer-events-none"></div>
-                    )}
-                    <div className="flex justify-between items-start mb-1 relative z-10">
-                      <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage?.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
-                      <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
+                <>
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-mono text-[#9CA3AF] uppercase tracking-wider block">Package 1 (Primary)</span>
+                    {packages.map(pkg => (
+                      <button
+                        key={pkg.id}
+                        onClick={() => setSelectedPackage(pkg)}
+                        className={`w-full text-left p-3 rounded-xl transition-all duration-300 border relative overflow-hidden group cursor-pointer ${
+                          selectedPackage?.id === pkg.id 
+                            ? 'bg-[#FFB703]/10 border-[#FFB703]/50 shadow-[0_0_15px_rgba(255,183,3,0.15)]' 
+                            : 'bg-[#050816] border-white/5 hover:border-white/20'
+                        }`}
+                      >
+                        {selectedPackage?.id === pkg.id && (
+                          <div className="absolute top-0 right-0 w-16 h-16 bg-[#FFB703]/20 rounded-full blur-[20px] pointer-events-none"></div>
+                        )}
+                        <div className="flex justify-between items-start mb-1 relative z-10">
+                          <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage?.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
+                          <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
+                        </div>
+                        <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1">{pkg.description}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {packages.length > 1 && (
+                    <div className="pt-3 border-t border-white/10 space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-mono font-bold text-[#14F1D9] hover:text-white transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={enableSecondPkg}
+                          onChange={e => setEnableSecondPkg(e.target.checked)}
+                          className="w-4 h-4 accent-[#14F1D9] rounded cursor-pointer"
+                        />
+                        <span>+ Add 2nd Package to Booking (2-Package Combo)</span>
+                      </label>
+
+                      {enableSecondPkg && (
+                        <div className="p-3 bg-[#050816] rounded-xl border border-[#14F1D9]/40 space-y-2 animate-fade-in">
+                          <span className="text-[10px] font-mono text-[#14F1D9] uppercase tracking-wider block font-bold">Package 2 (Second Package)</span>
+                          <select
+                            value={secondaryPackage?.id || ''}
+                            onChange={e => {
+                              const found = packages.find(p => p.id === e.target.value);
+                              if (found) setSecondaryPackage(found);
+                            }}
+                            className="w-full bg-[#0B1120] text-white border border-white/10 rounded-lg p-2 text-xs focus:border-[#14F1D9] outline-none font-mono"
+                          >
+                            {packages.map(pkg => (
+                              <option key={pkg.id} value={pkg.id} disabled={pkg.id === selectedPackage?.id}>
+                                {pkg.name} — ₹{pkg.price} {pkg.id === selectedPackage?.id ? '(Already Package 1)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {secondaryPackage && (
+                            <p className="text-[10px] text-[#9CA3AF] italic">{secondaryPackage.description}</p>
+                          )}
+                          <div className="text-xs font-mono text-[#14F1D9] font-bold">
+                            Combined Price: ₹{combinedPerPersonPrice} / person
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1">{pkg.description}</p>
-                  </button>
-                ))
+                  )}
+                </>
               )}
             </div>
           </div>
