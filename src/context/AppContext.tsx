@@ -1371,85 +1371,97 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
-    // Update existing payment record or insert a new one
-    const existingPayment = payments.find(p => p.bookingId === params.bookingId);
+    // Update existing payment record or insert a new one (using functional state updater to avoid closure staleness)
     const methodVal = params.method === 'razorpay' ? 'razorpay' : params.method;
 
-    if (existingPayment) {
-      const updatedPayment: Payment = {
-        ...existingPayment,
-        method: methodVal,
-        status: finalStatus === 'paid' ? 'paid' : (finalStatus as any),
-        timestamp: now,
-        referenceNumber: params.referenceNumber || existingPayment.referenceNumber,
-        amountReceived: params.amountReceived || existingPayment.amountReceived,
-        changeGiven: params.amountReceived != null ? Math.max(0, params.amountReceived - booking.totalAmount) : existingPayment.changeGiven,
-        staffId: params.staffId || existingPayment.staffId,
-        confirmedAt: now,
-        razorpayOrderId: params.razorpayOrderId || existingPayment.razorpayOrderId,
-        razorpayPaymentId: params.razorpayPaymentId || existingPayment.razorpayPaymentId,
-        
-        // DEUCE specific fields
-        payment_method: params.method.toUpperCase(),
-        payment_status: finalStatus.toUpperCase(),
-        gateway: params.gateway || existingPayment.gateway || (params.method === 'razorpay' ? 'Razorpay' : 'None'),
-        gateway_order_id: params.razorpayOrderId || existingPayment.gateway_order_id,
-        gateway_payment_id: params.razorpayPaymentId || existingPayment.gateway_payment_id,
-        gateway_reference_id: params.referenceNumber || existingPayment.gateway_reference_id,
-        pos_transaction_id: params.posTransactionId || existingPayment.pos_transaction_id,
-        terminal_id: params.terminalId || existingPayment.terminal_id,
-        updated_at: now,
-        paid_at: finalStatus === 'paid' ? now : undefined,
-        failure_reason: params.failureReason,
-        ticketId: `tkt-${params.bookingId}`,
-        customerName: booking.customerName,
-        customerPhone: booking.customerPhone,
-        activityName: booking.activityName,
-        counterId: (params.staffId || params.terminalId || params.posTransactionId || params.method === 'cash') ? 'counter_1' : 'online'
-      };
-      setPayments(prev => prev.map(p => p.id === existingPayment.id ? updatedPayment : p));
-      if (isSupabaseConfigured) writeToLocalAndSync('payments', 'update', updatedPayment);
-    } else {
-      const newPayment: Payment = {
-        id: `pay-${Date.now()}`,
-        bookingId: params.bookingId,
-        amount: booking.totalAmount,
-        method: methodVal,
-        status: finalStatus === 'paid' ? 'paid' : (finalStatus as any),
-        transactionId: params.referenceNumber || generateOfflineId('tx'),
-        timestamp: now,
-        referenceNumber: params.referenceNumber,
-        amountReceived: params.amountReceived,
-        changeGiven: params.amountReceived != null ? Math.max(0, params.amountReceived - booking.totalAmount) : undefined,
-        staffId: params.staffId,
-        confirmedAt: now,
-        razorpayOrderId: params.razorpayOrderId,
-        razorpayPaymentId: params.razorpayPaymentId,
-        
-        // DEUCE specific fields
-        invoice_id: `INV-B-${params.bookingId}`,
-        customer_id: booking.customerEmail,
-        currency: 'INR',
-        payment_method: params.method.toUpperCase(),
-        payment_status: finalStatus.toUpperCase(),
-        gateway: params.gateway || (params.method === 'razorpay' ? 'Razorpay' : 'None'),
-        gateway_order_id: params.razorpayOrderId,
-        gateway_payment_id: params.razorpayPaymentId,
-        gateway_reference_id: params.referenceNumber,
-        pos_transaction_id: params.posTransactionId,
-        terminal_id: params.terminalId,
-        created_at: now,
-        updated_at: now,
-        paid_at: finalStatus === 'paid' ? now : undefined,
-        failure_reason: params.failureReason,
-        ticketId: `tkt-${params.bookingId}`,
-        customerName: booking.customerName,
-        customerPhone: booking.customerPhone,
-        activityName: booking.activityName,
-        counterId: (params.staffId || params.terminalId || params.posTransactionId || params.method === 'cash') ? 'counter_1' : 'online'
-      };
-      setPayments(prev => [newPayment, ...prev]);
-      if (isSupabaseConfigured) writeToLocalAndSync('payments', 'insert', newPayment);
+    let finalPaymentRecord: Payment | null = null;
+
+    setPayments(prev => {
+      const existingPayment = prev.find(p => p.bookingId === params.bookingId);
+      if (existingPayment) {
+        const updatedPayment: Payment = {
+          ...existingPayment,
+          method: methodVal,
+          status: finalStatus === 'paid' ? 'paid' : (finalStatus as any),
+          timestamp: now,
+          referenceNumber: params.referenceNumber || existingPayment.referenceNumber,
+          amountReceived: params.amountReceived || existingPayment.amountReceived,
+          changeGiven: params.amountReceived != null ? Math.max(0, params.amountReceived - booking.totalAmount) : existingPayment.changeGiven,
+          staffId: params.staffId || existingPayment.staffId,
+          confirmedAt: now,
+          razorpayOrderId: params.razorpayOrderId || existingPayment.razorpayOrderId,
+          razorpayPaymentId: params.razorpayPaymentId || existingPayment.razorpayPaymentId,
+          
+          // DEUCE specific fields
+          payment_method: params.method.toUpperCase(),
+          payment_status: finalStatus.toUpperCase(),
+          gateway: params.gateway || existingPayment.gateway || (params.method === 'razorpay' ? 'Razorpay' : 'None'),
+          gateway_order_id: params.razorpayOrderId || existingPayment.gateway_order_id,
+          gateway_payment_id: params.razorpayPaymentId || existingPayment.gateway_payment_id,
+          gateway_reference_id: params.referenceNumber || existingPayment.gateway_reference_id,
+          pos_transaction_id: params.posTransactionId || existingPayment.pos_transaction_id,
+          terminal_id: params.terminalId || existingPayment.terminal_id,
+          updated_at: now,
+          paid_at: finalStatus === 'paid' ? now : undefined,
+          failure_reason: params.failureReason,
+          ticketId: `tkt-${params.bookingId}`,
+          customerName: booking.customerName,
+          customerPhone: booking.customerPhone,
+          activityName: booking.activityName,
+          counterId: (params.staffId || params.terminalId || params.posTransactionId || params.method === 'cash') ? 'counter_1' : 'online'
+        };
+        finalPaymentRecord = updatedPayment;
+        // Keep the updated payment, and filter out any duplicate pending payments for the same bookingId
+        const filteredOther = prev.filter(p => p.bookingId !== params.bookingId);
+        return [updatedPayment, ...filteredOther];
+      } else {
+        const newPayment: Payment = {
+          id: `pay-${Date.now()}`,
+          bookingId: params.bookingId,
+          amount: booking.totalAmount,
+          method: methodVal,
+          status: finalStatus === 'paid' ? 'paid' : (finalStatus as any),
+          transactionId: params.referenceNumber || generateOfflineId('tx'),
+          timestamp: now,
+          referenceNumber: params.referenceNumber,
+          amountReceived: params.amountReceived,
+          changeGiven: params.amountReceived != null ? Math.max(0, params.amountReceived - booking.totalAmount) : undefined,
+          staffId: params.staffId,
+          confirmedAt: now,
+          razorpayOrderId: params.razorpayOrderId,
+          razorpayPaymentId: params.razorpayPaymentId,
+          
+          // DEUCE specific fields
+          invoice_id: `INV-B-${params.bookingId}`,
+          customer_id: booking.customerEmail,
+          currency: 'INR',
+          payment_method: params.method.toUpperCase(),
+          payment_status: finalStatus.toUpperCase(),
+          gateway: params.gateway || (params.method === 'razorpay' ? 'Razorpay' : 'None'),
+          gateway_order_id: params.razorpayOrderId,
+          gateway_payment_id: params.razorpayPaymentId,
+          gateway_reference_id: params.referenceNumber,
+          pos_transaction_id: params.posTransactionId,
+          terminal_id: params.terminalId,
+          created_at: now,
+          updated_at: now,
+          paid_at: finalStatus === 'paid' ? now : undefined,
+          failure_reason: params.failureReason,
+          ticketId: `tkt-${params.bookingId}`,
+          customerName: booking.customerName,
+          customerPhone: booking.customerPhone,
+          activityName: booking.activityName,
+          counterId: (params.staffId || params.terminalId || params.posTransactionId || params.method === 'cash') ? 'counter_1' : 'online'
+        };
+        finalPaymentRecord = newPayment;
+        // Strip out any stale pending payments for the same bookingId if present
+        const filteredOther = prev.filter(p => p.bookingId !== params.bookingId);
+        return [newPayment, ...filteredOther];
+      }
+    });
+
+    if (isSupabaseConfigured && finalPaymentRecord) {
+      writeToLocalAndSync('payments', 'upsert', finalPaymentRecord);
     }
 
     if (isSupabaseConfigured) writeToLocalAndSync('bookings', 'update', updatedBooking);

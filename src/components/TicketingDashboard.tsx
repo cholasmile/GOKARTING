@@ -159,7 +159,7 @@ const TicketingDashboard: React.FC = () => {
     return matchesSearch && matchesVendor && item.isAvailable;
   });
 
-  const counterPayments = payments.filter(p => {
+  const filteredRawPayments = payments.filter(p => {
     const isCounter = p.counterId === 'counter_1' || p.staffId || p.method === 'cash' || p.method === 'qrcode' || p.method.startsWith('card');
     if (!isCounter) return false;
     if (!searchTerm) return true;
@@ -168,7 +168,25 @@ const TicketingDashboard: React.FC = () => {
            p.bookingId?.toLowerCase().includes(searchLower) ||
            p.ticketId?.toLowerCase().includes(searchLower) ||
            p.activityName?.toLowerCase().includes(searchLower);
-  }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  });
+
+  // Deduplicate by bookingId (prefer 'paid' status over 'pending')
+  const deduplicatedPaymentsMap = new Map<string, Payment>();
+  filteredRawPayments.forEach(p => {
+    const existing = deduplicatedPaymentsMap.get(p.bookingId);
+    if (!existing) {
+      deduplicatedPaymentsMap.set(p.bookingId, p);
+    } else if (p.status === 'paid' && existing.status !== 'paid') {
+      deduplicatedPaymentsMap.set(p.bookingId, p);
+    } else if (new Date(p.timestamp).getTime() > new Date(existing.timestamp).getTime()) {
+      if (existing.status !== 'paid' || p.status === 'paid') {
+        deduplicatedPaymentsMap.set(p.bookingId, p);
+      }
+    }
+  });
+
+  const counterPayments = Array.from(deduplicatedPaymentsMap.values())
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   if (isCheckoutOpen && selectedActivities.length > 0) {
     const combinedName = selectedActivities.length === activities.length 
