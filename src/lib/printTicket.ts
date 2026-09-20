@@ -346,7 +346,7 @@ export function printTicket(opts: PrintTicketOptions) {
       <div class="summary-box">
         ${discountAmount > 0 ? `
         <div class="summary-row">
-          <span>Discount (${discountPercentage}%)</span>
+          <span>Discount${discountPercentage > 0 ? ` (${discountPercentage}%)` : ''}</span>
           <span>-₹${discountAmount.toFixed(2)}</span>
         </div>
         ` : ''}

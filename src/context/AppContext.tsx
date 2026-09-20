@@ -87,6 +87,10 @@ interface AppContextProps {
     details: string;
     quantity: number;
     totalAmount: number;
+    discountType?: 'none' | 'individual_5' | 'group_10' | 'group_15' | 'bulk_30' | 'custom' | 'cash' | string;
+    discountPercentage?: number;
+    discountAmount?: number;
+    originalAmount?: number;
     paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay' | 'complimentary';
     paymentStatus?: 'pending' | 'processing' | 'paid' | 'failed' | 'cancelled' | 'refunded';
     status?: 'confirmed' | 'reserved';
@@ -1044,6 +1048,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     details: string;
     quantity: number;
     totalAmount: number;
+    discountType?: 'none' | 'individual_5' | 'group_10' | 'group_15' | 'bulk_30' | 'custom' | 'cash' | string;
+    discountPercentage?: number;
+    discountAmount?: number;
+    originalAmount?: number;
     paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay' | 'complimentary';
     paymentStatus?: 'pending' | 'processing' | 'paid' | 'failed' | 'cancelled' | 'refunded';
     status?: 'confirmed' | 'reserved';
@@ -1098,8 +1106,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       selectedPackageName = selectedPkg.name;
       selectedPackageId = selectedPkg.id;
 
-      // Fail-Safe: Calculate ticket total using database package price
-      enforcedTotalAmount = data.paymentMethod === 'complimentary' ? 0 : selectedUnitPrice * data.quantity;
+      // Fail-Safe: Calculate ticket total using database package price minus applied discount
+      const pkgSubtotal = selectedUnitPrice * data.quantity;
+      const appliedDiscount = data.discountAmount || 0;
+      enforcedTotalAmount = data.paymentMethod === 'complimentary' ? 0 : Math.max(0, pkgSubtotal - appliedDiscount);
     }
 
     // Count existing confirmed/reserved bookings for this date only (daily limit, not per-slot)
@@ -1134,7 +1144,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ? `Package: ${selectedPackageName} | Price: ₹${selectedUnitPrice} | Qty: ${data.quantity}`
       : data.details;
 
-    // 2. Create Booking (with snapshotted package price)
+    // 2. Create Booking (with snapshotted package price & discounts)
     const newBooking: Booking = {
       id: bookingId,
       customerName: data.customerName,
@@ -1148,6 +1158,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       details: detailsStr,
       quantity: data.quantity,
       totalAmount: enforcedTotalAmount,
+      discountType: data.discountType,
+      discountPercentage: data.discountPercentage,
+      discountAmount: data.discountAmount,
+      originalAmount: data.originalAmount || (enforcedTotalAmount + (data.discountAmount || 0)),
       paymentStatus: paymentStatusVal,
       status: statusVal,
       bookingDate: timestamp,
@@ -1461,7 +1475,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
 
     if (isSupabaseConfigured && finalPaymentRecord) {
-      writeToLocalAndSync('payments', 'upsert', finalPaymentRecord);
+      writeToLocalAndSync('payments', 'update', finalPaymentRecord);
     }
 
     if (isSupabaseConfigured) writeToLocalAndSync('bookings', 'update', updatedBooking);

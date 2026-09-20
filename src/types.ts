@@ -87,7 +87,7 @@ export interface Booking {
   details: string; // e.g. "2x Adult, 1x Child" or "Package: Sharp Shooter (25 shots)"
   quantity: number;
   totalAmount: number;
-  discountType?: 'none' | 'individual_5' | 'group_10' | 'group_15' | 'bulk_30' | 'custom';
+  discountType?: 'none' | 'individual_5' | 'group_10' | 'group_15' | 'bulk_30' | 'custom' | 'cash' | string;
   discountPercentage?: number;
   discountAmount?: number;
   originalAmount?: number;

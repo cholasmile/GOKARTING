@@ -115,8 +115,9 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
   };
 
   // ── Discount & Tiered Promotional Rules ──
-  const [discountType, setDiscountType] = useState<'none' | 'individual_5' | 'group_10' | 'group_15' | 'bulk_30' | 'custom'>('none');
+  const [discountType, setDiscountType] = useState<'none' | 'individual_5' | 'group_10' | 'group_15' | 'bulk_30' | 'custom' | 'cash'>('none');
   const [customDiscountPct, setCustomDiscountPct] = useState<number>(0);
+  const [customCashDiscount, setCustomCashDiscount] = useState<number>(0);
 
   const totalQuantity = adultCount + childCount;
 
@@ -131,15 +132,33 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
     return sum + (act.adultPrice || 0) * adultCount + (act.childPrice || 0) * childCount;
   }, 0);
 
-  // Active discount percentage
-  const activeDiscountPct = 
-    discountType === 'individual_5' ? 5 :
-    discountType === 'group_10' ? 10 :
-    discountType === 'group_15' ? 15 :
-    discountType === 'bulk_30' ? 30 :
-    discountType === 'custom' ? customDiscountPct : 0;
+  // Active discount percentage and cash discount amount calculation
+  let activeDiscountPct = 0;
+  let discountAmount = 0;
 
-  const discountAmount = Math.round((subtotalAmount * activeDiscountPct) / 100);
+  if (discountType === 'individual_5') {
+    activeDiscountPct = 5;
+    discountAmount = Math.round((subtotalAmount * 5) / 100);
+  } else if (discountType === 'group_10') {
+    activeDiscountPct = 10;
+    discountAmount = Math.round((subtotalAmount * 10) / 100);
+  } else if (discountType === 'group_15') {
+    activeDiscountPct = 15;
+    discountAmount = Math.round((subtotalAmount * 15) / 100);
+  } else if (discountType === 'bulk_30') {
+    activeDiscountPct = 30;
+    discountAmount = Math.round((subtotalAmount * 30) / 100);
+  } else if (discountType === 'custom') {
+    activeDiscountPct = Math.min(100, Math.max(0, customDiscountPct || 0));
+    discountAmount = Math.round((subtotalAmount * activeDiscountPct) / 100);
+  } else if (discountType === 'cash') {
+    discountAmount = Math.min(subtotalAmount, Math.max(0, customCashDiscount || 0));
+    activeDiscountPct = subtotalAmount > 0 ? Math.round((discountAmount / subtotalAmount) * 100) : 0;
+  } else {
+    activeDiscountPct = 0;
+    discountAmount = 0;
+  }
+
   const totalAmount = Math.max(0, subtotalAmount - discountAmount);
 
   // Human-readable details string that includes package names
@@ -268,6 +287,10 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
       details: buildDetailsString(),
       quantity: totalQuantity,
       totalAmount,
+      discountType,
+      discountPercentage: activeDiscountPct,
+      discountAmount,
+      originalAmount: subtotalAmount,
       paymentMethod: 'cash'
     });
 
@@ -368,6 +391,10 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
       details: buildDetailsString(),
       quantity: totalQuantity,
       totalAmount,
+      discountType,
+      discountPercentage: activeDiscountPct,
+      discountAmount,
+      originalAmount: subtotalAmount,
       paymentMethod: 'upi'
     });
 
@@ -415,6 +442,10 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
       details: buildDetailsString(),
       quantity: totalQuantity,
       totalAmount,
+      discountType,
+      discountPercentage: activeDiscountPct,
+      discountAmount,
+      originalAmount: subtotalAmount,
       paymentMethod: 'upi'
     });
 
@@ -474,6 +505,10 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
           details: buildDetailsString(),
           quantity: totalQuantity,
           totalAmount,
+          discountType,
+          discountPercentage: activeDiscountPct,
+          discountAmount,
+          originalAmount: subtotalAmount,
           paymentMethod: 'card'
         });
 
@@ -695,15 +730,17 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   );
                 })}
 
-                {/* ── TIERED DISCOUNTS & OFFERS ENGINE ── */}
+                {/* ── DISCOUNTS & INSTANT CASH BILLING ENGINE ── */}
                 <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] space-y-3">
                   <div className="flex justify-between items-center">
-                    <p className="text-[#94A3B8] font-mono text-xs uppercase tracking-widest font-bold">
-                      Discounts & Group Tiers
+                    <p className="text-[#94A3B8] font-mono text-xs uppercase tracking-widest font-bold flex items-center gap-1.5">
+                      🏷️ Discounts & Instant Cash Offer
                     </p>
-                    {activeDiscountPct > 0 && (
-                      <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded bg-[#14F1D9]/20 text-[#14F1D9] border border-[#14F1D9]/30">
-                        {activeDiscountPct}% OFF APPLIED
+                    {discountAmount > 0 && (
+                      <span className="text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full bg-[#14F1D9]/20 text-[#14F1D9] border border-[#14F1D9]/40 shadow-[0_0_10px_rgba(20,241,217,0.2)]">
+                        {discountType === 'cash' 
+                          ? `₹${discountAmount} CASH DISCOUNT APPLIED` 
+                          : `${activeDiscountPct}% OFF APPLIED (-₹${discountAmount})`}
                       </span>
                     )}
                   </div>
@@ -742,7 +779,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   ) : (
                     <div className="p-2 bg-sky-500/10 border border-sky-500/20 rounded-xl flex items-center justify-between gap-2">
                       <span className="text-[10px] font-mono text-sky-300">
-                        🏷️ 1–10 Pax: 5% Individual or 15% VIP Group Available
+                        🏷️ 1–10 Pax: 5% Individual or Direct Cash Discount Available
                       </span>
                       <button
                         type="button"
@@ -759,7 +796,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   )}
 
                   {/* Manual Tier Selection Pills */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[10px] font-mono">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 text-[10px] font-mono">
                     <button
                       type="button"
                       onClick={() => setDiscountType('individual_5')}
@@ -810,16 +847,110 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
                     <button
                       type="button"
-                      onClick={() => setDiscountType('none')}
+                      onClick={() => setDiscountType('custom')}
                       className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                        discountType === 'custom'
+                          ? 'bg-amber-400 text-black font-black border-amber-400'
+                          : 'bg-[#141414] text-amber-300/80 border-amber-500/20 hover:border-amber-500/40'
+                      }`}
+                    >
+                      ⚡ Custom %
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDiscountType('cash')}
+                      className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                        discountType === 'cash'
+                          ? 'bg-emerald-400 text-black font-black border-emerald-400'
+                          : 'bg-[#141414] text-emerald-300/80 border-emerald-500/20 hover:border-emerald-500/40'
+                      }`}
+                    >
+                      💵 Cash Discount (₹)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiscountType('none');
+                        setCustomDiscountPct(0);
+                        setCustomCashDiscount(0);
+                      }}
+                      className={`p-2 rounded-lg border text-center transition-all cursor-pointer col-span-2 ${
                         discountType === 'none'
                           ? 'bg-slate-700 text-white font-black border-slate-600'
                           : 'bg-[#141414] text-slate-400 border-white/10 hover:text-white'
                       }`}
                     >
-                      ✕ No Discount
+                      ✕ Clear Discount
                     </button>
                   </div>
+
+                  {/* Direct Input Controls for Custom % or Instant Cash (₹) Discount */}
+                  {discountType === 'custom' && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
+                      <div className="flex justify-between items-center text-xs text-amber-300 font-mono font-bold">
+                        <span>Enter Custom Discount Percentage</span>
+                        <span>{customDiscountPct}% OFF</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={customDiscountPct || ''}
+                            onChange={e => setCustomDiscountPct(Math.min(100, Math.max(0, Number(e.target.value))))}
+                            placeholder="Enter percentage (e.g. 12)"
+                            className="w-full bg-[#141414] border border-amber-500/40 rounded-lg p-2 text-sm text-white font-mono focus:border-amber-400 outline-none pr-8"
+                          />
+                          <span className="absolute right-3 top-2 text-amber-400 font-bold font-mono">%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {discountType === 'cash' && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-3">
+                      <div className="flex justify-between items-center text-xs text-emerald-300 font-mono font-bold">
+                        <span>Direct Cash Discount in Billing</span>
+                        <span>-₹{discountAmount} Instant Off</span>
+                      </div>
+
+                      {/* Quick Cash Discount Presets */}
+                      <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
+                        <span className="text-slate-400 self-center mr-1">Quick Presets:</span>
+                        {[50, 100, 200, 500].map(amt => (
+                          <button
+                            key={amt}
+                            type="button"
+                            onClick={() => setCustomCashDiscount(amt)}
+                            className={`px-2.5 py-1 rounded-md border font-bold transition-all ${
+                              customCashDiscount === amt
+                                ? 'bg-emerald-400 text-black border-emerald-400'
+                                : 'bg-[#141414] text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
+                            }`}
+                          >
+                            ₹{amt} OFF
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Cash Input */}
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-2.5 text-emerald-400 font-bold font-mono">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={subtotalAmount}
+                          value={customCashDiscount || ''}
+                          onChange={e => setCustomCashDiscount(Math.max(0, Number(e.target.value)))}
+                          placeholder="Type cash discount amount (e.g. 75)"
+                          className="w-full bg-[#141414] border border-emerald-500/40 rounded-lg p-2 pl-8 text-sm text-white font-mono focus:border-emerald-400 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Pricing Summary Card */}
@@ -834,9 +965,9 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                     <span>₹{subtotalAmount}</span>
                   </div>
 
-                  {activeDiscountPct > 0 && (
+                  {discountAmount > 0 && (
                     <div className="flex justify-between items-center text-xs text-emerald-400 font-bold">
-                      <span>Discount ({activeDiscountPct}%)</span>
+                      <span>Discount {discountType === 'cash' ? '(Cash Instant)' : `(${activeDiscountPct}%)`}</span>
                       <span>-₹{discountAmount}</span>
                     </div>
                   )}
@@ -924,9 +1055,9 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                 <span>Subtotal</span>
                 <span>₹{subtotalAmount}</span>
               </div>
-              {activeDiscountPct > 0 && (
+              {discountAmount > 0 && (
                 <div className="flex justify-between text-xs text-emerald-400 font-bold">
-                  <span>Discount ({activeDiscountPct}%)</span>
+                  <span>Discount {discountType === 'cash' ? '(Cash Instant)' : `(${activeDiscountPct}%)`}</span>
                   <span>-₹{discountAmount}</span>
                 </div>
               )}
