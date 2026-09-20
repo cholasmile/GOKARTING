@@ -221,6 +221,76 @@ const writeToLocalAndSync = (table: string, action: 'insert' | 'update' | 'delet
   });
 };
 
+const synthesizePayments = (currentPayments: Payment[], currentBookings: Booking[], currentOrders: FoodOrder[]): Payment[] => {
+  const paymentMap = new Map<string, Payment>();
+
+  currentPayments.forEach(p => {
+    const key = p.bookingId ? `b_${p.bookingId}` : p.orderId ? `o_${p.orderId}` : p.id;
+    paymentMap.set(key, p);
+  });
+
+  currentBookings.forEach(b => {
+    const key = `b_${b.id}`;
+    if (!paymentMap.has(key)) {
+      const isPaid = b.paymentStatus === 'paid';
+      const isPending = b.paymentStatus === 'pending' || (b.paymentStatus as string) === 'processing';
+      const isRefunded = b.paymentStatus === 'refunded';
+      const isFailed = b.paymentStatus === 'failed';
+      const isCancelled = b.paymentStatus === 'cancelled';
+
+      const methodVal = (b.discountType === 'cash' ? 'cash' : 'upi') as any;
+      const statusVal = isPaid ? 'paid' : isPending ? 'pending' : isRefunded ? 'refunded' : isFailed ? 'failed' : isCancelled ? 'cancelled' : 'paid';
+
+      const synth: Payment = {
+        id: `pay-${b.id}`,
+        bookingId: b.id,
+        amount: b.totalAmount,
+        method: methodVal,
+        status: statusVal,
+        transactionId: `TX-${b.id}`,
+        timestamp: b.bookingDate || new Date().toISOString(),
+        invoice_id: `INV-B-${b.id}`,
+        customer_id: b.customerEmail,
+        currency: 'INR',
+        payment_method: String(methodVal).toUpperCase(),
+        payment_status: String(statusVal).toUpperCase(),
+        ticketId: `tkt-${b.id}`,
+        customerName: b.customerName,
+        customerPhone: b.customerPhone,
+        activityName: b.activityName,
+        counterId: 'counter_1'
+      };
+      paymentMap.set(key, synth);
+    }
+  });
+
+  currentOrders.forEach(o => {
+    const key = `o_${o.id}`;
+    if (!paymentMap.has(key)) {
+      const synth: Payment = {
+        id: `pay-${o.id}`,
+        orderId: o.id,
+        amount: o.totalAmount,
+        method: 'cash',
+        status: 'success',
+        transactionId: `TX-${o.id}`,
+        timestamp: o.createdAt || new Date().toISOString(),
+        invoice_id: `INV-O-${o.id}`,
+        customer_id: o.customerEmail,
+        currency: 'INR',
+        payment_method: 'CASH',
+        payment_status: 'PAID',
+        customerName: o.customerName,
+        activityName: 'Food Street Dining',
+        counterId: 'counter_1'
+      };
+      paymentMap.set(key, synth);
+    }
+  });
+
+  return Array.from(paymentMap.values());
+};
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUserRaw] = useState<User | null>(() => {
     return localLoadHelper<User | null>('ap_current_user', null);
@@ -375,7 +445,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [tickets, setTickets] = useState<Ticket[]>(() => localLoadHelper('ap_tickets', INITIAL_TICKETS));
   const [orders, setOrders] = useState<FoodOrder[]>(() => localLoadHelper('ap_orders', INITIAL_FOOD_ORDERS));
   const [notifications, setNotifications] = useState<NotificationLog[]>(() => localLoadHelper('ap_notifications', []));
-  const [payments, setPayments] = useState<Payment[]>(() => localLoadHelper('ap_payments', []));
+  const [payments, setPayments] = useState<Payment[]>(() => {
+    const loaded = localLoadHelper('ap_payments', []);
+    const initialBookingsLoaded = localLoadHelper('ap_bookings', INITIAL_BOOKINGS);
+    const initialOrdersLoaded = localLoadHelper('ap_orders', INITIAL_FOOD_ORDERS);
+    return synthesizePayments(loaded, initialBookingsLoaded, initialOrdersLoaded);
+  });
+
+  // Auto-sync payments whenever bookings or orders are modified
+  useEffect(() => {
+    setPayments(prev => {
+      const synthesized = synthesizePayments(prev, bookings, orders);
+      if (synthesized.length !== prev.length) {
+        try {
+          localStorage.setItem('ap_payments', JSON.stringify(synthesized));
+        } catch (e) {}
+        return synthesized;
+      }
+      return prev;
+    });
+  }, [bookings, orders]);
 
   // Go Karting specific states
   const [karts, setKarts] = useState<Kart[]>(() => localLoadHelper('ap_karts', mockKarts));

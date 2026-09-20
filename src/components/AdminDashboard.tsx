@@ -353,6 +353,182 @@ export const AdminDashboard: React.FC = () => {
   const COLORS = ['#007B8B', '#134E4A', '#99F6E4', '#F59E0B', '#10B981'];
 
   // -----------------------------------------------------------------
+  // DETAILED DASHBOARD BREAKDOWNS (ACTIVITY-WISE & PACKAGE-WISE)
+  // -----------------------------------------------------------------
+  
+  // 1. Activity-Wise Detailed Metrics
+  const activityDetailedStats = activities.map(act => {
+    const actBookings = bookings.filter(b => b.activityId.includes(act.id));
+    const visitorsCount = actBookings.reduce((sum, b) => sum + b.quantity, 0);
+    const amountCollected = actBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+    const bookingsCount = actBookings.length;
+    const sharePercentage = totalActivityRevenue > 0 ? (amountCollected / totalActivityRevenue) * 100 : 0;
+    return {
+      id: act.id,
+      name: act.name,
+      type: act.type,
+      visitorsCount,
+      bookingsCount,
+      amountCollected,
+      sharePercentage
+    };
+  });
+
+  // 2. Package-Wise Detailed Metrics
+  const packageDetailedStats: Array<{
+    activityId: string;
+    activityName: string;
+    packageId: string;
+    packageName: string;
+    price: number;
+    visitorsCount: number;
+    bookingsCount: number;
+    amountCollected: number;
+    shareOfActivity: number;
+  }> = [];
+
+  activities.forEach(act => {
+    const actBookings = bookings.filter(b => b.activityId.includes(act.id));
+    const actTotalAmount = actBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+
+    if (act.packages && act.packages.length > 0) {
+      act.packages.forEach(pkg => {
+        const pkgBookings = actBookings.filter(b =>
+          b.packageId === pkg.id ||
+          (b.packageName && b.packageName.toLowerCase() === pkg.name.toLowerCase()) ||
+          (b.details && b.details.toLowerCase().includes(pkg.name.toLowerCase()))
+        );
+        const visitorsCount = pkgBookings.reduce((sum, b) => sum + b.quantity, 0);
+        const amountCollected = pkgBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+        const shareOfActivity = actTotalAmount > 0 ? (amountCollected / actTotalAmount) * 100 : 0;
+
+        packageDetailedStats.push({
+          activityId: act.id,
+          activityName: act.name,
+          packageId: pkg.id,
+          packageName: pkg.name,
+          price: pkg.price,
+          visitorsCount,
+          bookingsCount: pkgBookings.length,
+          amountCollected,
+          shareOfActivity
+        });
+      });
+    } else {
+      const visitorsCount = actBookings.reduce((sum, b) => sum + b.quantity, 0);
+      const amountCollected = actBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+      packageDetailedStats.push({
+        activityId: act.id,
+        activityName: act.name,
+        packageId: `std-${act.id}`,
+        packageName: 'Standard Entry / Single Ticket',
+        price: act.adultPrice || 0,
+        visitorsCount,
+        bookingsCount: actBookings.length,
+        amountCollected,
+        shareOfActivity: 100
+      });
+    }
+  });
+
+  // 3. Complete Dashboard Transaction Logs Filters
+  const [dashLogSearch, setDashLogSearch] = useState('');
+  const [dashLogMethodFilter, setDashLogMethodFilter] = useState('all');
+  const [dashLogStatusFilter, setDashLogStatusFilter] = useState('all');
+  const [dashLogActivityFilter, setDashLogActivityFilter] = useState('all');
+  const [dashLogDateFilter, setDashLogDateFilter] = useState('all');
+
+  const filteredDashboardPayments = payments.filter(pay => {
+    if (dashLogMethodFilter !== 'all') {
+      if (dashLogMethodFilter === 'cash' && pay.method !== 'cash') return false;
+      if (dashLogMethodFilter === 'upi' && pay.method !== 'upi' && pay.method !== 'qrcode') return false;
+      if (dashLogMethodFilter === 'card' && !pay.method.startsWith('card')) return false;
+      if (dashLogMethodFilter === 'razorpay' && pay.method !== 'razorpay' && pay.gateway !== 'Razorpay') return false;
+    }
+
+    if (dashLogStatusFilter !== 'all') {
+      if (dashLogStatusFilter === 'paid' && pay.status !== 'paid' && pay.status !== 'success') return false;
+      if (dashLogStatusFilter === 'pending' && pay.status !== 'pending' && pay.status !== 'processing') return false;
+      if (dashLogStatusFilter === 'refunded' && pay.status !== 'refunded') return false;
+      if (dashLogStatusFilter === 'failed' && pay.status !== 'failed') return false;
+    }
+
+    if (dashLogActivityFilter !== 'all') {
+      const booking = bookings.find(b => b.id === pay.bookingId);
+      if (!booking || !booking.activityId.includes(dashLogActivityFilter)) return false;
+    }
+
+    if (dashLogDateFilter !== 'all' && pay.timestamp) {
+      const payDate = new Date(pay.timestamp);
+      const now = new Date();
+      if (dashLogDateFilter === 'today') {
+        if (payDate.toDateString() !== now.toDateString()) return false;
+      } else if (dashLogDateFilter === '7days') {
+        const diffDays = (now.getTime() - payDate.getTime()) / (1000 * 3600 * 24);
+        if (diffDays > 7) return false;
+      } else if (dashLogDateFilter === '30days') {
+        const diffDays = (now.getTime() - payDate.getTime()) / (1000 * 3600 * 24);
+        if (diffDays > 30) return false;
+      }
+    }
+
+    if (dashLogSearch.trim()) {
+      const q = dashLogSearch.toLowerCase();
+      const booking = bookings.find(b => b.id === pay.bookingId);
+      const ticket = tickets.find(t => t.bookingId === pay.bookingId);
+
+      const matches =
+        pay.invoice_id?.toLowerCase().includes(q) ||
+        pay.id?.toLowerCase().includes(q) ||
+        pay.bookingId?.toLowerCase().includes(q) ||
+        pay.transactionId?.toLowerCase().includes(q) ||
+        pay.customerName?.toLowerCase().includes(q) ||
+        pay.customerPhone?.toLowerCase().includes(q) ||
+        pay.customer_id?.toLowerCase().includes(q) ||
+        pay.activityName?.toLowerCase().includes(q) ||
+        booking?.customerName?.toLowerCase().includes(q) ||
+        booking?.activityName?.toLowerCase().includes(q) ||
+        booking?.packageName?.toLowerCase().includes(q) ||
+        booking?.details?.toLowerCase().includes(q) ||
+        ticket?.id?.toLowerCase().includes(q);
+
+      if (!matches) return false;
+    }
+
+    return true;
+  }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  const handleExportDashboardCSV = () => {
+    const headers = ["Invoice ID", "Booking ID", "Customer Name", "Phone / Email", "Activity Name", "Package / Details", "Visitors Qty", "Amount (INR)", "Payment Method", "Payment Status", "Timestamp"];
+    const rows = filteredDashboardPayments.map(pay => {
+      const booking = bookings.find(b => b.id === pay.bookingId);
+      return [
+        `"${pay.invoice_id || `INV-B-${pay.bookingId?.slice(-6) || ''}`}"`,
+        `"${pay.bookingId || pay.orderId || ''}"`,
+        `"${pay.customerName || booking?.customerName || 'Guest'}"`,
+        `"${pay.customerPhone || booking?.customerPhone || pay.customer_id || ''}"`,
+        `"${pay.activityName || booking?.activityName || 'Activity'}"`,
+        `"${booking?.packageName || booking?.details || 'Standard'}"`,
+        booking?.quantity || 1,
+        pay.amount || 0,
+        `"${pay.method?.toUpperCase() || ''}"`,
+        `"${pay.status?.toUpperCase() || ''}"`,
+        `"${new Date(pay.timestamp).toLocaleString('en-IN')}"`
+      ];
+    });
+
+    const csvStr = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `deuce_transaction_logs_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // -----------------------------------------------------------------
   // HANDLERS FOR CRUD
   // -----------------------------------------------------------------
   const handleSaveActivity = async (e: React.FormEvent) => {
@@ -545,41 +721,41 @@ export const AdminDashboard: React.FC = () => {
           
           {/* KPI Dashboard Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 glass-card border border-[#00ABAB]/30  space-y-1.5 hover: transition-shadow">
+            <div className="p-4 glass-card border border-[#00ABAB]/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)] transition-all">
               <div className="flex items-center justify-between text-[#9CA3AF]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Today's Revenue</span>
-                <span className="p-1.5 bg-[#0A0A0A] text-teal-700 rounded-lg"><TrendingUp className="h-4 w-4" /></span>
+                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Total Revenue Collected</span>
+                <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30"><TrendingUp className="h-4 w-4" /></span>
               </div>
-              <div className="text-xl font-extrabold text-[#40E0D0] font-mono">₹{totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <p className="text-[10px] text-[#9CA3AF] font-mono">100% simulated live</p>
+              <div className="text-2xl font-extrabold text-[#40E0D0] font-mono">₹{totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <p className="text-[10px] text-[#9CA3AF] font-mono">Activities + Food Street</p>
             </div>
 
-            <div className="p-4 glass-card border border-[#00ABAB]/30  space-y-1.5 hover: transition-shadow">
+            <div className="p-4 glass-card border border-[#00ABAB]/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)] transition-all">
               <div className="flex items-center justify-between text-[#9CA3AF]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Total Visitors</span>
-                <span className="p-1.5 bg-[#0A0A0A] text-teal-700 rounded-lg"><Users className="h-4 w-4" /></span>
+                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Total Visitors Count</span>
+                <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30"><Users className="h-4 w-4" /></span>
               </div>
-              <div className="text-xl font-extrabold text-[#FFFFFF] font-mono">{totalVisitors}</div>
-              <p className="text-[10px] text-[#9CA3AF] font-mono">Gate counter scans</p>
+              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">{totalVisitors}</div>
+              <p className="text-[10px] text-[#9CA3AF] font-mono">Across all activity tickets</p>
             </div>
 
-            <div className="p-4 glass-card border border-[#00ABAB]/30  space-y-1.5 hover: transition-shadow">
+            <div className="p-4 glass-card border border-[#00ABAB]/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)] transition-all">
               <div className="flex items-center justify-between text-[#9CA3AF]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Activities share</span>
-                <span className="p-1.5 bg-[#0A0A0A] text-teal-700 rounded-lg"><Ticket className="h-4 w-4" /></span>
+                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Activities Revenue</span>
+                <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30"><Ticket className="h-4 w-4" /></span>
               </div>
-              <div className="text-xl font-extrabold text-[#FFFFFF] font-mono">₹{totalActivityRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">₹{totalActivityRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <p className="text-[10px] text-[#9CA3AF] font-mono">
                 {((totalActivityRevenue / (totalRevenue || 1)) * 100).toFixed(0)}% contribution
               </p>
             </div>
 
-            <div className="p-4 glass-card border border-[#00ABAB]/30  space-y-1.5 hover: transition-shadow">
+            <div className="p-4 glass-card border border-[#00ABAB]/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)] transition-all">
               <div className="flex items-center justify-between text-[#9CA3AF]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Food Street sales</span>
-                <span className="p-1.5 bg-[#0A0A0A] text-teal-700 rounded-lg"><Utensils className="h-4 w-4" /></span>
+                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Food Street Revenue</span>
+                <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30"><Utensils className="h-4 w-4" /></span>
               </div>
-              <div className="text-xl font-extrabold text-[#FFFFFF] font-mono">₹{totalFoodRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">₹{totalFoodRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <p className="text-[10px] text-[#9CA3AF] font-mono">
                 {((totalFoodRevenue / (totalRevenue || 1)) * 100).toFixed(0)}% contribution
               </p>
@@ -589,8 +765,8 @@ export const AdminDashboard: React.FC = () => {
           {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-             {/* Sales Trend Chart */}
-            <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl space-y-4 ">
+            {/* Sales Trend Chart */}
+            <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl space-y-4">
               <div>
                 <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Multi-Source Revenue History</h4>
                 <p className="text-[11px] text-[#9CA3AF] font-sans">Sales compared across adventure tickets and food items</p>
@@ -608,11 +784,11 @@ export const AdminDashboard: React.FC = () => {
                         <stop offset="95%" stopColor="#99F6E4" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1C1C1C" />
                     <XAxis dataKey="date" stroke="#007B8B" opacity={0.6} fontSize={11} tickLine={false} />
                     <YAxis stroke="#007B8B" opacity={0.6} fontSize={11} tickLine={false} />
-                    <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#CCFBF1', color: '#0A0A0A', borderRadius: '8px' }} />
-                    <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: '#334155' }} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', borderColor: '#00ABAB', color: '#FFFFFF', borderRadius: '8px' }} />
+                    <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: '#9CA3AF' }} />
                     <Area type="monotone" dataKey="Activities" stroke="#007B8B" fillOpacity={1} fill="url(#colorAct)" />
                     <Area type="monotone" dataKey="Food Street" stroke="#00ABAB" fillOpacity={1} fill="url(#colorFood)" />
                   </AreaChart>
@@ -621,7 +797,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Activities Performance Chart */}
-            <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl space-y-4 ">
+            <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl space-y-4">
               <div>
                 <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Activity Popularity Matrix</h4>
                 <p className="text-[11px] text-[#9CA3AF] font-sans">Gross monetary earnings generated by sport</p>
@@ -629,11 +805,11 @@ export const AdminDashboard: React.FC = () => {
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={activityPerformanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1C1C1C" />
                     <XAxis dataKey="name" stroke="#007B8B" opacity={0.6} fontSize={10} tickLine={false} />
                     <YAxis stroke="#007B8B" opacity={0.6} fontSize={10} tickLine={false} />
-                    <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#CCFBF1', color: '#0A0A0A', borderRadius: '8px' }} />
-                    <Bar dataKey="revenue" fill="#007B8B" radius={[6, 6, 0, 0]} name="Revenue (?)">
+                    <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', borderColor: '#00ABAB', color: '#FFFFFF', borderRadius: '8px' }} />
+                    <Bar dataKey="revenue" fill="#007B8B" radius={[6, 6, 0, 0]} name="Revenue (₹)">
                       {activityPerformanceData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={index === 0 ? '#007B8B' : index === 1 ? '#134E4A' : '#00ABAB'} />
                       ))}
@@ -643,77 +819,303 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Food Stalls Split Chart */}
-            <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl  flex flex-col justify-between">
+          </div>
+
+          {/* ── 1. ACTIVITY-WISE VISITORS & AMOUNT COLLECTED ── */}
+          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden space-y-4 p-5">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 pb-3 border-b border-[#00ABAB]/30">
               <div>
-                <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Food Street Stall Share</h4>
-                <p className="text-[11px] text-[#9CA3AF] font-sans">Percentage distribution of orders among vendors</p>
+                <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                  <Award className="w-5 h-5 text-[#00ABAB]" /> Activity-Wise Visitors & Revenue Summary
+                </h3>
+                <p className="text-[#9CA3AF] text-xs mt-0.5">Total visitors and amount collected for each adventure activity</p>
               </div>
-              <div className="flex flex-col md:flex-row items-center justify-around py-4">
-                <div className="h-44 w-44">
-                  {foodSplitData.length === 0 ? (
-                    <div className="text-center text-xs text-[#9CA3AF] py-16">No food sales yet.</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                           data={foodSplitData}
-                           cx="50%"
-                           cy="50%"
-                           innerRadius={50}
-                           outerRadius={70}
-                           paddingAngle={5}
-                           dataKey="value"
-                        >
-                          {foodSplitData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(v) => `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-                <div className="space-y-2 mt-4 md:mt-0 max-w-xs">
-                  {foodSplitData.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-xs font-sans text-[#9CA3AF]">
-                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                      <span className="truncate max-w-[120px] font-semibold">{item.name}</span>
-                      <span className="font-bold text-[#FFFFFF] font-mono">₹{item.value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
+              <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
+                {activities.length} Active Sports
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
+              <table className="w-full text-left text-xs text-[#FFFFFF]">
+                <thead>
+                  <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
+                    <th className="p-3.5">Activity Name</th>
+                    <th className="p-3.5">Type</th>
+                    <th className="p-3.5 text-center">Visitors Count</th>
+                    <th className="p-3.5 text-center">Bookings Count</th>
+                    <th className="p-3.5 text-right">Amount Collected (₹)</th>
+                    <th className="p-3.5 text-right">Revenue Share</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1C1C1C]">
+                  {activityDetailedStats.map(stat => (
+                    <tr key={`act-stat-${stat.id}`} className="hover:bg-[#1C1C1C]/40 transition-colors">
+                      <td className="p-3.5 font-bold text-[#FFFFFF] flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#00ABAB]" />
+                        {stat.name}
+                      </td>
+                      <td className="p-3.5 font-mono text-[10px] text-[#9CA3AF] uppercase">
+                        <span className="px-2 py-0.5 rounded bg-[#1C1C1C] border border-[#00ABAB]/20 text-[#40E0D0]">
+                          {stat.type.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-center font-mono font-bold text-[#40E0D0] text-sm">
+                        {stat.visitorsCount}
+                      </td>
+                      <td className="p-3.5 text-center font-mono text-[#9CA3AF]">
+                        {stat.bookingsCount}
+                      </td>
+                      <td className="p-3.5 text-right font-mono font-extrabold text-white text-sm">
+                        ₹{stat.amountCollected.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-3.5 text-right font-mono text-xs">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-20 bg-[#1C1C1C] h-2 rounded-full overflow-hidden">
+                            <div className="bg-[#00ABAB] h-full rounded-full" style={{ width: `${Math.min(100, stat.sharePercentage)}%` }} />
+                          </div>
+                          <span className="font-bold text-teal-400">{stat.sharePercentage.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              </div>
+                </tbody>
+              </table>
             </div>
+          </div>
 
-            {/* Live Audit Log Stream */}
-            <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl  space-y-3 text-[#FFFFFF]">
+          {/* ── 2. PACKAGE-WISE VISITORS & AMOUNT COLLECTED ── */}
+          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden space-y-4 p-5">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 pb-3 border-b border-[#00ABAB]/30">
               <div>
-                <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Transactional Logs</h4>
-                <p className="text-[11px] text-[#9CA3AF]">Real-time bookings and order receipts flowing</p>
+                <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-[#00ABAB]" /> Package-Wise Visitors & Revenue Summary
+                </h3>
+                <p className="text-[#9CA3AF] text-xs mt-0.5">Detailed breakdown of visitors and revenue per specific package tier</p>
               </div>
-              <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
-                {bookings.slice(0, 3).map(b => (
-                  <div key={b.id} className="p-2.5 bg-[#0A0A0A]/50 border border-[#00ABAB]/30 rounded-xl text-[11px] flex items-center justify-between gap-2">
-                    <div>
-                      <span className="font-semibold text-[#FFFFFF]">{b.customerName}</span> booked <span className="font-semibold text-[#FFFFFF]">{b.activityName}</span>
-                      <div className="text-[#9CA3AF] font-mono text-[9px] mt-0.5">{b.details} â€¢ Slot: {b.timeSlot}</div>
-                    </div>
-                    <span className="font-bold text-[#FFFFFF] font-mono">₹{b.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                ))}
-                {orders.slice(0, 2).map(o => (
-                  <div key={o.id} className="p-2.5 bg-[#0A0A0A]/50 border border-[#00ABAB]/30 rounded-xl text-[11px] flex items-center justify-between gap-2">
-                    <div>
-                      <span className="font-semibold text-[#FFFFFF]">{o.customerName}</span> ordered food <span className="text-[#9CA3AF]">({o.items.length} items)</span>
-                      <div className="text-[#9CA3AF] font-mono text-[9px] mt-0.5">Status: <span className="text-[#40E0D0] font-bold capitalize">{o.status}</span></div>
-                    </div>
-                    <span className="font-bold text-[#40E0D0] font-mono">₹{o.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                ))}
+              <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
+                {packageDetailedStats.length} Configured Packages
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
+              <table className="w-full text-left text-xs text-[#FFFFFF]">
+                <thead>
+                  <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
+                    <th className="p-3.5">Activity</th>
+                    <th className="p-3.5">Package Name</th>
+                    <th className="p-3.5 text-right">Price (₹)</th>
+                    <th className="p-3.5 text-center">Visitors / Tickets</th>
+                    <th className="p-3.5 text-right">Amount Collected (₹)</th>
+                    <th className="p-3.5 text-right">Share of Activity</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1C1C1C]">
+                  {packageDetailedStats.map(pkgStat => (
+                    <tr key={`pkg-stat-${pkgStat.activityId}-${pkgStat.packageId}`} className="hover:bg-[#1C1C1C]/40 transition-colors">
+                      <td className="p-3.5 font-semibold text-[#9CA3AF]">
+                        {pkgStat.activityName}
+                      </td>
+                      <td className="p-3.5 font-bold text-white">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Tag className="w-3 h-3 text-[#00ABAB]" />
+                          {pkgStat.packageName}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-right font-mono text-slate-300">
+                        ₹{pkgStat.price.toLocaleString('en-IN')}
+                      </td>
+                      <td className="p-3.5 text-center font-mono font-bold text-[#40E0D0] text-sm">
+                        {pkgStat.visitorsCount}
+                      </td>
+                      <td className="p-3.5 text-right font-mono font-extrabold text-white text-sm">
+                        ₹{pkgStat.amountCollected.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-3.5 text-right font-mono text-xs">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 bg-[#1C1C1C] h-2 rounded-full overflow-hidden">
+                            <div className="bg-[#40E0D0] h-full rounded-full" style={{ width: `${Math.min(100, pkgStat.shareOfActivity)}%` }} />
+                          </div>
+                          <span className="font-bold text-slate-300">{pkgStat.shareOfActivity.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ── 3. COMPLETE REAL-TIME TRANSACTION LOGS TABLE ── */}
+          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl p-5 space-y-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#00ABAB]/30 pb-3">
+              <div>
+                <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                  <IndianRupee className="w-5 h-5 text-[#00ABAB]" /> Complete Real-Time Transaction Logs
+                </h3>
+                <p className="text-[#9CA3AF] text-xs mt-0.5">Live database audit stream of all ticket sales, food orders, and counter transactions</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportDashboardCSV}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#00ABAB] text-black rounded-lg hover:bg-[#00ABAB]/80 transition-all cursor-pointer"
+                >
+                  <Download className="w-4 h-4" /> Export CSV
+                </button>
+                <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Live Realtime Sync
+                </span>
               </div>
             </div>
 
+            {/* Filter Controls Bar */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-[#0A0A0A] p-3 rounded-xl border border-[#1C1C1C]">
+              
+              {/* Search Box */}
+              <div className="relative md:col-span-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+                <input
+                  type="text"
+                  placeholder="Search customer, phone, invoice, ticket ID, package..."
+                  value={dashLogSearch}
+                  onChange={e => setDashLogSearch(e.target.value)}
+                  className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-[#9CA3AF] focus:border-[#00ABAB] outline-none"
+                />
+              </div>
+
+              {/* Payment Method Filter */}
+              <div>
+                <select
+                  value={dashLogMethodFilter}
+                  onChange={e => setDashLogMethodFilter(e.target.value)}
+                  className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ABAB] outline-none capitalize"
+                >
+                  <option value="all">All Payment Methods</option>
+                  <option value="cash">Cash</option>
+                  <option value="upi">UPI / QR Code</option>
+                  <option value="card">Card POS</option>
+                  <option value="razorpay">Online (Razorpay)</option>
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div>
+                <select
+                  value={dashLogStatusFilter}
+                  onChange={e => setDashLogStatusFilter(e.target.value)}
+                  className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ABAB] outline-none capitalize"
+                >
+                  <option value="all">All Payment Statuses</option>
+                  <option value="paid">Paid / Success</option>
+                  <option value="pending">Pending</option>
+                  <option value="refunded">Refunded</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+
+              {/* Date Filter */}
+              <div>
+                <select
+                  value={dashLogDateFilter}
+                  onChange={e => setDashLogDateFilter(e.target.value)}
+                  className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ABAB] outline-none"
+                >
+                  <option value="all">All Time</option>
+                  <option value="today">Today Only</option>
+                  <option value="7days">Past 7 Days</option>
+                  <option value="30days">Past 30 Days</option>
+                </select>
+              </div>
+
+            </div>
+
+            {/* Filtered Logs Table */}
+            <div className="overflow-x-auto rounded-xl border border-[#1C1C1C] max-h-[500px]">
+              <table className="w-full text-left text-xs text-[#FFFFFF]">
+                <thead className="sticky top-0 bg-[#0A0A0A] shadow-md z-10">
+                  <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
+                    <th className="p-3">Invoice / Ref ID</th>
+                    <th className="p-3">Booking ID</th>
+                    <th className="p-3">Customer Details</th>
+                    <th className="p-3">Activity & Package</th>
+                    <th className="p-3 text-center">Qty / Visitors</th>
+                    <th className="p-3 text-right">Amount (₹)</th>
+                    <th className="p-3 text-center">Method</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-right">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1C1C1C]">
+                  {filteredDashboardPayments.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="p-8 text-center text-[#9CA3AF] font-mono">
+                        No transaction records match the current filters.
+                      </td>
+                    </tr>
+                  ) : filteredDashboardPayments.map(pay => {
+                    const booking = bookings.find(b => b.id === pay.bookingId);
+                    const methodUpper = (pay.method || 'CASH').toUpperCase();
+                    const statusUpper = (pay.status || 'PAID').toUpperCase();
+
+                    const methodBadgeClass =
+                      methodUpper === 'CASH' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : methodUpper.includes('CARD') ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                      : methodUpper === 'UPI' || methodUpper === 'QRCODE' ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
+                      : 'bg-teal-500/10 text-[#40E0D0] border-teal-500/20';
+
+                    const statusBadgeClass =
+                      statusUpper === 'PAID' || statusUpper === 'SUCCESS' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      : statusUpper === 'PENDING' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      : statusUpper === 'REFUNDED' ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                      : 'bg-rose-500/15 text-rose-400 border-rose-500/30';
+
+                    return (
+                      <tr key={`dash-pay-${pay.id}`} className="hover:bg-[#1C1C1C]/50 transition-colors">
+                        <td className="p-3 font-mono font-bold text-[#40E0D0] text-[11px]">
+                          {pay.invoice_id || `INV-B-${pay.bookingId?.slice(-6) || '—'}`}
+                        </td>
+                        <td className="p-3 font-mono text-[10px] text-[#9CA3AF]">
+                          {pay.bookingId || pay.orderId || '—'}
+                        </td>
+                        <td className="p-3">
+                          <div className="font-bold text-white">{pay.customerName || booking?.customerName || 'Guest Customer'}</div>
+                          <div className="text-[10px] text-[#40E0D0] font-mono mt-0.5">{pay.customerPhone || booking?.customerPhone || pay.customer_id || ''}</div>
+                        </td>
+                        <td className="p-3">
+                          <div className="font-semibold text-white">{pay.activityName || booking?.activityName || 'Activity'}</div>
+                          <div className="text-[10px] text-[#9CA3AF] mt-0.5">{booking?.packageName || booking?.details || 'Standard Ticket'}</div>
+                        </td>
+                        <td className="p-3 text-center font-mono font-bold text-white">
+                          {booking?.quantity || 1}
+                        </td>
+                        <td className="p-3 text-right font-mono font-extrabold text-white text-sm">
+                          ₹{pay.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-center font-mono text-[10px]">
+                          <span className={`inline-block px-2 py-0.5 rounded border ${methodBadgeClass}`}>
+                            {methodUpper}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center font-mono text-[10px]">
+                          <span className={`inline-block px-2 py-0.5 rounded-full font-bold border ${statusBadgeClass}`}>
+                            {statusUpper}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-mono text-[10px] text-[#9CA3AF] whitespace-nowrap">
+                          {new Date(pay.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between items-center text-xs text-[#9CA3AF] pt-2">
+              <span>Showing {filteredDashboardPayments.length} of {payments.length} transactions</span>
+              <span className="font-mono">Real-time sync active</span>
+            </div>
           </div>
 
         </div>
