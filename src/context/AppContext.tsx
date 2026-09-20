@@ -441,15 +441,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [vendors, setVendors] = useState<FoodVendor[]>(() => localLoadHelper('ap_vendors', INITIAL_FOOD_VENDORS));
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => localLoadHelper('ap_menu_items', INITIAL_MENU_ITEMS));
   const [inventory, setInventory] = useState<InventoryItem[]>(() => localLoadHelper('ap_inventory', INITIAL_INVENTORY));
-  const [bookings, setBookings] = useState<Booking[]>(() => localLoadHelper('ap_bookings', INITIAL_BOOKINGS));
-  const [tickets, setTickets] = useState<Ticket[]>(() => localLoadHelper('ap_tickets', INITIAL_TICKETS));
-  const [orders, setOrders] = useState<FoodOrder[]>(() => localLoadHelper('ap_orders', INITIAL_FOOD_ORDERS));
+  const isDummyRecord = (item: { id: string; customerEmail?: string; customer_id?: string }) => {
+    const email = (item.customerEmail || item.customer_id || '').toLowerCase();
+    const id = item.id || '';
+    return id.startsWith('bk-100') || id.startsWith('ord-500') || id.startsWith('pay-bk-100') || id.startsWith('pay-ord-500') ||
+           email.endsWith('@example.com') || email.includes('gotham.com') || email.includes('themyscira.gov') ||
+           email.includes('dailybugle.com') || email.includes('ccpd.gov');
+  };
+
+  const [bookings, setBookings] = useState<Booking[]>(() => {
+    const loaded = localLoadHelper<Booking[]>('ap_bookings', INITIAL_BOOKINGS);
+    return loaded.filter(b => !isDummyRecord(b));
+  });
+  const [tickets, setTickets] = useState<Ticket[]>(() => {
+    const loaded = localLoadHelper<Ticket[]>('ap_tickets', INITIAL_TICKETS);
+    return loaded.filter(t => !isDummyRecord(t));
+  });
+  const [orders, setOrders] = useState<FoodOrder[]>(() => {
+    const loaded = localLoadHelper<FoodOrder[]>('ap_orders', INITIAL_FOOD_ORDERS);
+    return loaded.filter(o => !isDummyRecord(o));
+  });
   const [notifications, setNotifications] = useState<NotificationLog[]>(() => localLoadHelper('ap_notifications', []));
   const [payments, setPayments] = useState<Payment[]>(() => {
-    const loaded = localLoadHelper('ap_payments', []);
-    const initialBookingsLoaded = localLoadHelper('ap_bookings', INITIAL_BOOKINGS);
-    const initialOrdersLoaded = localLoadHelper('ap_orders', INITIAL_FOOD_ORDERS);
-    return synthesizePayments(loaded, initialBookingsLoaded, initialOrdersLoaded);
+    const loaded = localLoadHelper<Payment[]>('ap_payments', []).filter(p => !isDummyRecord(p));
+    const realBookings = localLoadHelper<Booking[]>('ap_bookings', []).filter(b => !isDummyRecord(b));
+    const realOrders = localLoadHelper<FoodOrder[]>('ap_orders', []).filter(o => !isDummyRecord(o));
+    return synthesizePayments(loaded, realBookings, realOrders);
   });
 
   // Auto-sync payments whenever bookings or orders are modified

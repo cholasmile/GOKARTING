@@ -14,7 +14,7 @@ import {
   TrendingUp, Users, Ticket, Utensils, Award, ShieldAlert,
   Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle,
   MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check,
-  Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag
+  Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag, RotateCcw
 } from 'lucide-react';
 import ActivityManagementPanel from './admin/ActivityManagementPanel';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
@@ -28,7 +28,7 @@ export const AdminDashboard: React.FC = () => {
     menuItems, deleteMenuItem, updateMenuItem, addMenuItem,
     addActivity, updateActivity, deleteActivity,
     addVendor, updateVendor, deleteVendor, addUser,
-    counterUpiId, setCounterUpiId
+    counterUpiId, setCounterUpiId, resetAllData
   } = useAppContext();
 
   // Bulk & Single add menu modal state
@@ -662,35 +662,54 @@ export const AdminDashboard: React.FC = () => {
     <div className="space-y-6">
       
       {/* Top Welcome Panel */}
-      <div className="bg-gradient-to-r from-[#134E4A] to-[#007B8B] text-[#0B0F14] rounded-3xl p-6 relative overflow-hidden  border border-[#007B8B]/30">
-        <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-15 pointer-events-none">
+      <div className="bg-gradient-to-r from-[#050816] via-[#0B1120] to-[#0F172A] text-[#F8FAFC] rounded-3xl p-6 relative overflow-hidden border border-[#14F1D9]/30 shadow-[0_0_30px_rgba(20,241,217,0.15)]">
+        <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-20 pointer-events-none">
           <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <path d="M0,100 C30,40 70,60 100,0 L100,100 Z" fill="#99F6E4" />
+            <path d="M0,100 C30,40 70,60 100,0 L100,100 Z" fill="#14F1D9" />
           </svg>
         </div>
         
-        <div className="relative z-10 space-y-2">
-          <span className="bg-[#99F6E4]/25 text-[#99F6E4] border border-[#99F6E4]/30 text-[10px] uppercase font-extrabold tracking-widest px-2.5 py-1 rounded-full font-mono">
-            Super Admin Control Center
-          </span>
-          <h2 className="text-2xl font-bold font-sans tracking-tight text-[#F8FAFC]">Executive Park Overview</h2>
-          <p className="text-[#F8FAFC]/80 text-xs max-w-xl">
-            Real-time analytics across extreme outdoor activities, food street transactions, ticket redemptions, and vendor accounts.
-          </p>
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-2">
+            <span className="bg-[#14F1D9]/15 text-[#14F1D9] border border-[#14F1D9]/30 text-[10px] uppercase font-extrabold tracking-widest px-3 py-1 rounded-full font-mono shadow-[0_0_10px_rgba(20,241,217,0.2)]">
+              ⚡ Super Admin Control Center
+            </span>
+            <h2 className="text-2xl sm:text-3xl font-black font-sans tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#F8FAFC] via-[#14F1D9] to-[#00B4FF]">
+              Executive Park Live Overview
+            </h2>
+            <p className="text-[#CBD5E1] text-xs max-w-xl font-medium">
+              Real-time analytics across Go-Karting, Air Rifle Shooting, Horse Riding, Food Street transactions, and gate scan redemptions.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm("Are you sure you want to clear all sample dummy bookings/orders? The panel will start fresh with real tickets created from the ticketing page.")) {
+                  resetAllData();
+                  alert("Sample data cleared! Ready for real ticketing data.");
+                }
+              }}
+              className="px-4 py-2 text-xs font-bold text-[#050816] bg-gradient-to-r from-[#FFB703] to-[#F59E0B] rounded-xl hover:scale-105 transition-all shadow-[0_0_15px_rgba(255,183,3,0.3)] cursor-pointer flex items-center gap-1.5"
+            >
+              <RotateCcw className="w-4 h-4" /> Clear Sample Data
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Admin Tabs */}
-      <div className="flex border-b border-[#00ABAB]/30 gap-1 overflow-x-auto text-[#FFFFFF] pb-px">
+      <div className="flex border-b border-[#14F1D9]/20 gap-1.5 overflow-x-auto text-[#FFFFFF] pb-2">
         {(['analytics', 'activities', 'activity_mgmt', 'vendors', 'retail_menu', 'users', 'reports', 'payments', 'pay_settings', 'database'] as const).map(tab => (
           <button
             key={tab}
             id={`btn-admin-tab-${tab}`}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 text-xs font-bold capitalize transition-all border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+            className={`px-4 py-2.5 text-xs font-bold capitalize transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap rounded-xl ${
               activeTab === tab
-                ? 'border-teal-600 text-[#40E0D0] font-extrabold bg-[#0A0A0A] rounded-t-lg'
-                : 'border-transparent text-[#9CA3AF] hover:text-[#FFFFFF]'
+                ? 'bg-gradient-to-r from-[#14F1D9] via-[#00ABAB] to-[#00B4FF] text-[#050816] font-black shadow-[0_0_20px_rgba(20,241,217,0.35)] border border-[#14F1D9]'
+                : 'border border-transparent text-[#94A3B8] hover:text-[#14F1D9] hover:bg-white/5'
             }`}
           >
             {tab === 'analytics' && <TrendingUp className="h-4 w-4" />}
