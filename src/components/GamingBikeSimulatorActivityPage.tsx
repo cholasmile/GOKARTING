@@ -27,6 +27,21 @@ export const GamingBikeSimulatorActivityPage: React.FC<ActivityPageProps> = ({ o
   const [selectedGameId, setSelectedGameId] = useState<string>(gamingGames[0]?.id || 'game-gta5');
   const [packageQuantity, setPackageQuantity] = useState<number>(1);
 
+  // Auto-sync selection when packages or games update
+  useEffect(() => {
+    const activePkgs = gamingPackages.filter(p => p.isActive !== false);
+    if (activePkgs.length > 0 && (!selectedPkgId || !activePkgs.some(p => p.id === selectedPkgId))) {
+      setSelectedPkgId(activePkgs[0].id);
+    }
+  }, [gamingPackages, selectedPkgId]);
+
+  useEffect(() => {
+    const enabledGames = gamingGames.filter(g => g.isEnabled !== false);
+    if (enabledGames.length > 0 && (!selectedGameId || !enabledGames.some(g => g.id === selectedGameId))) {
+      setSelectedGameId(enabledGames[0].id);
+    }
+  }, [gamingGames, selectedGameId]);
+
   // Customer Form
   const [customerName, setCustomerName] = useState<string>('');
   const [customerEmail, setCustomerEmail] = useState<string>('');

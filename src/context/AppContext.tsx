@@ -576,6 +576,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       localStorage.setItem('ap_gamingPackages', JSON.stringify(gamingPackages));
       db.gamingPackages.bulkPut(gamingPackages).catch(() => {});
     } catch (e) {}
+    if (gamingPackages && gamingPackages.length > 0) {
+      syncGamingPackagesToActivities(gamingPackages);
+    }
   }, [gamingPackages]);
 
   useEffect(() => {
