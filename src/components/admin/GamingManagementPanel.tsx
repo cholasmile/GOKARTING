@@ -426,15 +426,19 @@ export const GamingManagementPanel: React.FC = () => {
                         setPkgForm({ name: pkg.name, durationMinutes: pkg.durationMinutes, price: pkg.price, description: pkg.description, isActive: pkg.isActive });
                         setIsPkgModalOpen(true);
                       }}
-                      className="p-1 text-gray-400 hover:text-cyan-400 transition"
+                      className="flex items-center gap-1.5 px-3 py-1 bg-cyan-500/10 hover:bg-cyan-600 text-cyan-400 hover:text-white rounded-lg font-bold text-xs border border-cyan-500/30 transition shadow-sm"
                     >
-                      <Edit className="w-4 h-4" />
+                      <Edit className="w-3.5 h-3.5" /> Edit
                     </button>
                     <button
-                      onClick={() => deleteGamingPackage(pkg.id)}
-                      className="p-1 text-gray-400 hover:text-red-400 transition"
+                      onClick={() => {
+                        if (window.confirm(`Delete gaming package "${pkg.name}"?`)) {
+                          deleteGamingPackage(pkg.id);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white rounded-lg font-bold text-xs border border-red-500/30 transition shadow-sm"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
                     </button>
                   </div>
                 </div>
@@ -515,15 +519,19 @@ export const GamingManagementPanel: React.FC = () => {
                             });
                             setIsGameModalOpen(true);
                           }}
-                          className="p-1 text-gray-400 hover:text-cyan-400 transition"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-600 text-cyan-400 hover:text-white rounded-lg font-bold text-xs border border-cyan-500/30 transition shadow-sm"
                         >
-                          <Edit className="w-4 h-4" />
+                          <Edit className="w-3.5 h-3.5" /> Edit
                         </button>
                         <button
-                          onClick={() => deleteGamingGame(game.id)}
-                          className="p-1 text-gray-400 hover:text-red-400 transition"
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to delete "${game.name}" from Games Library?`)) {
+                              deleteGamingGame(game.id);
+                            }
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white rounded-lg font-bold text-xs border border-red-500/30 transition shadow-sm"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" /> Delete
                         </button>
                       </div>
                     </td>
