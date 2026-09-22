@@ -585,19 +585,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (e) {}
   }, [gamingSessions]);
 
+  // Helper to sync gaming packages into activities state
+  const syncGamingPackagesToActivities = (pkgs: GamingPackage[]) => {
+    setActivities(prev => prev.map(act => {
+      if (act.id === 'act-gaming-pc') {
+        return {
+          ...act,
+          packages: pkgs.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            description: p.description || ''
+          }))
+        };
+      }
+      return act;
+    }));
+  };
+
   // Initial Fetch & Periodic Heartbeat Sync from Backend
   const refetchGamingDataFromBackend = async () => {
     try {
       const [pcsRes, gamesRes, pkgsRes, sessionsRes] = await Promise.all([
-        fetch('/api/gaming/pcs').then(r => r.json()).catch(() => null),
-        fetch('/api/gaming/games').then(r => r.json()).catch(() => null),
-        fetch('/api/gaming/packages').then(r => r.json()).catch(() => null),
-        fetch('/api/gaming/sessions').then(r => r.json()).catch(() => null)
+        fetch('/api/gaming/pcs').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/gaming/games').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/gaming/packages').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/gaming/sessions').then(r => r.ok ? r.json() : null).catch(() => null)
       ]);
 
       if (Array.isArray(pcsRes) && pcsRes.length > 0) setGamingPcs(pcsRes);
       if (Array.isArray(gamesRes) && gamesRes.length > 0) setGamingGames(gamesRes);
-      if (Array.isArray(pkgsRes) && pkgsRes.length > 0) setGamingPackages(pkgsRes);
+      if (Array.isArray(pkgsRes) && pkgsRes.length > 0) {
+        setGamingPackages(pkgsRes);
+        syncGamingPackagesToActivities(pkgsRes);
+      }
       if (Array.isArray(sessionsRes)) setGamingSessions(sessionsRes);
     } catch (e) {
       console.warn('[frontend] Gaming backend fetch error:', e);
@@ -673,6 +694,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setGamingPackages(prev => {
       const updated = [...prev, newPkg];
       fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      syncGamingPackagesToActivities(updated);
       return updated;
     });
   };
@@ -681,6 +703,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setGamingPackages(prev => {
       const updated = prev.map(p => p.id === pkg.id ? pkg : p);
       fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      syncGamingPackagesToActivities(updated);
       return updated;
     });
   };
@@ -689,6 +712,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setGamingPackages(prev => {
       const updated = prev.filter(p => p.id !== pkgId);
       fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      syncGamingPackagesToActivities(updated);
       return updated;
     });
   };

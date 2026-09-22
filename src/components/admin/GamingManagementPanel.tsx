@@ -9,7 +9,7 @@ import { GamingPC, GamingGame, GamingPackage, GamingSession, GamingPCStatus } fr
 import {
   Monitor, Play, Square, Plus, Edit, Trash2, Clock, ShieldAlert, CheckCircle,
   AlertTriangle, RefreshCw, Key, Download, Settings, Gamepad2, Search, Filter,
-  IndianRupee, Lock, Unlock, Zap, Server, Activity as ActivityIcon
+  IndianRupee, Lock, Unlock, Zap, Server, Activity as ActivityIcon, ExternalLink
 } from 'lucide-react';
 
 export const GamingManagementPanel: React.FC = () => {
@@ -163,10 +163,19 @@ export const GamingManagementPanel: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <a
+            href="/gaming/kiosk"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl transition font-bold text-xs shadow-lg shadow-purple-900/30"
+          >
+            <ExternalLink className="w-4 h-4" /> Open Standalone Kiosk
+          </a>
+
           <button
             onClick={handleManualSync}
             disabled={isRefetching}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gray-700/60 hover:bg-gray-700 text-gray-200 rounded-xl transition font-medium border border-gray-600/40 text-sm disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-700/60 hover:bg-gray-700 text-gray-200 rounded-xl transition font-medium border border-gray-600/40 text-xs disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 text-cyan-400 ${isRefetching ? 'animate-spin' : ''}`} />
             Sync PCs
@@ -178,7 +187,7 @@ export const GamingManagementPanel: React.FC = () => {
               setPcForm({ id: `DEUCE-PC-0${gamingPcs.length + 1}`, pcName: `Gaming Station 0${gamingPcs.length + 1}`, ipAddress: '', notes: '' });
               setIsPcModalOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition font-medium text-sm shadow-lg shadow-emerald-900/20"
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition font-medium text-xs shadow-lg shadow-emerald-900/20"
           >
             <Plus className="w-4 h-4" /> Add Gaming PC
           </button>
@@ -630,18 +639,35 @@ export const GamingManagementPanel: React.FC = () => {
         <div className="bg-gray-800/60 rounded-2xl border border-gray-700/50 p-6 space-y-6">
           <div>
             <h3 className="text-xl font-bold text-gray-100 flex items-center gap-2">
-              <Download className="w-5 h-5 text-emerald-400" /> DEUCE Gaming PC Client Installation
+              <Download className="w-5 h-5 text-emerald-400" /> DEUCE Gaming PC Client & Standalone Access
             </h3>
             <p className="text-xs text-gray-400 mt-1">
-              Download the client installer or run the batch script on target Windows Gaming PCs.
+              Access the Standalone Kiosk directly in browser or install the Windows Client launcher script on target Gaming PCs.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-gray-900/60 border border-purple-500/30 p-5 rounded-xl space-y-4">
+              <h4 className="font-bold text-purple-300 text-sm flex items-center gap-2">
+                <Monitor className="w-4 h-4 text-purple-400" /> Web Browser Kiosk Mode
+              </h4>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Run the Standalone Gaming PC client UI directly in Chrome/Edge browser on any gaming station:
+              </p>
+              <a
+                href="/gaming/kiosk"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-xs transition shadow-lg shadow-purple-900/40 w-full justify-center"
+              >
+                <ExternalLink className="w-4 h-4" /> Launch Standalone Kiosk (/gaming/kiosk)
+              </a>
+            </div>
+
             <div className="bg-gray-900/60 border border-gray-700/60 p-5 rounded-xl space-y-4">
               <h4 className="font-bold text-gray-200 text-sm">Quick Windows Batch Setup</h4>
               <p className="text-xs text-gray-400 leading-relaxed">
-                Execute the automated setup batch file on your Gaming PC to configure auto-startup and connect to this server:
+                Execute the automated setup batch file on target Windows Gaming PCs for full auto-startup and process control:
               </p>
               <div className="bg-black/60 p-3 rounded-lg font-mono text-xs text-emerald-400 border border-gray-800">
                 Install-Gaming-Client.bat
@@ -651,9 +677,9 @@ export const GamingManagementPanel: React.FC = () => {
             <div className="bg-gray-900/60 border border-gray-700/60 p-5 rounded-xl space-y-4">
               <h4 className="font-bold text-gray-200 text-sm">Admin Emergency Recovery Key</h4>
               <p className="text-xs text-gray-400 leading-relaxed">
-                If a PC client becomes locked or disconnected, press <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-gray-200 font-mono">CTRL + SHIFT + A</kbd> on the target machine and enter the Admin PIN:
+                To unlock a locked PC client or exit kiosk mode, press <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-gray-200 font-mono text-[11px]">CTRL + SHIFT + A</kbd> and enter the Admin PIN:
               </p>
-              <div className="bg-black/60 p-3 rounded-lg font-mono text-base font-bold text-amber-400 border border-gray-800 tracking-wider">
+              <div className="bg-black/60 p-3 rounded-lg font-mono text-base font-bold text-amber-400 border border-gray-800 tracking-wider text-center">
                 DEUCE2026
               </div>
             </div>
@@ -664,6 +690,210 @@ export const GamingManagementPanel: React.FC = () => {
       {/* ─────────────────────────────────────────────────────────────
           MODALS
       ───────────────────────────────────────────────────────────── */}
+      {/* PC ADD/EDIT MODAL */}
+      {isPcModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-4">
+            <h3 className="text-lg font-bold text-gray-100 flex items-center gap-2">
+              <Monitor className="w-5 h-5 text-emerald-400" /> {editingPc ? 'Edit Gaming PC' : 'Add Gaming PC'}
+            </h3>
+            <form onSubmit={handleSavePc} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-gray-400 mb-1">PC Station ID</label>
+                <input
+                  type="text"
+                  required
+                  disabled={!!editingPc}
+                  value={pcForm.id}
+                  onChange={e => setPcForm({ ...pcForm, id: e.target.value })}
+                  placeholder="e.g. DEUCE-PC-05"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-400 mb-1">PC Name / Specs</label>
+                <input
+                  type="text"
+                  required
+                  value={pcForm.pcName}
+                  onChange={e => setPcForm({ ...pcForm, pcName: e.target.value })}
+                  placeholder="e.g. Gaming Station 05 (RTX 4080)"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-400 mb-1">IP Address (Optional)</label>
+                <input
+                  type="text"
+                  value={pcForm.ipAddress}
+                  onChange={e => setPcForm({ ...pcForm, ipAddress: e.target.value })}
+                  placeholder="192.168.1.105"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-3">
+                <button type="button" onClick={() => setIsPcModalOpen(false)} className="px-4 py-2 bg-gray-700 text-gray-300 rounded-xl">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold">Save PC</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* GAME ADD/EDIT MODAL */}
+      {isGameModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-lg space-y-4">
+            <h3 className="text-lg font-bold text-gray-100 flex items-center gap-2">
+              <Gamepad2 className="w-5 h-5 text-emerald-400" /> {editingGame ? 'Edit Game Config' : 'Add New Game'}
+            </h3>
+            <form onSubmit={handleSaveGame} className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-gray-400 mb-1">Game Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={gameForm.name}
+                    onChange={e => setGameForm({ ...gameForm, name: e.target.value })}
+                    placeholder="e.g. Moto GP 24"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-400 mb-1">Category</label>
+                  <input
+                    type="text"
+                    value={gameForm.category}
+                    onChange={e => setGameForm({ ...gameForm, category: e.target.value })}
+                    placeholder="e.g. Racing / Bike Simulator"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-gray-400 mb-1">Executable Path (on PC)</label>
+                <input
+                  type="text"
+                  required
+                  value={gameForm.executablePath}
+                  onChange={e => setGameForm({ ...gameForm, executablePath: e.target.value })}
+                  placeholder="C:\Games\MotoGP\Game.exe"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 font-mono text-[11px]"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-400 mb-1">Process Name (to monitor/close)</label>
+                <input
+                  type="text"
+                  required
+                  value={gameForm.processName}
+                  onChange={e => setGameForm({ ...gameForm, processName: e.target.value })}
+                  placeholder="MotoGP.exe"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100 font-mono text-[11px]"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-400 mb-1">Icon Image URL (Optional)</label>
+                <input
+                  type="text"
+                  value={gameForm.iconUrl}
+                  onChange={e => setGameForm({ ...gameForm, iconUrl: e.target.value })}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100"
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="gameEnabled"
+                  checked={gameForm.isEnabled}
+                  onChange={e => setGameForm({ ...gameForm, isEnabled: e.target.checked })}
+                  className="rounded bg-gray-900 border-gray-700 text-emerald-500"
+                />
+                <label htmlFor="gameEnabled" className="text-gray-300 font-medium">Enable in PC Game Selector</label>
+              </div>
+              <div className="flex justify-end gap-3 pt-3">
+                <button type="button" onClick={() => setIsGameModalOpen(false)} className="px-4 py-2 bg-gray-700 text-gray-300 rounded-xl">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold">Save Game</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* PACKAGE ADD/EDIT MODAL */}
+      {isPkgModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-4">
+            <h3 className="text-lg font-bold text-gray-100 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-emerald-400" /> {editingPkg ? 'Edit Package' : 'Add Gaming Package'}
+            </h3>
+            <form onSubmit={handleSavePkg} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-gray-400 mb-1">Package Name</label>
+                <input
+                  type="text"
+                  required
+                  value={pkgForm.name}
+                  onChange={e => setPkgForm({ ...pkgForm, name: e.target.value })}
+                  placeholder="e.g. 30 Minutes Pro Gaming"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-gray-400 mb-1">Duration (Minutes)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={pkgForm.durationMinutes}
+                    onChange={e => setPkgForm({ ...pkgForm, durationMinutes: Number(e.target.value) })}
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-400 mb-1">Price (INR)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={pkgForm.price}
+                    onChange={e => setPkgForm({ ...pkgForm, price: Number(e.target.value) })}
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-gray-400 mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={pkgForm.description}
+                  onChange={e => setPkgForm({ ...pkgForm, description: e.target.value })}
+                  placeholder="Package summary..."
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-gray-100"
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="pkgActive"
+                  checked={pkgForm.isActive}
+                  onChange={e => setPkgForm({ ...pkgForm, isActive: e.target.checked })}
+                  className="rounded bg-gray-900 border-gray-700 text-emerald-500"
+                />
+                <label htmlFor="pkgActive" className="text-gray-300 font-medium">Active for Sale</label>
+              </div>
+              <div className="flex justify-end gap-3 pt-3">
+                <button type="button" onClick={() => setIsPkgModalOpen(false)} className="px-4 py-2 bg-gray-700 text-gray-300 rounded-xl">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold">Save Package</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* START SESSION MODAL */}
       {isStartSessionModalOpen && selectedPcForSession && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
