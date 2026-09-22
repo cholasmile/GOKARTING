@@ -172,7 +172,7 @@ export const GamingBikeSimulatorActivityPage: React.FC<ActivityPageProps> = ({ o
           <div className="md:col-span-2 space-y-3">
             <label className="text-xs font-bold text-gray-300 uppercase tracking-wider block">Choose Game Experience</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {gamingGames.map(game => (
+              {gamingGames.filter(g => g.isEnabled !== false).map(game => (
                 <button
                   key={game.id}
                   type="button"
@@ -244,7 +244,7 @@ export const GamingBikeSimulatorActivityPage: React.FC<ActivityPageProps> = ({ o
 
         {/* Packages Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {gamingPackages.map(pkg => (
+          {gamingPackages.filter(p => p.isActive !== false).map(pkg => (
             <div
               key={pkg.id}
               onClick={() => setSelectedPkgId(pkg.id)}
