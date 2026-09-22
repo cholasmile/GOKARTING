@@ -2,7 +2,8 @@ import Dexie, { Table } from 'dexie';
 import { 
   User, Activity, FoodVendor, MenuItem, InventoryItem, 
   Booking, Ticket, FoodOrder, Payment, NotificationLog,
-  Kart, GoKartingSession, LapRecord, GoKartingWaiver
+  Kart, GoKartingSession, LapRecord, GoKartingWaiver,
+  GamingPC, GamingGame, GamingPackage, GamingSession, GamingPCEvent
 } from '../types';
 
 export interface SyncQueueItem {
@@ -32,12 +33,19 @@ export class AppDB extends Dexie {
   sessions!: Table<GoKartingSession, string>;
   lapRecords!: Table<LapRecord, string>;
   waivers!: Table<GoKartingWaiver, string>;
-  
+
+  // Gaming PC Tables
+  gamingPcs!: Table<GamingPC, string>;
+  gamingGames!: Table<GamingGame, string>;
+  gamingPackages!: Table<GamingPackage, string>;
+  gamingSessions!: Table<GamingSession, string>;
+  gamingEvents!: Table<GamingPCEvent, string>;
+
   syncQueue!: Table<SyncQueueItem, number>;
 
   constructor() {
     super('DeuceOfflineDB');
-    this.version(1).stores({
+    this.version(2).stores({
       users: 'id, role, email',
       activities: 'id, type',
       vendors: 'id, type',
@@ -52,9 +60,16 @@ export class AppDB extends Dexie {
       sessions: 'id, status',
       lapRecords: 'id, sessionId, driverId',
       waivers: 'id, ticketId',
+      // Gaming PC Stores
+      gamingPcs: 'id, status, pcName',
+      gamingGames: 'id, name, isEnabled',
+      gamingPackages: 'id, name, isActive',
+      gamingSessions: 'id, pcId, status, startTime',
+      gamingEvents: 'id, eventId, pcId, eventType',
       syncQueue: '++id, table, action, status, createdAt'
     });
   }
 }
 
 export const db = new AppDB();
+

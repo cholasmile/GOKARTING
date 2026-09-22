@@ -20,6 +20,7 @@ import {
 import { HorseRidingActivityPage } from './HorseRidingActivityPage';
 import { ShootingActivityPage } from './ShootingActivityPage';
 import { GoKartingActivityPage } from './GoKartingActivityPage';
+import { GamingBikeSimulatorActivityPage } from './GamingBikeSimulatorActivityPage';
 import { AdventureHero } from './AdventureHero';
 import { ReservationCalendar } from './ReservationCalendar';
 import { getAvailableTimeSlots, getTodayDateString, isPastDate } from '../lib/slotUtils';
@@ -522,8 +523,9 @@ export const CustomerDashboard: React.FC = () => {
       {activeSubTab === 'act-horse-riding' && <HorseRidingActivityPage onSuccessClose={() => setActiveSubTab('history')} />}
       {activeSubTab === 'act-air-gun' && <ShootingActivityPage onSuccessClose={() => setActiveSubTab('history')} />}
       {activeSubTab === 'act-go-karting' && <GoKartingActivityPage onSuccessClose={() => setActiveSubTab('history')} />}
+      {activeSubTab === 'act-gaming-pc' && <GamingBikeSimulatorActivityPage onSuccessClose={() => setActiveSubTab('history')} />}
       {/* Dynamic Activities */}
-      {!['act-horse-riding', 'act-air-gun', 'act-go-karting', 'history'].includes(activeSubTab) && (
+      {!['act-horse-riding', 'act-air-gun', 'act-go-karting', 'act-gaming-pc', 'history'].includes(activeSubTab) && (
         <div className="p-6 md:p-8 glass-panel border border-[#14F1D9]/30 rounded-3xl space-y-6">
           {(() => {
             const dynamicAct = activities.find(a => a.id === activeSubTab);

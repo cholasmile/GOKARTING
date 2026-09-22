@@ -9,7 +9,8 @@ import {
   InventoryItem, Booking, Ticket, FoodOrder, Payment, 
   NotificationLog, OrderStatus, FoodOrderItem, ActivityPackage,
   Kart, GoKartingSession, LapRecord, GoKartingWaiver, KartStatus, SessionStatus,
-  ActivityPhoto, ActivityOffer
+  ActivityPhoto, ActivityOffer,
+  GamingPC, GamingGame, GamingPackage, GamingSession, GamingPCStatus
 } from '../types';
 import { 
   INITIAL_ACTIVITIES, INITIAL_FOOD_VENDORS, INITIAL_MENU_ITEMS, 
@@ -173,6 +174,39 @@ interface AppContextProps {
   updateSessionStatus: (sessionId: string, status: SessionStatus) => void;
   recordLapTime: (lapData: Omit<LapRecord, 'id'>) => void;
   submitWaiver: (waiverData: Omit<GoKartingWaiver, 'id'>) => void;
+
+  // Gaming PC Module State & Actions
+  gamingPcs: GamingPC[];
+  gamingGames: GamingGame[];
+  gamingPackages: GamingPackage[];
+  gamingSessions: GamingSession[];
+  addGamingPC: (pc: GamingPC) => void;
+  updateGamingPC: (pc: GamingPC) => void;
+  deleteGamingPC: (pcId: string) => void;
+  addGamingGame: (game: Omit<GamingGame, 'id' | 'createdAt'> & { id?: string }) => void;
+  updateGamingGame: (game: GamingGame) => void;
+  deleteGamingGame: (gameId: string) => void;
+  addGamingPackage: (pkg: Omit<GamingPackage, 'id' | 'createdAt'> & { id?: string }) => void;
+  updateGamingPackage: (pkg: GamingPackage) => void;
+  deleteGamingPackage: (pkgId: string) => void;
+  startGamingSession: (params: {
+    pcId: string;
+    customerName: string;
+    customerPhone?: string;
+    packageId: string;
+    packageName: string;
+    gameId?: string;
+    gameName?: string;
+    durationMinutes: number;
+    price: number;
+    paymentMethod: 'cash' | 'upi' | 'card' | 'razorpay';
+  }) => GamingSession;
+  extendGamingSession: (sessionId: string, extraMinutes: number) => void;
+  stopGamingSession: (sessionId: string) => void;
+  lockGamingPC: (pcId: string) => void;
+  unlockGamingPC: (pcId: string) => void;
+  togglePCMaintenance: (pcId: string) => void;
+  refetchGamingDataFromBackend: () => Promise<void>;
 
   // Utility Actions
   sendMockNotification: (recipient: string, title: string, body: string, channel: 'email' | 'sms' | 'whatsapp') => void;
@@ -437,7 +471,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
     return merged;
   });
-  const [activities, setActivities] = useState<Activity[]>(() => localLoadHelper('ap_activities', INITIAL_ACTIVITIES));
+  const [activities, setActivities] = useState<Activity[]>(() => {
+    const loaded = localLoadHelper<Activity[]>('ap_activities', INITIAL_ACTIVITIES);
+    const merged = [...loaded];
+    INITIAL_ACTIVITIES.forEach(initAct => {
+      if (!merged.some(a => a.id === initAct.id)) {
+        merged.push(initAct);
+      }
+    });
+    return merged;
+  });
   const [vendors, setVendors] = useState<FoodVendor[]>(() => localLoadHelper('ap_vendors', INITIAL_FOOD_VENDORS));
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => localLoadHelper('ap_menu_items', INITIAL_MENU_ITEMS));
   const [inventory, setInventory] = useState<InventoryItem[]>(() => localLoadHelper('ap_inventory', INITIAL_INVENTORY));
@@ -488,6 +531,340 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [sessions, setSessions] = useState<GoKartingSession[]>(() => localLoadHelper('ap_sessions', mockSessions));
   const [lapRecords, setLapRecords] = useState<LapRecord[]>(() => localLoadHelper('ap_lapRecords', mockLapRecords));
   const [waivers, setWaivers] = useState<GoKartingWaiver[]>(() => localLoadHelper('ap_waivers', []));
+
+  // Gaming PC Specific States
+  const [gamingPcs, setGamingPcs] = useState<GamingPC[]>(() => localLoadHelper('ap_gamingPcs', [
+    { id: 'DEUCE-PC-01', pcName: 'Gaming Station 01 (RTX 4080)', ipAddress: '192.168.1.101', status: 'AVAILABLE', isKioskLocked: true, clientVersion: '1.0.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'DEUCE-PC-02', pcName: 'Gaming Station 02 (RTX 4080)', ipAddress: '192.168.1.102', status: 'AVAILABLE', isKioskLocked: true, clientVersion: '1.0.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'DEUCE-PC-03', pcName: 'Gaming Station 03 (RTX 4070)', ipAddress: '192.168.1.103', status: 'AVAILABLE', isKioskLocked: true, clientVersion: '1.0.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'DEUCE-PC-04', pcName: 'Gaming Station 04 (RTX 4070)', ipAddress: '192.168.1.104', status: 'AVAILABLE', isKioskLocked: true, clientVersion: '1.0.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  ]));
+
+  const [gamingGames, setGamingGames] = useState<GamingGame[]>(() => localLoadHelper('ap_gamingGames', [
+    { id: 'game-gta5', name: 'GTA V', executablePath: 'C:\\Games\\GTAV\\GTA5.exe', processName: 'GTA5.exe', launchArguments: '-fullscreen', iconUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=300&q=80', isEnabled: true, category: 'Action / Open World', createdAt: new Date().toISOString() },
+    { id: 'game-nfs', name: 'Need For Speed Unbound', executablePath: 'C:\\Games\\NFS\\NFS.exe', processName: 'NFS.exe', launchArguments: '', iconUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=300&q=80', isEnabled: true, category: 'Racing', createdAt: new Date().toISOString() },
+    { id: 'game-valorant', name: 'Valorant', executablePath: 'C:\\Riot Games\\VALORANT\\live\\VALORANT.exe', processName: 'VALORANT.exe', launchArguments: '', iconUrl: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=300&q=80', isEnabled: true, category: 'FPS Shooter', createdAt: new Date().toISOString() },
+    { id: 'game-cyberpunk', name: 'Cyberpunk 2077', executablePath: 'C:\\Games\\Cyberpunk2077\\bin\\x64\\Cyberpunk2077.exe', processName: 'Cyberpunk2077.exe', launchArguments: '', iconUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=300&q=80', isEnabled: true, category: 'RPG / Open World', createdAt: new Date().toISOString() }
+  ]));
+
+  const [gamingPackages, setGamingPackages] = useState<GamingPackage[]>(() => localLoadHelper('ap_gamingPackages', [
+    { id: 'pkg-gaming-5m', name: '5 Minutes Test Drive', durationMinutes: 5, price: 10, description: 'Quick 5 minute trial session.', isActive: true, createdAt: new Date().toISOString() },
+    { id: 'pkg-gaming-15m', name: '15 Minutes Speed Play', durationMinutes: 15, price: 50, description: '15 minute high speed gaming session.', isActive: true, createdAt: new Date().toISOString() },
+    { id: 'pkg-gaming-30m', name: '30 Minutes Pro Gaming', durationMinutes: 30, price: 90, description: '30 minute full match session.', isActive: true, createdAt: new Date().toISOString() },
+    { id: 'pkg-gaming-60m', name: '60 Minutes Ultimate Gaming', durationMinutes: 60, price: 150, description: '1 Hour ultimate gaming experience.', isActive: true, createdAt: new Date().toISOString() }
+  ]));
+
+  const [gamingSessions, setGamingSessions] = useState<GamingSession[]>(() => localLoadHelper('ap_gamingSessions', []));
+
+  // Sync gaming states to localStorage & Dexie DB
+  useEffect(() => {
+    try {
+      localStorage.setItem('ap_gamingPcs', JSON.stringify(gamingPcs));
+      db.gamingPcs.bulkPut(gamingPcs).catch(() => {});
+    } catch (e) {}
+  }, [gamingPcs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ap_gamingGames', JSON.stringify(gamingGames));
+      db.gamingGames.bulkPut(gamingGames).catch(() => {});
+    } catch (e) {}
+  }, [gamingGames]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ap_gamingPackages', JSON.stringify(gamingPackages));
+      db.gamingPackages.bulkPut(gamingPackages).catch(() => {});
+    } catch (e) {}
+  }, [gamingPackages]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ap_gamingSessions', JSON.stringify(gamingSessions));
+      db.gamingSessions.bulkPut(gamingSessions).catch(() => {});
+    } catch (e) {}
+  }, [gamingSessions]);
+
+  // Initial Fetch & Periodic Heartbeat Sync from Backend
+  const refetchGamingDataFromBackend = async () => {
+    try {
+      const [pcsRes, gamesRes, pkgsRes, sessionsRes] = await Promise.all([
+        fetch('/api/gaming/pcs').then(r => r.json()).catch(() => null),
+        fetch('/api/gaming/games').then(r => r.json()).catch(() => null),
+        fetch('/api/gaming/packages').then(r => r.json()).catch(() => null),
+        fetch('/api/gaming/sessions').then(r => r.json()).catch(() => null)
+      ]);
+
+      if (Array.isArray(pcsRes) && pcsRes.length > 0) setGamingPcs(pcsRes);
+      if (Array.isArray(gamesRes) && gamesRes.length > 0) setGamingGames(gamesRes);
+      if (Array.isArray(pkgsRes) && pkgsRes.length > 0) setGamingPackages(pkgsRes);
+      if (Array.isArray(sessionsRes)) setGamingSessions(sessionsRes);
+    } catch (e) {
+      console.warn('[frontend] Gaming backend fetch error:', e);
+    }
+  };
+
+  useEffect(() => {
+    refetchGamingDataFromBackend();
+    const interval = setInterval(refetchGamingDataFromBackend, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Gaming PC Actions
+  const addGamingPC = (pc: GamingPC) => {
+    setGamingPcs(prev => {
+      const updated = [...prev.filter(p => p.id !== pc.id), pc];
+      fetch('/api/gaming/pcs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const updateGamingPC = (pc: GamingPC) => {
+    setGamingPcs(prev => {
+      const updated = prev.map(p => p.id === pc.id ? pc : p);
+      fetch('/api/gaming/pcs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const deleteGamingPC = (pcId: string) => {
+    setGamingPcs(prev => {
+      const updated = prev.filter(p => p.id !== pcId);
+      fetch('/api/gaming/pcs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const addGamingGame = (gameData: Omit<GamingGame, 'id' | 'createdAt'> & { id?: string }) => {
+    const newGame: GamingGame = {
+      ...gameData,
+      id: gameData.id || `game-${Date.now()}`,
+      createdAt: new Date().toISOString()
+    };
+    setGamingGames(prev => {
+      const updated = [...prev, newGame];
+      fetch('/api/gaming/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const updateGamingGame = (game: GamingGame) => {
+    setGamingGames(prev => {
+      const updated = prev.map(g => g.id === game.id ? game : g);
+      fetch('/api/gaming/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const deleteGamingGame = (gameId: string) => {
+    setGamingGames(prev => {
+      const updated = prev.filter(g => g.id !== gameId);
+      fetch('/api/gaming/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const addGamingPackage = (pkgData: Omit<GamingPackage, 'id' | 'createdAt'> & { id?: string }) => {
+    const newPkg: GamingPackage = {
+      ...pkgData,
+      id: pkgData.id || `pkg-gaming-${Date.now()}`,
+      createdAt: new Date().toISOString()
+    };
+    setGamingPackages(prev => {
+      const updated = [...prev, newPkg];
+      fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const updateGamingPackage = (pkg: GamingPackage) => {
+    setGamingPackages(prev => {
+      const updated = prev.map(p => p.id === pkg.id ? pkg : p);
+      fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const deleteGamingPackage = (pkgId: string) => {
+    setGamingPackages(prev => {
+      const updated = prev.filter(p => p.id !== pkgId);
+      fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+  };
+
+  const startGamingSession = (params: {
+    pcId: string;
+    customerName: string;
+    customerPhone?: string;
+    packageId: string;
+    packageName: string;
+    gameId?: string;
+    gameName?: string;
+    durationMinutes: number;
+    price: number;
+    paymentMethod: 'cash' | 'upi' | 'card' | 'razorpay';
+  }): GamingSession => {
+    const now = new Date();
+    const expiry = new Date(now.getTime() + params.durationMinutes * 60000);
+    const sessionId = `G-${Date.now().toString().slice(-6)}`;
+
+    const newSession: GamingSession = {
+      id: sessionId,
+      pcId: params.pcId,
+      customerName: params.customerName,
+      customerPhone: params.customerPhone,
+      packageId: params.packageId,
+      packageName: params.packageName,
+      gameId: params.gameId,
+      gameName: params.gameName,
+      startTime: now.toISOString(),
+      expiryTime: expiry.toISOString(),
+      durationMinutes: params.durationMinutes,
+      status: 'AUTHORIZED',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString()
+    };
+
+    // 1. Update Gaming Sessions
+    setGamingSessions(prev => {
+      const updated = [newSession, ...prev];
+      fetch('/api/gaming/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+
+    // 2. Update Target Gaming PC Status
+    setGamingPcs(prev => {
+      const updated = prev.map(pc => {
+        if (pc.id === params.pcId) {
+          return {
+            ...pc,
+            status: 'PLAYING' as GamingPCStatus,
+            currentSessionId: sessionId,
+            currentCustomerName: params.customerName,
+            currentGameName: params.gameName,
+            remainingSeconds: params.durationMinutes * 60,
+            isKioskLocked: false,
+            updatedAt: now.toISOString()
+          };
+        }
+        return pc;
+      });
+      fetch('/api/gaming/pcs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+
+    // 3. Integrate into Existing Booking & Payment system so sales appear in reports!
+    const todayStr = now.toISOString().split('T')[0];
+    const newBooking: Booking = {
+      id: `bk-gaming-${sessionId}`,
+      customerName: params.customerName,
+      customerEmail: `${params.customerName.toLowerCase().replace(/\s+/g, '')}@gaming.station`,
+      customerPhone: params.customerPhone,
+      activityId: 'act-gaming-pc',
+      activityName: `Gaming PC (${params.pcId})`,
+      date: todayStr,
+      timeSlot: `${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${expiry.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      ticketType: 'package',
+      details: `Package: ${params.packageName} (${params.durationMinutes} Mins) - ${params.gameName || 'Any Game'}`,
+      quantity: 1,
+      totalAmount: params.price,
+      paymentStatus: 'paid',
+      bookingDate: now.toISOString(),
+      packageId: params.packageId,
+      packageName: params.packageName,
+      unitPrice: params.price
+    };
+
+    setBookings(prev => [newBooking, ...prev]);
+
+    return newSession;
+  };
+
+  const extendGamingSession = (sessionId: string, extraMinutes: number) => {
+    setGamingSessions(prev => {
+      const updated = prev.map(s => {
+        if (s.id === sessionId) {
+          const currentExp = new Date(s.expiryTime).getTime();
+          const newExp = new Date(currentExp + extraMinutes * 60000).toISOString();
+          return {
+            ...s,
+            expiryTime: newExp,
+            durationMinutes: s.durationMinutes + extraMinutes,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return s;
+      });
+      fetch('/api/gaming/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+
+    setGamingPcs(prev => {
+      const targetSession = gamingSessions.find(s => s.id === sessionId);
+      if (!targetSession) return prev;
+      return prev.map(pc => {
+        if (pc.id === targetSession.pcId) {
+          return {
+            ...pc,
+            remainingSeconds: (pc.remainingSeconds || 0) + extraMinutes * 60,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return pc;
+      });
+    });
+  };
+
+  const stopGamingSession = (sessionId: string) => {
+    const targetSession = gamingSessions.find(s => s.id === sessionId);
+    const nowIso = new Date().toISOString();
+
+    setGamingSessions(prev => {
+      const updated = prev.map(s => {
+        if (s.id === sessionId) {
+          return { ...s, status: 'STOPPED' as const, actualEndTime: nowIso, updatedAt: nowIso };
+        }
+        return s;
+      });
+      fetch('/api/gaming/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
+
+    if (targetSession) {
+      setGamingPcs(prev => {
+        const updated = prev.map(pc => {
+          if (pc.id === targetSession.pcId) {
+            return {
+              ...pc,
+              status: 'AVAILABLE' as GamingPCStatus,
+              currentSessionId: undefined,
+              currentCustomerName: undefined,
+              currentGameName: undefined,
+              remainingSeconds: 0,
+              isKioskLocked: true,
+              updatedAt: nowIso
+            };
+          }
+          return pc;
+        });
+        fetch('/api/gaming/pcs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+        return updated;
+      });
+    }
+  };
+
+  const lockGamingPC = (pcId: string) => {
+    setGamingPcs(prev => prev.map(p => p.id === pcId ? { ...p, isKioskLocked: true, status: p.status === 'PLAYING' ? 'PLAYING' : 'LOCKED' } : p));
+  };
+
+  const unlockGamingPC = (pcId: string) => {
+    setGamingPcs(prev => prev.map(p => p.id === pcId ? { ...p, isKioskLocked: false } : p));
+  };
+
+  const togglePCMaintenance = (pcId: string) => {
+    setGamingPcs(prev => prev.map(p => p.id === pcId ? { ...p, status: p.status === 'MAINTENANCE' ? 'AVAILABLE' : 'MAINTENANCE', isKioskLocked: true } : p));
+  };
 
   const [foodCart, setFoodCart] = useState<FoodOrderItem[]>([]);
 
@@ -2157,7 +2534,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       // Go Karting Exports
       karts, sessions, lapRecords, waivers,
-      updateKartStatus, createGoKartingSession, updateSessionStatus, recordLapTime, submitWaiver
+      updateKartStatus, createGoKartingSession, updateSessionStatus, recordLapTime, submitWaiver,
+
+      // Gaming PC Exports
+      gamingPcs, gamingGames, gamingPackages, gamingSessions,
+      addGamingPC, updateGamingPC, deleteGamingPC,
+      addGamingGame, updateGamingGame, deleteGamingGame,
+      addGamingPackage, updateGamingPackage, deleteGamingPackage,
+      startGamingSession, extendGamingSession, stopGamingSession,
+      lockGamingPC, unlockGamingPC, togglePCMaintenance, refetchGamingDataFromBackend
     }}>
       {children}
     </AppContext.Provider>

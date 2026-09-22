@@ -359,3 +359,86 @@ export interface AllotmentAuditEntry {
   staffName: string;
   notes?: string;
 }
+
+// ==========================================
+// STANDALONE GAMING PC MODULE TYPES
+// ==========================================
+
+export type GamingPCStatus = 'ONLINE' | 'AVAILABLE' | 'PLAYING' | 'EXPIRED' | 'LOCKED' | 'MAINTENANCE' | 'OFFLINE';
+
+export interface GamingPC {
+  id: string; // e.g. 'DEUCE-PC-01'
+  pcName: string;
+  ipAddress?: string;
+  macAddress?: string;
+  status: GamingPCStatus;
+  currentSessionId?: string;
+  currentCustomerName?: string;
+  currentGameName?: string;
+  remainingSeconds?: number;
+  lastHeartbeat?: string;
+  clientVersion?: string;
+  isKioskLocked: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GamingGame {
+  id: string;
+  name: string;
+  executablePath: string; // e.g. "C:\Games\GTAV\Game.exe"
+  processName: string;    // e.g. "GTA5.exe"
+  launchArguments?: string;
+  iconUrl?: string;
+  isEnabled: boolean;
+  category?: string;
+  createdAt: string;
+}
+
+export interface GamingPackage {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  price: number;
+  description: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type GamingSessionStatus = 'AUTHORIZED' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'STOPPED' | 'CANCELLED';
+
+export interface GamingSession {
+  id: string;
+  pcId: string;
+  customerId?: string;
+  customerName: string;
+  customerPhone?: string;
+  packageId: string;
+  packageName: string;
+  gameId?: string;
+  gameName?: string;
+  paymentId?: string;
+  paymentRef?: string;
+  startTime: string;
+  expiryTime: string;
+  actualEndTime?: string;
+  durationMinutes: number;
+  remainingSecondsAtLastSync?: number;
+  status: GamingSessionStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GamingPCEvent {
+  id: string;
+  eventId: string; // Idempotency UUID
+  pcId: string;
+  sessionId?: string;
+  eventType: 'SESSION_STARTED' | 'GAME_STARTED' | 'SESSION_EXTENDED' | 'GAME_CLOSED' | 'SESSION_EXPIRED' | 'SESSION_STOPPED' | 'PC_LOCKED' | 'CLOCK_ANOMALY';
+  eventData?: Record<string, any>;
+  timestamp: string;
+  uploadedAt?: string;
+}
+

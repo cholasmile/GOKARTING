@@ -14,9 +14,10 @@ import {
   TrendingUp, Users, Ticket, Utensils, Award, ShieldAlert,
   Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle,
   MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check,
-  Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag, RotateCcw
+  Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag, RotateCcw, Monitor
 } from 'lucide-react';
 import ActivityManagementPanel from './admin/ActivityManagementPanel';
+import GamingManagementPanel from './admin/GamingManagementPanel';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
 import { compressImageFile } from '../lib/imageUtils';
 
@@ -209,7 +210,7 @@ export const AdminDashboard: React.FC = () => {
   const [reconciliationTab, setReconciliationTab] = useState<'reports' | 'reconciliation'>('reports');
 
   // Active Admin Tabs
-  const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'database' | 'payments' | 'pay_settings'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'gaming' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'database' | 'payments' | 'pay_settings'>('analytics');
   const [activeDbSubTab, setActiveDbSubTab] = useState<'schema' | 'rls' | 'hierarchy' | 'api_routes' | 'deploy'>('schema');
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -701,7 +702,7 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Admin Tabs */}
       <div className="flex border-b border-[#14F1D9]/20 gap-1.5 overflow-x-auto text-[#FFFFFF] pb-2">
-        {(['analytics', 'activities', 'activity_mgmt', 'vendors', 'retail_menu', 'users', 'reports', 'payments', 'pay_settings', 'database'] as const).map(tab => (
+        {(['analytics', 'gaming', 'activities', 'activity_mgmt', 'vendors', 'retail_menu', 'users', 'reports', 'payments', 'pay_settings', 'database'] as const).map(tab => (
           <button
             key={tab}
             id={`btn-admin-tab-${tab}`}
@@ -713,6 +714,7 @@ export const AdminDashboard: React.FC = () => {
             }`}
           >
             {tab === 'analytics' && <TrendingUp className="h-4 w-4" />}
+            {tab === 'gaming' && <Monitor className="h-4 w-4" />}
             {tab === 'activities' && <Award className="h-4 w-4" />}
             {tab === 'activity_mgmt' && <ImageIcon className="h-4 w-4" />}
             {tab === 'vendors' && <Coffee className="h-4 w-4" />}
@@ -723,6 +725,7 @@ export const AdminDashboard: React.FC = () => {
             {tab === 'pay_settings' && <Settings className="h-4 w-4" />}
             {tab === 'database' && <Database className="h-4 w-4" />}
             {tab === 'database' ? 'Supabase & RLS'
+              : tab === 'gaming' ? 'Gaming Management'
               : tab === 'pay_settings' ? 'Pay Settings'
               : tab === 'payments' ? 'Pay Reports'
               : tab === 'activity_mgmt' ? 'Activity Mgmt'
@@ -731,6 +734,11 @@ export const AdminDashboard: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* GAMING MANAGEMENT PANEL VIEW */}
+      {activeTab === 'gaming' && (
+        <GamingManagementPanel />
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* 1. ANALYTICS VIEW */}
