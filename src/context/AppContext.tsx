@@ -949,8 +949,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           freshList = dbActivities;
           setActivities(prev => {
             const map = new Map<string, Activity>();
-            prev.forEach(existing => map.set(existing.id, existing));
             dbActivities.forEach((dba: Activity) => map.set(dba.id, dba));
+            prev.forEach(existing => map.set(existing.id, existing));
             const mergedList = Array.from(map.values());
             try {
               localStorage.setItem('ap_activities', JSON.stringify(mergedList));
@@ -972,8 +972,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         freshList = serverActivities;
         setActivities(prev => {
           const map = new Map<string, Activity>();
-          prev.forEach(existing => map.set(existing.id, existing));
           serverActivities.forEach((sa: Activity) => map.set(sa.id, sa));
+          prev.forEach(existing => map.set(existing.id, existing));
           const mergedList = Array.from(map.values());
           try {
             localStorage.setItem('ap_activities', JSON.stringify(mergedList));
@@ -1024,9 +1024,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (dbActivities && dbActivities.length > 0) {
           setActivities(prev => {
             const map = new Map<string, Activity>();
-            prev.forEach(existing => map.set(existing.id, existing));
-            // DATABASE IS SINGLE SOURCE OF TRUTH — dba strictly overrides existing!
             dbActivities.forEach((dba: Activity) => map.set(dba.id, dba));
+            prev.forEach(existing => map.set(existing.id, existing));
             const mergedList = Array.from(map.values());
             try {
               localStorage.setItem('ap_activities', JSON.stringify(mergedList));
@@ -1070,8 +1069,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           if (Array.isArray(serverActivities) && serverActivities.length > 0) {
             setActivities(prev => {
               const map = new Map<string, Activity>();
-              prev.forEach(existing => map.set(existing.id, existing));
               serverActivities.forEach((sa: Activity) => map.set(sa.id, sa));
+              prev.forEach(existing => map.set(existing.id, existing));
               const mergedList = Array.from(map.values());
               try {
                 localStorage.setItem('ap_activities', JSON.stringify(mergedList));
