@@ -587,20 +587,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Helper to sync gaming packages into activities state
   const syncGamingPackagesToActivities = (pkgs: GamingPackage[]) => {
-    setActivities(prev => prev.map(act => {
-      if (act.id === 'act-gaming-pc') {
-        return {
-          ...act,
-          packages: pkgs.map(p => ({
-            id: p.id,
-            name: p.name,
-            price: p.price,
-            description: p.description || ''
-          }))
-        };
-      }
-      return act;
-    }));
+    setActivities(prev => {
+      const updated = prev.map(act => {
+        if (act.id === 'act-gaming-pc') {
+          return {
+            ...act,
+            packages: pkgs.map(p => ({
+              id: p.id,
+              name: p.name,
+              price: p.price,
+              description: p.description || ''
+            }))
+          };
+        }
+        return act;
+      });
+      try {
+        localStorage.setItem('ap_activities', JSON.stringify(updated));
+      } catch (e) {}
+      fetch('/api/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+      return updated;
+    });
   };
 
   // Initial Fetch & Periodic Heartbeat Sync from Backend
@@ -1338,6 +1345,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       // 5. Refetch fresh data from DB to confirm application state
       await refetchActivitiesFromDatabase();
       return updatedDbRow || act;
+    }
+
+    // Synchronize act-gaming-pc package edits back to gamingPackages
+    if (act.id === 'act-gaming-pc' && act.packages && Array.isArray(act.packages)) {
+      setGamingPackages(prev => {
+        const updated = act.packages!.map(ap => {
+          const existing = prev.find(p => p.id === ap.id);
+          return {
+            id: ap.id,
+            name: ap.name,
+            durationMinutes: existing?.durationMinutes || 30,
+            price: ap.price,
+            description: ap.description || existing?.description || '',
+            isActive: existing?.isActive !== false,
+            createdAt: existing?.createdAt || new Date().toISOString()
+          };
+        });
+        try {
+          localStorage.setItem('ap_gamingPackages', JSON.stringify(updated));
+        } catch (e) {}
+        fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
+        return updated;
+      });
     }
 
     // Local server mode fallback

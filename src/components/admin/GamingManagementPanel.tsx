@@ -82,6 +82,7 @@ export const GamingManagementPanel: React.FC = () => {
     } else {
       addGamingPC({ id: pcForm.id.trim() || `DEUCE-PC-0${gamingPcs.length + 1}`, pcName: pcForm.pcName, ipAddress: pcForm.ipAddress, status: 'AVAILABLE', isKioskLocked: true, notes: pcForm.notes, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     }
+    setEditingPc(null);
     setIsPcModalOpen(false);
   };
 
@@ -93,6 +94,7 @@ export const GamingManagementPanel: React.FC = () => {
     } else {
       addGamingGame({ ...gameForm, id: `game-${Date.now()}`, createdAt: new Date().toISOString() });
     }
+    setEditingGame(null);
     setIsGameModalOpen(false);
   };
 
@@ -104,6 +106,7 @@ export const GamingManagementPanel: React.FC = () => {
     } else {
       addGamingPackage({ ...pkgForm, id: `pkg-gaming-${Date.now()}`, createdAt: new Date().toISOString() });
     }
+    setEditingPkg(null);
     setIsPkgModalOpen(false);
   };
 
