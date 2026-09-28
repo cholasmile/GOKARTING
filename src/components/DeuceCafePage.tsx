@@ -9,19 +9,21 @@ import { MenuItem, FoodOrder } from '../types';
 import { 
   Coffee, Utensils, ShoppingBag, Search, Plus, Minus, Edit,
   Trash2, ArrowRight, CheckCircle2, Clock, Sparkles, X, 
-  CreditCard, Flame, ChevronRight, Ticket
+  CreditCard, Flame, ChevronRight, Ticket, Package
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const DeuceCafePage: React.FC = () => {
   const { 
     menuItems, vendors, foodCart, addToFoodCart, removeFromFoodCart, 
-    clearFoodCart, submitFoodOrder, currentUser, addMenuItem, updateMenuItem, deleteMenuItem, orders 
+    clearFoodCart, submitFoodOrder, currentUser, addMenuItem, updateMenuItem, deleteMenuItem, 
+    updateMenuItemStock, adjustMenuItemStock, orders 
   } = useAppContext();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVendorFilter, setSelectedVendorFilter] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [showStockManager, setShowStockManager] = useState(false);
 
   // Extract repeat / frequently ordered items
   const repeatOrderItems = React.useMemo(() => {
@@ -176,24 +178,37 @@ export const DeuceCafePage: React.FC = () => {
 
           <div className="flex items-center gap-3">
             {isStaffOrAdmin && (
-              <button
-                onClick={() => {
-                  setEditingMenuItem(null);
-                  setMenuForm({
-                    name: '',
-                    description: '',
-                    price: 5.0,
-                    category: 'Beverages',
-                    vendorId: vendors[0]?.id || 'vendor-forest-cafe',
-                    image: '',
-                    isAvailable: true
-                  });
-                  setIsMenuModalOpen(true);
-                }}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-2 transition-all hover:scale-105 cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.3)]"
-              >
-                <Plus className="w-4 h-4" /> Add Menu Item
-              </button>
+              <>
+                <button
+                  onClick={() => setShowStockManager(!showStockManager)}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer border ${
+                    showStockManager 
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]' 
+                      : 'bg-[#0B1120] text-[#14F1D9] border-[#14F1D9]/40 hover:bg-[#14F1D9]/10'
+                  }`}
+                >
+                  <Package className="w-4 h-4" /> {showStockManager ? 'Hide Stock Panel' : 'Stock Positions'}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingMenuItem(null);
+                    setMenuForm({
+                      name: '',
+                      description: '',
+                      price: 5.0,
+                      category: 'Beverages',
+                      vendorId: vendors[0]?.id || 'vendor-forest-cafe',
+                      image: '',
+                      isAvailable: true,
+                      stockQuantity: 50
+                    });
+                    setIsMenuModalOpen(true);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-2 transition-all hover:scale-105 cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.3)]"
+                >
+                  <Plus className="w-4 h-4" /> Add Menu Item
+                </button>
+              </>
             )}
             <Link 
               to="/" 
@@ -203,6 +218,79 @@ export const DeuceCafePage: React.FC = () => {
             </Link>
           </div>
         </div>
+
+        {/* Stock Position Management Panel (Staff / Admin) */}
+        {isStaffOrAdmin && showStockManager && (
+          <div className="mt-6 p-4 rounded-2xl bg-[#0B1120] border border-amber-400/40 shadow-[0_0_25px_rgba(245,158,11,0.15)] space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="text-sm font-black text-white font-mono uppercase tracking-wider">Live Cafe & Snack Stock Position Manager</h3>
+                  <p className="text-[11px] text-[#9CA3AF]">Directly update stock counts for inventory. Selling items at POS automatically deducts these positions.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowStockManager(false)}
+                className="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
+              {menuItems.map(item => {
+                const stock = item.stockQuantity ?? 50;
+                return (
+                  <div key={`stock-mgr-${item.id}`} className="p-3 bg-[#050816] border border-white/10 rounded-xl flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-xs text-white truncate">{item.name}</div>
+                      <div className="text-[10px] text-[#9CA3AF] font-mono flex items-center gap-1">
+                        <span>{item.category}</span>
+                        <span>•</span>
+                        <span className="text-[#14F1D9]">₹{item.price.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => adjustMenuItemStock(item.id, -1)}
+                        disabled={stock <= 0}
+                        className="w-6 h-6 rounded bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 flex items-center justify-center font-bold text-xs disabled:opacity-30 cursor-pointer"
+                        title="Deduct 1"
+                      >
+                        -1
+                      </button>
+                      
+                      <input 
+                        type="number"
+                        min="0"
+                        value={stock}
+                        onChange={(e) => updateMenuItemStock(item.id, parseInt(e.target.value) || 0)}
+                        className="w-14 text-center py-1 bg-[#0B1120] border border-amber-400/50 rounded text-xs font-mono font-black text-amber-300 focus:outline-none focus:border-amber-400"
+                      />
+
+                      <button
+                        onClick={() => adjustMenuItemStock(item.id, 5)}
+                        className="px-1.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 font-bold text-[10px] font-mono cursor-pointer"
+                        title="Add 5"
+                      >
+                        +5
+                      </button>
+                      <button
+                        onClick={() => adjustMenuItemStock(item.id, 20)}
+                        className="px-1.5 py-1 rounded bg-[#14F1D9]/20 hover:bg-[#14F1D9]/40 text-[#14F1D9] font-bold text-[10px] font-mono cursor-pointer"
+                        title="Add 20"
+                      >
+                        +20
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Search & Filters */}
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -18,7 +18,8 @@ export const FoodVendorDashboard: React.FC = () => {
   const { 
     vendors, menuItems, inventory, orders, selectedVendorId, setSelectedVendorId,
     addMenuItem, updateMenuItem, deleteMenuItem, updateInventoryStock, updateOrderStatus,
-    foodCart, addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder
+    foodCart, addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder,
+    updateMenuItemStock, adjustMenuItemStock
   } = useAppContext();
 
   // Bulk add modal state
@@ -378,41 +379,56 @@ export const FoodVendorDashboard: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8 gap-2.5">
-              {filteredPosMenuItems.map(item => (
-                <div 
-                  key={item.id}
-                  className="glass-panel p-2 border border-[#00ABAB]/20 hover:border-[#14F1D9]/50 rounded-xl flex flex-col justify-between bg-[#0B1120] transition-all group aspect-square"
-                >
-                  <div className="relative w-full h-1/2 rounded-lg overflow-hidden mb-1">
-                    <img 
-                      src={item.image} 
-                      alt={item.name} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
-                      referrerPolicy="no-referrer"
-                    />
-                    <span className="absolute top-1 left-1 px-1 py-0.5 bg-[#050816]/90 border border-white/5 text-[7px] font-mono font-bold text-[#14F1D9] rounded uppercase truncate max-w-[80%]">
-                      {item.category}
-                    </span>
-                  </div>
+              {filteredPosMenuItems.map(item => {
+                const stockQty = item.stockQuantity ?? 50;
+                const isOutOfStock = stockQty <= 0 || !item.isAvailable;
 
-                  <div className="flex-1 flex flex-col justify-between min-w-0">
-                    <div>
-                      <div className="flex justify-between items-start gap-1">
-                        <h4 className="font-bold text-[10px] text-white truncate group-hover:text-[#14F1D9] transition-colors">{item.name}</h4>
-                        <span className="font-mono text-[10px] font-black text-white shrink-0">₹{item.price.toFixed(2)}</span>
-                      </div>
+                return (
+                  <div 
+                    key={item.id}
+                    className="glass-panel p-2 border border-[#00ABAB]/20 hover:border-[#14F1D9]/50 rounded-xl flex flex-col justify-between bg-[#0B1120] transition-all group aspect-square"
+                  >
+                    <div className="relative w-full h-1/2 rounded-lg overflow-hidden mb-1">
+                      <img 
+                        src={item.image} 
+                        alt={item.name} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                        referrerPolicy="no-referrer"
+                      />
+                      <span className="absolute top-1 left-1 px-1 py-0.5 bg-[#050816]/90 border border-white/5 text-[7px] font-mono font-bold text-[#14F1D9] rounded uppercase truncate max-w-[80%]">
+                        {item.category}
+                      </span>
+                      <span className={`absolute top-1 right-1 px-1 py-0.5 border text-[7px] font-mono font-bold rounded uppercase ${
+                        stockQty > 10 
+                          ? 'bg-[#050816]/90 border-emerald-500/30 text-emerald-400'
+                          : stockQty > 0
+                          ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                          : 'bg-rose-500/20 border-rose-500/40 text-rose-400'
+                      }`}>
+                        {stockQty > 0 ? `Stk: ${stockQty}` : '0 Stk'}
+                      </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => addToPosCart(item)}
-                      className="w-full py-1 mt-1 rounded-lg bg-[#14F1D9]/10 hover:bg-[#14F1D9] hover:text-[#0B1120] text-[#14F1D9] font-black text-[8px] uppercase tracking-widest flex items-center justify-center gap-0.5 cursor-pointer transition-all border border-[#14F1D9]/30"
-                    >
-                      <Plus className="h-2.5 w-2.5" /> Add
-                    </button>
+                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                      <div>
+                        <div className="flex justify-between items-start gap-1">
+                          <h4 className="font-bold text-[10px] text-white truncate group-hover:text-[#14F1D9] transition-colors">{item.name}</h4>
+                          <span className="font-mono text-[10px] font-black text-white shrink-0">₹{item.price.toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => addToPosCart(item)}
+                        disabled={isOutOfStock}
+                        className="w-full py-1 mt-1 rounded-lg bg-[#14F1D9]/10 hover:bg-[#14F1D9] hover:text-[#0B1120] text-[#14F1D9] font-black text-[8px] uppercase tracking-widest flex items-center justify-center gap-0.5 cursor-pointer transition-all border border-[#14F1D9]/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Plus className="h-2.5 w-2.5" /> {isOutOfStock ? 'Sold Out' : 'Add'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -873,9 +889,9 @@ export const FoodVendorDashboard: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Price (?)</label>
+                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Price (₹)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -883,8 +899,21 @@ export const FoodVendorDashboard: React.FC = () => {
                     id="input-menu-price"
                     value={menuForm.price}
                     onChange={e => setMenuForm({...menuForm, price: Number(e.target.value)})}
-                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
+                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF] font-mono"
                     min={0}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Stock Position</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    id="input-menu-stock"
+                    value={menuForm.stockQuantity}
+                    onChange={e => setMenuForm({...menuForm, stockQuantity: parseInt(e.target.value) || 0})}
+                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#14F1D9] font-mono font-bold"
+                    placeholder="e.g. 50"
                   />
                 </div>
                 <div>

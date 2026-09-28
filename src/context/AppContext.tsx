@@ -144,11 +144,13 @@ interface AppContextProps {
   updateVendor: (vendor: FoodVendor) => void;
   deleteVendor: (id: string) => void;
 
-  // Mutators - Menu Items
+  // Mutators - Menu Items & Stock
   addMenuItem: (item: Omit<MenuItem, 'id'>) => void;
   addBulkMenuItems: (items: Array<Omit<MenuItem, 'id'>>) => void;
   updateMenuItem: (item: MenuItem) => void;
   deleteMenuItem: (id: string) => void;
+  updateMenuItemStock: (itemId: string, newStock: number) => void;
+  adjustMenuItemStock: (itemId: string, delta: number) => void;
 
   // Mutators - Inventory
   updateInventoryStock: (id: string, amount: number, mode: 'set' | 'adjust') => void;
@@ -159,7 +161,12 @@ interface AppContextProps {
   addToFoodCart: (item: MenuItem, quantity: number) => void;
   removeFromFoodCart: (menuItemId: string) => void;
   clearFoodCart: () => void;
-  submitFoodOrder: (customerName: string, customerEmail: string, paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash') => FoodOrder;
+  submitFoodOrder: (
+    customerNameOrData: string | { customerName: string; customerEmail: string; paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash'; customerPhone?: string },
+    customerEmail?: string,
+    paymentMethod?: 'upi' | 'card' | 'net_banking' | 'cash',
+    customerPhone?: string
+  ) => FoodOrder;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
 
   // Mutators - Go Karting
@@ -726,15 +733,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     };
 
-    // Purge legacy gaming items from local Dexie & localStorage immediately
+    // Purge legacy gaming items from Supabase, local Dexie & localStorage immediately
     try {
+      if (isSupabaseConfigured && supabase) {
+        supabase.from('activities').delete().or('id.eq.act-gaming-pc,id.ilike.%gaming%,name.ilike.%gaming%,name.ilike.%arena%').then(() => {}).catch(() => {});
+        supabase.from('users').delete().or('id.eq.usr-gam,role.eq.gaming_staff,email.ilike.%gaming%').then(() => {}).catch(() => {});
+      }
       db.activities.delete('act-gaming-pc').catch(() => {});
       db.users.delete('usr-gam').catch(() => {});
       const storedAct = localStorage.getItem('ap_activities');
       if (storedAct) {
         const parsed = JSON.parse(storedAct);
         if (Array.isArray(parsed)) {
-          const cleaned = parsed.filter(a => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
+          const cleaned = parsed.filter(a => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('arena'));
           localStorage.setItem('ap_activities', JSON.stringify(cleaned));
         }
       }
@@ -1978,6 +1989,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     writeToLocalAndSync('menuItems', 'delete', { id });
   };
 
+  const updateMenuItemStock = (itemId: string, newStock: number) => {
+    const cleanStock = Math.max(0, newStock);
+    setMenuItems(prev => {
+      const updatedList = prev.map(m => {
+        if (m.id === itemId) {
+          const updated = {
+            ...m,
+            stockQuantity: cleanStock,
+            isAvailable: cleanStock > 0
+          };
+          writeToLocalAndSync('menuItems', 'update', updated);
+          return updated;
+        }
+        return m;
+      });
+      try {
+        localStorage.setItem('ap_menu_items', JSON.stringify(updatedList));
+        db.menuItems.bulkPut(updatedList);
+      } catch {}
+      return updatedList;
+    });
+  };
+
+  const adjustMenuItemStock = (itemId: string, delta: number) => {
+    setMenuItems(prev => {
+      const updatedList = prev.map(m => {
+        if (m.id === itemId) {
+          const current = m.stockQuantity ?? 50;
+          const cleanStock = Math.max(0, current + delta);
+          const updated = {
+            ...m,
+            stockQuantity: cleanStock,
+            isAvailable: cleanStock > 0
+          };
+          writeToLocalAndSync('menuItems', 'update', updated);
+          return updated;
+        }
+        return m;
+      });
+      try {
+        localStorage.setItem('ap_menu_items', JSON.stringify(updatedList));
+        db.menuItems.bulkPut(updatedList);
+      } catch {}
+      return updatedList;
+    });
+  };
+
   // Inventory Management
   const updateInventoryStock = (id: string, amount: number, mode: 'set' | 'adjust') => {
     setInventory(prev => prev.map(item => {
@@ -2013,10 +2071,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     writeToLocalAndSync('inventory', 'insert', newItem);
   };
 
-  // Food Cart Actions
+  // Food Cart Actions with live stock position checks
   const addToFoodCart = (item: MenuItem, quantity: number) => {
     setFoodCart(prev => {
       const existing = prev.find(i => i.menuItemId === item.id);
+      const currentCartQty = existing ? existing.quantity : 0;
+      const availableStock = item.stockQuantity !== undefined ? item.stockQuantity : 9999;
+
+      if (availableStock <= 0) {
+        alert(`Sorry, "${item.name}" is currently Out of Stock.`);
+        return prev;
+      }
+
+      if (currentCartQty + quantity > availableStock) {
+        alert(`Cannot add more than available stock (${availableStock} units available for ${item.name}).`);
+        return prev;
+      }
+
       const vendorName = vendors.find(v => v.id === item.vendorId)?.name || 'Food Stall';
 
       if (existing) {
@@ -2043,9 +2114,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setFoodCart([]);
   };
 
-  // Submit Food Order (Single checkout supporting multi-vendor list)
-  const submitFoodOrder = (customerName: string, customerEmail: string, paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash') => {
+  // Submit Food Order (Single checkout supporting multi-vendor list & auto stock deduction)
+  const submitFoodOrder = (
+    customerNameOrData: string | { customerName: string; customerEmail: string; paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash'; customerPhone?: string },
+    customerEmail?: string,
+    paymentMethod?: 'upi' | 'card' | 'net_banking' | 'cash',
+    customerPhone?: string
+  ) => {
     if (foodCart.length === 0) throw new Error('Cart is empty');
+
+    let finalName = 'Walk-in Guest';
+    let finalEmail = 'guest@deucepark.com';
+    let finalPhone = 'N/A';
+    let finalMethod: 'upi' | 'card' | 'net_banking' | 'cash' = 'cash';
+
+    if (typeof customerNameOrData === 'object' && customerNameOrData !== null) {
+      finalName = customerNameOrData.customerName || 'Walk-in Guest';
+      finalEmail = customerNameOrData.customerEmail || 'guest@deucepark.com';
+      finalPhone = customerNameOrData.customerPhone || 'N/A';
+      finalMethod = customerNameOrData.paymentMethod || 'cash';
+    } else {
+      finalName = customerNameOrData || 'Walk-in Guest';
+      finalEmail = customerEmail || 'guest@deucepark.com';
+      finalMethod = paymentMethod || 'cash';
+      finalPhone = customerPhone || 'N/A';
+    }
 
     const orderId = generateOfflineId('ord');
     const txId = generateOfflineId('tx');
@@ -2054,8 +2147,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const newOrder: FoodOrder = {
       id: orderId,
-      customerName,
-      customerEmail,
+      customerName: finalName,
+      customerEmail: finalEmail,
+      customerPhone: finalPhone,
       items: [...foodCart],
       totalAmount,
       status: 'pending',
@@ -2067,7 +2161,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       id: `pay-${Date.now()}`,
       orderId,
       amount: totalAmount,
-      method: paymentMethod,
+      method: finalMethod,
       status: 'success',
       transactionId: txId,
       timestamp
@@ -2079,22 +2173,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     writeToLocalAndSync('orders', 'insert', newOrder);
     writeToLocalAndSync('payments', 'insert', newPayment);
 
-    // Reduce inventory stocks & direct menu item stock quantity for ordering simulation
-    setMenuItems(prev => prev.map(m => {
-      const cartItem = foodCart.find(ci => ci.menuItemId === m.id);
-      if (cartItem && m.stockQuantity !== undefined) {
-        const newQty = Math.max(0, m.stockQuantity - cartItem.quantity);
-        return {
-          ...m,
-          stockQuantity: newQty,
-          isAvailable: newQty > 0 ? m.isAvailable : false
-        };
-      }
-      return m;
-    }));
+    // ── REDUCE DIRECT MENU ITEM STOCK AND PERSIST AFTER BILLING ──
+    setMenuItems(prev => {
+      const updatedList = prev.map(m => {
+        const cartItem = foodCart.find(ci => ci.menuItemId === m.id);
+        if (cartItem) {
+          const currentStock = m.stockQuantity !== undefined ? m.stockQuantity : 50;
+          const newQty = Math.max(0, currentStock - cartItem.quantity);
+          const updated = {
+            ...m,
+            stockQuantity: newQty,
+            isAvailable: newQty > 0 ? m.isAvailable : false
+          };
+          writeToLocalAndSync('menuItems', 'update', updated);
+          return updated;
+        }
+        return m;
+      });
 
+      try {
+        localStorage.setItem('ap_menu_items', JSON.stringify(updatedList));
+        db.menuItems.bulkPut(updatedList);
+      } catch {}
+
+      return updatedList;
+    });
+
+    // ── DEDUCT LINKED INGREDIENT INVENTORIES ──
     foodCart.forEach(cartItem => {
-      // Find matches in inventory (fuzzy lookup name or category)
       const matchingIngredients = inventory.filter(inv => 
         inv.vendorId === cartItem.vendorId && 
         (cartItem.name.toLowerCase().includes(inv.name.split(' ')[0].toLowerCase()) || 
@@ -2104,7 +2210,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       );
 
       matchingIngredients.forEach(ing => {
-        // Deduct stock proportionally
         updateInventoryStock(ing.id, -cartItem.quantity, 'adjust');
       });
     });
@@ -2113,9 +2218,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Notify Customer & Stall owners
     sendMockNotification(
-      customerEmail,
+      finalEmail,
       'Food Order Received! 🍔☕',
-      `Your order ${orderId} has been successfully placed at Food Street. Total amount: ₹${totalAmount.toFixed(2)}. Stalls are preparing your fresh items!`,
+      `Your order ${orderId} has been successfully placed at Food Street / Cafe. Total amount: ₹${totalAmount.toFixed(2)}. Kitchen is preparing your fresh order!`,
       'email'
     );
 
@@ -2284,6 +2389,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       addBulkMenuItems,
       updateMenuItem,
       deleteMenuItem,
+      updateMenuItemStock,
+      adjustMenuItemStock,
 
       updateInventoryStock,
       addInventoryItem,

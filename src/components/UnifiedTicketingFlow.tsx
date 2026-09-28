@@ -54,50 +54,42 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
     }
   }, [date, timeSlot]);
 
-  // Per-activity selected package: { [activityId]: packageId }
-  const [selectedPackages, setSelectedPackages] = useState<Record<string, string>>(() => {
-    const defaults: Record<string, string> = {};
+  // Per-package quantities: { [packageId]: quantity }
+  const [packageQuantities, setPackageQuantities] = useState<Record<string, number>>(() => {
+    const defaults: Record<string, number> = {};
     activities.forEach(act => {
       if (act.packages && act.packages.length > 0) {
-        defaults[act.id] = act.packages[0].id;
+        // Default the first package of each activity to 1 pax
+        defaults[act.packages[0].id] = 1;
       }
     });
     return defaults;
   });
 
-  // Second package selection for 2-package billing (e.g. Go-Karting combo billing)
-  const [secondSelectedPackages, setSecondSelectedPackages] = useState<Record<string, string>>(() => {
-    const defaults: Record<string, string> = {};
-    activities.forEach(act => {
-      if (act.packages && act.packages.length > 1) {
-        defaults[act.id] = act.packages[1].id;
-      }
+  const updatePackageQty = (pkgId: string, delta: number) => {
+    setPackageQuantities(prev => {
+      const current = prev[pkgId] || 0;
+      const next = Math.max(0, current + delta);
+      return { ...prev, [pkgId]: next };
     });
-    return defaults;
-  });
+  };
 
-  const [enableSecondPackage, setEnableSecondPackage] = useState<Record<string, boolean>>({});
+  const setPackageDirectQty = (pkgId: string, qty: number) => {
+    setPackageQuantities(prev => ({
+      ...prev,
+      [pkgId]: Math.max(0, qty)
+    }));
+  };
 
   // Synchronize package selection whenever activity packages or pricing change in context
   useEffect(() => {
-    setSelectedPackages(prev => {
+    setPackageQuantities(prev => {
       const updated = { ...prev };
       activities.forEach(act => {
         if (act.packages && act.packages.length > 0) {
-          if (!updated[act.id] || !act.packages.some(p => p.id === updated[act.id])) {
-            updated[act.id] = act.packages[0].id;
-          }
-        }
-      });
-      return updated;
-    });
-
-    setSecondSelectedPackages(prev => {
-      const updated = { ...prev };
-      activities.forEach(act => {
-        if (act.packages && act.packages.length > 1) {
-          if (!updated[act.id] || !act.packages.some(p => p.id === updated[act.id])) {
-            updated[act.id] = act.packages[1].id;
+          const hasAnySet = act.packages.some(p => (updated[p.id] || 0) > 0);
+          if (!hasAnySet) {
+            updated[act.packages[0].id] = 1;
           }
         }
       });
@@ -127,34 +119,47 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
   const [tempBooking, setTempBooking] = useState<Booking | null>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
-  // Helper: get primary selected package object for an activity
-  const getSelectedPackage = (actId: string) => {
-    const act = activities.find(a => a.id === actId);
-    if (!act?.packages?.length) return null;
-    return act.packages.find(p => p.id === selectedPackages[actId]) || act.packages[0];
-  };
-
-  // Helper: get secondary selected package object for an activity
-  const getSecondSelectedPackage = (actId: string) => {
-    const act = activities.find(a => a.id === actId);
-    if (!act?.packages?.length || !enableSecondPackage[actId]) return null;
-    return act.packages.find(p => p.id === secondSelectedPackages[actId]) || act.packages[1] || null;
-  };
-
   // ── Discount & Tiered Promotional Rules ──
   const [discountType, setDiscountType] = useState<'none' | 'individual_5' | 'group_10' | 'group_15' | 'bulk_30' | 'custom' | 'cash'>('none');
   const [customDiscountPct, setCustomDiscountPct] = useState<number>(0);
   const [customCashDiscount, setCustomCashDiscount] = useState<number>(0);
 
-  const totalQuantity = adultCount + childCount;
+  // List of all active selected package items across all activities
+  const selectedPackageItems = activities.flatMap(act => {
+    if (!act.packages || act.packages.length === 0) return [];
+    return act.packages
+      .map(pkg => ({
+        activityId: act.id,
+        activityName: act.name,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        unitPrice: pkg.price,
+        description: pkg.description,
+        quantity: packageQuantities[pkg.id] || 0,
+        subtotal: pkg.price * (packageQuantities[pkg.id] || 0)
+      }))
+      .filter(item => item.quantity > 0);
+  });
 
-  // Compute raw subtotal from packages (including 2nd package if enabled) or adult/child pricing
+  // Calculate total pax/quantity across all activities
+  const hasAnyPackages = activities.some(act => act.packages && act.packages.length > 0);
+
+  const totalQuantity = activities.reduce((sum, act) => {
+    if (act.packages && act.packages.length > 0) {
+      const actPkgQty = act.packages.reduce((pSum, pkg) => pSum + (packageQuantities[pkg.id] || 0), 0);
+      return sum + actPkgQty;
+    }
+    return sum + adultCount + childCount;
+  }, 0);
+
+  // Compute raw subtotal from per-package quantities or adult/child pricing
   const subtotalAmount = activities.reduce((sum, act) => {
-    const pkg1 = getSelectedPackage(act.id);
-    const pkg2 = getSecondSelectedPackage(act.id);
-    if (pkg1) {
-      const combinedPkgPrice = pkg1.price + (pkg2 ? pkg2.price : 0);
-      return sum + combinedPkgPrice * totalQuantity;
+    if (act.packages && act.packages.length > 0) {
+      const actPkgSubtotal = act.packages.reduce((pSum, pkg) => {
+        const qty = packageQuantities[pkg.id] || 0;
+        return pSum + (pkg.price * qty);
+      }, 0);
+      return sum + actPkgSubtotal;
     }
     return sum + (act.adultPrice || 0) * adultCount + (act.childPrice || 0) * childCount;
   }, 0);
@@ -188,19 +193,26 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
   const totalAmount = Math.max(0, subtotalAmount - discountAmount);
 
-  // Human-readable details string that includes package names
+  // Human-readable details string that includes package names and quantities
   const buildDetailsString = () => {
-    const parts = activities.map(act => {
-      const pkg1 = getSelectedPackage(act.id);
-      const pkg2 = getSecondSelectedPackage(act.id);
-      if (pkg1 && pkg2) {
-        return `${act.name}: 2 Packages [${pkg1.name} (₹${pkg1.price}) + ${pkg2.name} (₹${pkg2.price})]`;
-      } else if (pkg1) {
-        return `${act.name}: ${pkg1.name}`;
+    const parts: string[] = [];
+    activities.forEach(act => {
+      if (act.packages && act.packages.length > 0) {
+        const sel = act.packages
+          .map(pkg => ({ pkg, qty: packageQuantities[pkg.id] || 0 }))
+          .filter(item => item.qty > 0);
+
+        if (sel.length > 0) {
+          const pkgStrings = sel.map(item => `${item.qty}x ${item.pkg.name} (₹${item.pkg.price * item.qty})`);
+          parts.push(`${act.name}: ${pkgStrings.join(' + ')}`);
+        } else {
+          parts.push(`${act.name}: 0 Selected`);
+        }
+      } else {
+        parts.push(`${act.name}: ${adultCount}x Adult${childCount > 0 ? `, ${childCount}x Child` : ''}`);
       }
-      return `${act.name}: ${adultCount}x Adult${childCount > 0 ? `, ${childCount}x Child` : ''}`;
     });
-    return parts.join(' | ');
+    return parts.join(' | ') || 'Standard Admission';
   };
 
   const totalAdultPrice = activities.reduce((sum, act) => sum + (act.adultPrice || 0), 0);
@@ -639,118 +651,152 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   {availableSlots.length === 0 && <p className="text-red-400 text-xs mt-1">No available slots for today. Please select a future date.</p>}
                 </div>
 
-                {/* Guest Count */}
-                <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
-                  <p className="text-[#94A3B8] font-mono text-sm mb-3">Guest Count</p>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm">Adults</span>
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => setAdultCount(Math.max(1, adultCount - 1))} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">-</button>
-                      <span className="font-bold w-6 text-center">{adultCount}</span>
-                      <button onClick={() => setAdultCount(adultCount + 1)} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">+</button>
-                    </div>
-                  </div>
+                {/* Guest Count / Ticket Summary */}
+                <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm">Children</span>
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => setChildCount(Math.max(0, childCount - 1))} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">-</button>
-                      <span className="font-bold w-6 text-center">{childCount}</span>
-                      <button onClick={() => setChildCount(childCount + 1)} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">+</button>
-                    </div>
+                    <p className="text-[#94A3B8] font-mono text-sm font-bold">Guest & Pax Allocation</p>
+                    <span className="text-xs font-mono font-bold bg-[#00ABAB]/15 text-[#00ABAB] px-2 py-0.5 rounded border border-[#00ABAB]/30">
+                      {totalQuantity} Pax Total
+                    </span>
                   </div>
+
+                  {hasAnyPackages ? (
+                    <p className="text-xs text-[#94A3B8] leading-relaxed">
+                      💡 Package quantities are configured individually on the right. You can assign different Pax counts to each package.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm">Adults</span>
+                        <div className="flex items-center gap-3">
+                          <button onClick={() => setAdultCount(Math.max(1, adultCount - 1))} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">-</button>
+                          <span className="font-bold w-6 text-center">{adultCount}</span>
+                          <button onClick={() => setAdultCount(adultCount + 1)} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">+</button>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm">Children</span>
+                        <div className="flex items-center gap-3">
+                          <button onClick={() => setChildCount(Math.max(0, childCount - 1))} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">-</button>
+                          <span className="font-bold w-6 text-center">{childCount}</span>
+                          <button onClick={() => setChildCount(childCount + 1)} className="w-8 h-8 rounded-full bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black transition-colors font-bold">+</button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
               {/* Right column: Package selection per activity + total */}
               <div className="space-y-4">
-                <p className="text-[#94A3B8] font-mono text-sm uppercase tracking-widest">Activity Packages</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[#94A3B8] font-mono text-xs uppercase tracking-widest font-bold">
+                    Activity Packages & Pax Selectors
+                  </p>
+                  <span className="text-xs font-mono text-[#00ABAB] font-bold">
+                    {totalQuantity} Pax Selected
+                  </span>
+                </div>
+
                 {activities.map(act => {
                   const hasPkgs = act.packages && act.packages.length > 0;
-                  const selPkg = getSelectedPackage(act.id);
-                  const secondSelPkg = getSecondSelectedPackage(act.id);
-                  const isSecondEnabled = !!enableSecondPackage[act.id];
-                  const isGoKarting = act.type === 'go_karting' || act.id === 'act-go-karting';
+                  const actTotalQty = hasPkgs
+                    ? act.packages!.reduce((sum, pkg) => sum + (packageQuantities[pkg.id] || 0), 0)
+                    : totalQuantity;
 
                   return (
                     <div key={act.id} className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] hover:border-[#00ABAB]/40 transition-colors space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#00ABAB]" />
-                          <span className="font-semibold text-sm text-white">{act.name}</span>
+                          <div className="w-2.5 h-2.5 rounded-full bg-[#00ABAB]" />
+                          <span className="font-bold text-sm text-white">{act.name}</span>
                         </div>
-                        {isSecondEnabled && (
-                          <span className="text-[10px] font-mono font-bold bg-[#00ABAB]/20 text-[#00ABAB] px-2 py-0.5 rounded border border-[#00ABAB]/40">
-                            2 Packages Billed
+                        {hasPkgs && (
+                          <span className="text-[11px] font-mono font-bold bg-[#00ABAB]/15 text-[#00ABAB] px-2.5 py-0.5 rounded-full border border-[#00ABAB]/30">
+                            {actTotalQty} Pax
                           </span>
                         )}
                       </div>
 
                       {hasPkgs ? (
-                        <>
-                          <div>
-                            <label className="block text-[#94A3B8] text-xs mb-1 font-mono">
-                              Package 1 {hasPkgs && act.packages!.length > 1 ? '(Primary)' : ''}
-                            </label>
-                            <select
-                              value={selectedPackages[act.id] || ''}
-                              onChange={e => setSelectedPackages(prev => ({ ...prev, [act.id]: e.target.value }))}
-                              className="w-full bg-[#111] border border-[#2C2C2C] rounded-lg p-2 text-sm focus:border-[#00ABAB] outline-none mb-1"
-                            >
-                              {act.packages!.map(pkg => (
-                                <option key={pkg.id} value={pkg.id}>
-                                  {pkg.name} — ₹{pkg.price}/person
-                                </option>
-                              ))}
-                            </select>
-                            {selPkg && (
-                              <p className="text-xs text-[#94A3B8] italic">{selPkg.description}</p>
-                            )}
-                          </div>
+                        <div className="space-y-2.5 pt-1">
+                          {act.packages!.map(pkg => {
+                            const qty = packageQuantities[pkg.id] || 0;
+                            const isSelected = qty > 0;
 
-                          {/* 2-Package Selection option (especially for Go-Karting) */}
-                          {act.packages!.length > 1 && (
-                            <div className="pt-2 border-t border-[#1C1C1C]">
-                              <label className="flex items-center gap-2 cursor-pointer text-xs font-mono font-bold text-[#00ABAB] hover:text-[#40E0D0] transition-colors mb-2">
-                                <input
-                                  type="checkbox"
-                                  checked={isSecondEnabled}
-                                  onChange={e => setEnableSecondPackage(prev => ({ ...prev, [act.id]: e.target.checked }))}
-                                  className="w-4 h-4 accent-[#00ABAB] rounded cursor-pointer"
-                                />
-                                <span>+ Add 2nd Package to Bill {isGoKarting ? '(Go-Karting Combo)' : ''}</span>
-                              </label>
+                            return (
+                              <div
+                                key={pkg.id}
+                                className={`p-3 rounded-xl border transition-all ${
+                                  isSelected
+                                    ? 'bg-[#121E24]/80 border-[#00ABAB]/50 shadow-[0_0_12px_rgba(0,171,171,0.15)]'
+                                    : 'bg-[#111111] border-[#222222] hover:border-[#333333]'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-sm font-bold text-white">{pkg.name}</span>
+                                      <span className="text-xs font-mono font-black text-[#00ABAB] bg-[#00ABAB]/10 px-2 py-0.5 rounded border border-[#00ABAB]/30">
+                                        ₹{pkg.price} / pax
+                                      </span>
+                                    </div>
+                                    {pkg.description && (
+                                      <p className="text-xs text-[#94A3B8] mt-1 leading-relaxed">{pkg.description}</p>
+                                    )}
+                                  </div>
 
-                              {isSecondEnabled && (
-                                <div className="p-3 bg-[#111] rounded-lg border border-[#00ABAB]/30 space-y-2 animate-fade-in">
-                                  <label className="block text-[#94A3B8] text-xs font-mono">
-                                    Package 2 (Second Package)
-                                  </label>
-                                  <select
-                                    value={secondSelectedPackages[act.id] || ''}
-                                    onChange={e => setSecondSelectedPackages(prev => ({ ...prev, [act.id]: e.target.value }))}
-                                    className="w-full bg-[#0A0A0A] border border-[#2C2C2C] rounded-lg p-2 text-sm focus:border-[#00ABAB] outline-none"
-                                  >
-                                    {act.packages!.map(pkg => (
-                                      <option key={pkg.id} value={pkg.id} disabled={pkg.id === selectedPackages[act.id]}>
-                                        {pkg.name} — ₹{pkg.price}/person {pkg.id === selectedPackages[act.id] ? '(Already Pkg 1)' : ''}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  {secondSelPkg && (
-                                    <p className="text-xs text-[#94A3B8] italic">{secondSelPkg.description}</p>
-                                  )}
-                                  <div className="text-xs font-mono text-[#00ABAB] font-bold pt-1">
-                                    Combined Package Price: ₹{(selPkg?.price || 0) + (secondSelPkg?.price || 0)}/person
+                                  {/* Direct Interactive Pax Counter */}
+                                  <div className="flex items-center gap-2 bg-[#0A0A0A] p-1 rounded-xl border border-[#262626]">
+                                    <button
+                                      type="button"
+                                      onClick={() => updatePackageQty(pkg.id, -1)}
+                                      disabled={qty <= 0}
+                                      className="w-8 h-8 rounded-lg bg-[#1C1C1C] hover:bg-rose-500/20 hover:text-rose-400 text-white font-bold flex items-center justify-center transition-colors disabled:opacity-30 disabled:hover:bg-[#1C1C1C] disabled:hover:text-white cursor-pointer text-base"
+                                      title="Decrease Pax"
+                                    >
+                                      -
+                                    </button>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max="999"
+                                      value={qty}
+                                      onChange={e => {
+                                        const parsed = parseInt(e.target.value, 10);
+                                        setPackageDirectQty(pkg.id, isNaN(parsed) ? 0 : Math.max(0, parsed));
+                                      }}
+                                      className="w-12 text-center bg-transparent font-mono font-black text-sm text-white focus:outline-none focus:text-[#00ABAB]"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => updatePackageQty(pkg.id, 1)}
+                                      className="w-8 h-8 rounded-lg bg-[#00ABAB] hover:bg-[#00ABAB]/80 text-black font-black flex items-center justify-center transition-colors cursor-pointer text-base"
+                                      title="Increase Pax"
+                                    >
+                                      +
+                                    </button>
                                   </div>
                                 </div>
-                              )}
-                            </div>
-                          )}
-                        </>
+
+                                {isSelected && (
+                                  <div className="flex justify-between items-center mt-2.5 pt-2 border-t border-[#00ABAB]/20 text-xs font-mono">
+                                    <span className="text-slate-400">
+                                      {qty} Pax × ₹{pkg.price}
+                                    </span>
+                                    <span className="text-emerald-400 font-black">
+                                      = ₹{pkg.price * qty}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       ) : (
-                        <div className="flex justify-between text-sm text-[#94A3B8]">
+                        <div className="flex justify-between text-sm text-[#94A3B8] p-2 bg-[#111] rounded-lg">
                           <span>Adult: ₹{act.adultPrice} · Child: ₹{act.childPrice}</span>
-                          <span>×{totalQuantity}</span>
+                          <span className="font-mono font-bold text-white">×{totalQuantity} Pax</span>
                         </div>
                       )}
                     </div>
@@ -981,27 +1027,45 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                 </div>
 
                 {/* Pricing Summary Card */}
-                <div className="bg-[#00ABAB]/10 border border-[#00ABAB]/30 rounded-xl p-4 space-y-1.5">
-                  <div className="flex justify-between items-center text-xs text-[#94A3B8]">
-                    <span>Guests</span>
-                    <span>{adultCount} Adult{adultCount !== 1 ? 's' : ''}{childCount > 0 ? ` + ${childCount} Child${childCount !== 1 ? 'ren' : ''}` : ''} ({totalQuantity} Total)</span>
+                <div className="bg-[#00ABAB]/10 border border-[#00ABAB]/30 rounded-xl p-4 space-y-2">
+                  <div className="flex justify-between items-center text-xs text-[#94A3B8] font-mono">
+                    <span>Total Guests / Tickets</span>
+                    <span className="text-white font-bold">{totalQuantity} Pax</span>
                   </div>
+
+                  {selectedPackageItems.length > 0 ? (
+                    <div className="py-2 border-y border-[#00ABAB]/20 space-y-1.5">
+                      {selectedPackageItems.map(item => (
+                        <div key={item.packageId} className="flex justify-between items-center text-xs">
+                          <span className="text-slate-300 font-medium">
+                            <span className="text-[#00ABAB] font-mono font-bold mr-1">{item.quantity}x</span> {item.packageName}
+                          </span>
+                          <span className="text-white font-mono font-bold">₹{item.subtotal}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center text-xs text-[#94A3B8]">
+                      <span>Guests</span>
+                      <span>{adultCount} Adult{adultCount !== 1 ? 's' : ''}{childCount > 0 ? ` + ${childCount} Child${childCount !== 1 ? 'ren' : ''}` : ''} ({totalQuantity} Total)</span>
+                    </div>
+                  )}
 
                   <div className="flex justify-between items-center text-xs text-[#94A3B8]">
                     <span>Subtotal</span>
-                    <span>₹{subtotalAmount}</span>
+                    <span className="text-white font-mono font-bold">₹{subtotalAmount}</span>
                   </div>
 
                   {discountAmount > 0 && (
                     <div className="flex justify-between items-center text-xs text-emerald-400 font-bold">
                       <span>Discount {discountType === 'cash' ? '(Cash Instant)' : `(${activeDiscountPct}%)`}</span>
-                      <span>-₹{discountAmount}</span>
+                      <span className="font-mono">-₹{discountAmount}</span>
                     </div>
                   )}
 
                   <div className="flex justify-between items-center text-xl font-bold text-[#00ABAB] border-t border-[#00ABAB]/20 pt-2">
                     <span>Total Due</span>
-                    <span>₹{totalAmount}</span>
+                    <span className="font-black">₹{totalAmount}</span>
                   </div>
                 </div>
               </div>
@@ -1015,11 +1079,16 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                     alert('Please select a valid future date and available time slot.');
                     return;
                   }
+                  if (totalQuantity <= 0) {
+                    alert('Please select at least 1 guest / package to continue.');
+                    return;
+                  }
                   setStep(2);
                 }}
-                className="btn-glow px-8 py-2 rounded-xl font-bold"
+                disabled={totalQuantity <= 0}
+                className="btn-glow px-8 py-2 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Continue
+                Continue ({totalQuantity} Pax • ₹{totalAmount})
               </button>
             </div>
           </motion.div>
@@ -1068,29 +1137,41 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="glass-panel p-8 rounded-2xl border border-[#00ABAB]/30 shadow-[0_0_30px_rgba(0,171,171,0.1)] space-y-6">
 
             {/* Order Summary */}
-            <div className="bg-[#0A0A0A] p-5 rounded-2xl border border-[#1C1C1C] space-y-1.5">
-              <p className="text-xs text-[#94A3B8] font-mono uppercase tracking-widest mb-2">Order Summary</p>
-              <div className="flex justify-between text-sm">
+            <div className="bg-[#0A0A0A] p-5 rounded-2xl border border-[#1C1C1C] space-y-2">
+              <p className="text-xs text-[#94A3B8] font-mono uppercase tracking-widest mb-1">Order Summary</p>
+              <div className="flex justify-between text-sm font-bold text-white">
                 <span>{combinedActivityNames}</span>
-                <span>{adultCount}A + {childCount}C</span>
+                <span className="text-[#00ABAB] font-mono">{totalQuantity} Pax</span>
               </div>
               <div className="flex justify-between text-xs text-[#94A3B8]">
                 <span>{date} • {timeSlot}</span>
                 <span>{totalQuantity} tickets</span>
               </div>
+
+              {selectedPackageItems.length > 0 && (
+                <div className="py-2 border-y border-[#1C1C1C] space-y-1">
+                  {selectedPackageItems.map(item => (
+                    <div key={item.packageId} className="flex justify-between text-xs text-slate-300">
+                      <span>{item.quantity}x {item.packageName}</span>
+                      <span className="font-mono text-white font-bold">₹{item.subtotal}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="flex justify-between text-xs text-[#94A3B8] pt-1">
                 <span>Subtotal</span>
-                <span>₹{subtotalAmount}</span>
+                <span className="font-mono font-bold text-white">₹{subtotalAmount}</span>
               </div>
               {discountAmount > 0 && (
                 <div className="flex justify-between text-xs text-emerald-400 font-bold">
                   <span>Discount {discountType === 'cash' ? '(Cash Instant)' : `(${activeDiscountPct}%)`}</span>
-                  <span>-₹{discountAmount}</span>
+                  <span className="font-mono">-₹{discountAmount}</span>
                 </div>
               )}
               <div className="flex justify-between text-xl font-bold text-[#00ABAB] border-t border-[#1C1C1C] pt-3">
                 <span>Total Due</span>
-                <span>₹{totalAmount}</span>
+                <span className="font-black">₹{totalAmount}</span>
               </div>
             </div>
 
@@ -1386,6 +1467,13 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                 <div className="flex gap-3 justify-center flex-wrap">
                   <button onClick={() => {
                     const pd = getPaymentDetails(confirmedBooking.id);
+                    const receiptItems = selectedPackageItems.length > 0
+                      ? selectedPackageItems.map(item => ({
+                          label: `${item.quantity}x ${item.packageName}`,
+                          value: `₹${item.subtotal.toFixed(2)}`
+                        }))
+                      : [{ label: confirmedBooking.details || confirmedBooking.activityName, value: `₹${confirmedBooking.totalAmount.toFixed(2)}` }];
+
                     printTicket({
                       receiptId: `TKT-${confirmedBooking.id}`,
                       activityName: combinedActivityNames || confirmedBooking.activityName,
@@ -1394,7 +1482,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                       customerPhone: confirmedBooking.customerPhone,
                       date: confirmedBooking.date,
                       slot: confirmedBooking.timeSlot,
-                      items: [{ label: confirmedBooking.details || confirmedBooking.activityName, value: `₹${confirmedBooking.totalAmount.toFixed(2)}` }],
+                      items: receiptItems,
                       subtotalAmount: confirmedBooking.originalAmount || subtotalAmount,
                       discountPercentage: confirmedBooking.discountPercentage || activeDiscountPct,
                       discountAmount: confirmedBooking.discountAmount || discountAmount,
@@ -1445,6 +1533,13 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
             <div className="flex gap-3 justify-center flex-wrap">
               <button onClick={() => {
                 const pd = getPaymentDetails(confirmedBooking.id);
+                const receiptItems = selectedPackageItems.length > 0
+                  ? selectedPackageItems.map(item => ({
+                      label: `${item.quantity}x ${item.packageName}`,
+                      value: `₹${item.subtotal.toFixed(2)}`
+                    }))
+                  : [{ label: confirmedBooking.details || confirmedBooking.activityName, value: `₹${confirmedBooking.totalAmount.toFixed(2)}` }];
+
                 printTicket({
                   receiptId: `TKT-${confirmedBooking.id}`,
                   activityName: combinedActivityNames || confirmedBooking.activityName,
@@ -1453,7 +1548,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   customerPhone: confirmedBooking.customerPhone,
                   date: confirmedBooking.date,
                   slot: confirmedBooking.timeSlot,
-                  items: [{ label: confirmedBooking.details || confirmedBooking.activityName, value: `₹${confirmedBooking.totalAmount.toFixed(2)}` }],
+                  items: receiptItems,
                   subtotalAmount: confirmedBooking.originalAmount || subtotalAmount,
                   discountPercentage: confirmedBooking.discountPercentage || activeDiscountPct,
                   discountAmount: confirmedBooking.discountAmount || discountAmount,

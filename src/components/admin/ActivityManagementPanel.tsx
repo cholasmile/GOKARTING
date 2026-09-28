@@ -1,8 +1,8 @@
-/**
+ï»¿/**
  * ActivityManagementPanel.tsx
  * Main Activity Management Panel for the Admin Dashboard.
  * Provides rich activity editing, photo gallery management, and offers/promotions CRUD.
- * Displayed as a new tab inside the existing Admin Panel — no existing tabs are modified.
+ * Displayed as a new tab inside the existing Admin Panel ï¿½ no existing tabs are modified.
  */
 
 import React, { useState } from 'react';
@@ -43,7 +43,7 @@ const ActivityManagementPanel: React.FC = () => {
 
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
 
-  const sortedActivities = [...activities].sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
+  const sortedActivities = activities.filter(a => !a.id.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('arena')).sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
 
   const today = new Date().toISOString().split('T')[0];
 

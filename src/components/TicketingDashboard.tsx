@@ -36,11 +36,16 @@ const TicketingDashboard: React.FC = () => {
   const [foodPaymentMethod, setFoodPaymentMethod] = useState<'cash' | 'upi' | 'card'>('cash');
   const [foodOrderSuccess, setFoodOrderSuccess] = useState<any>(null);
 
+  // Visible activities excluding any legacy gaming/arena
+  const visibleActivities = activities.filter(a => a.isActive !== false && !a.id.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('arena'));
+
   // Auto-sync selectedActivities whenever activities updates in AppContext
   React.useEffect(() => {
     setSelectedActivities(prev => {
       if (prev.length === 0) return prev;
-      return prev.map(pAct => activities.find(a => a.id === pAct.id) || pAct);
+      return prev
+        .filter(pAct => visibleActivities.some(a => a.id === pAct.id))
+        .map(pAct => visibleActivities.find(a => a.id === pAct.id) || pAct);
     });
   }, [activities]);
 
@@ -53,10 +58,10 @@ const TicketingDashboard: React.FC = () => {
   };
 
   const selectAll = () => {
-    if (selectedActivities.length === activities.length) {
+    if (selectedActivities.length === visibleActivities.length) {
       setSelectedActivities([]);
     } else {
-      setSelectedActivities([...activities]);
+      setSelectedActivities([...visibleActivities]);
     }
   };
 
@@ -277,7 +282,7 @@ const TicketingDashboard: React.FC = () => {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {activities.map(act => {
+            {visibleActivities.map(act => {
               const isSelected = selectedActivities.some(a => a.id === act.id);
               return (
                 <div 
@@ -358,6 +363,9 @@ const TicketingDashboard: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                 {filteredMenuItems.map(item => {
                   const vendor = vendors.find(v => v.id === item.vendorId);
+                  const stockQty = item.stockQuantity ?? 50;
+                  const isOutOfStock = stockQty <= 0 || !item.isAvailable;
+
                   return (
                     <div 
                       key={item.id}
@@ -374,13 +382,25 @@ const TicketingDashboard: React.FC = () => {
                           </div>
                           <h4 className="font-bold text-xs text-white truncate mt-1">{item.name}</h4>
                           <p className="text-[10px] text-[#94A3B8] line-clamp-1 mt-0.5">{item.description}</p>
+                          <div className="mt-1">
+                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded inline-block ${
+                              stockQty > 10 
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
+                                : stockQty > 0 
+                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' 
+                                : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                            }`}>
+                              {stockQty > 0 ? `📦 Stock: ${stockQty}` : '🔴 Out of Stock'}
+                            </span>
+                          </div>
                         </div>
 
                         <button
                           onClick={() => addToFoodCart(item, 1)}
-                          className="mt-2 self-end px-3 py-1 rounded bg-[#00ABAB]/10 hover:bg-[#00ABAB] text-[#00ABAB] hover:text-black font-bold text-[10px] uppercase tracking-widest flex items-center gap-1 transition-all border border-[#00ABAB]/30 cursor-pointer"
+                          disabled={isOutOfStock}
+                          className="mt-2 self-end px-3 py-1 rounded bg-[#00ABAB]/10 hover:bg-[#00ABAB] text-[#00ABAB] hover:text-black font-bold text-[10px] uppercase tracking-widest flex items-center gap-1 transition-all border border-[#00ABAB]/30 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          <Plus className="h-3 w-3" /> Add to Cart
+                          <Plus className="h-3 w-3" /> {isOutOfStock ? 'Sold Out' : 'Add to Cart'}
                         </button>
                       </div>
                     </div>

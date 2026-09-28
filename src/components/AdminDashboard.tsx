@@ -25,10 +25,13 @@ export const AdminDashboard: React.FC = () => {
     users, updateUserRole,
     activities, vendors, bookings, orders, payments, tickets,
     menuItems, deleteMenuItem, updateMenuItem, addMenuItem,
+    updateMenuItemStock, adjustMenuItemStock,
     addActivity, updateActivity, deleteActivity,
     addVendor, updateVendor, deleteVendor, addUser,
     counterUpiId, setCounterUpiId
   } = useAppContext();
+
+  const activeActivities = activities.filter(a => !a.id.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('arena'));
 
   // Bulk & Single add menu modal state
   const [isBulkMenuModalOpen, setIsBulkMenuModalOpen] = useState(false);
@@ -299,7 +302,7 @@ export const AdminDashboard: React.FC = () => {
   const totalVisitors = bookings.reduce((sum, b) => sum + b.quantity, 0);
 
   // Activity performance metric (by total bookings)
-  const activityPerformanceData = activities.map(act => {
+  const activityPerformanceData = activeActivities.map(act => {
     const actBookings = bookings.filter(b => b.activityId === act.id);
     const revenue = actBookings.reduce((sum, b) => sum + b.totalAmount, 0);
     const ticketsSold = actBookings.reduce((sum, b) => sum + b.quantity, 0);
@@ -356,7 +359,7 @@ export const AdminDashboard: React.FC = () => {
   // -----------------------------------------------------------------
   
   // 1. Activity-Wise Detailed Metrics
-  const activityDetailedStats = activities.map(act => {
+  const activityDetailedStats = activeActivities.map(act => {
     const actBookings = bookings.filter(b => b.activityId.includes(act.id));
     const visitorsCount = actBookings.reduce((sum, b) => sum + b.quantity, 0);
     const amountCollected = actBookings.reduce((sum, b) => sum + b.totalAmount, 0);
@@ -1158,7 +1161,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {activities.map(act => (
+            {activeActivities.map(act => (
               <div 
                 key={act.id} 
                 id={`activity-card-${act.id}`}
@@ -1203,7 +1206,7 @@ export const AdminDashboard: React.FC = () => {
                     >
                       <Edit className="h-3.5 w-3.5" /> Edit
                     </button>
-                    {act.type === 'dynamic' && (
+                    {(act.type === 'dynamic' || (act.id !== 'act-go-karting' && act.id !== 'act-air-gun' && act.id !== 'act-horse-riding')) && (
                       <button
                         id={`btn-delete-act-${act.id}`}
                         onClick={() => {
@@ -1211,7 +1214,7 @@ export const AdminDashboard: React.FC = () => {
                             deleteActivity(act.id);
                           }
                         }}
-                        className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 text-red-800 transition-colors cursor-pointer"
+                        className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 transition-colors cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" /> Delete
                       </button>
@@ -1427,16 +1430,44 @@ export const AdminDashboard: React.FC = () => {
                           <td className="p-4 font-mono font-extrabold text-[#40E0D0]">
                             ₹{item.price.toFixed(2)}
                           </td>
-                          <td className="p-4 font-mono font-bold">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
-                              (item.stockQuantity ?? 50) > 10
-                                ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
-                                : (item.stockQuantity ?? 50) > 0
-                                ? 'bg-amber-950/60 text-amber-300 border-amber-800/60'
-                                : 'bg-red-950/60 text-red-400 border-red-800/60'
-                            }`}>
-                              {item.stockQuantity ?? 50} units
-                            </span>
+                          <td className="p-4 font-mono">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                (item.stockQuantity ?? 50) > 10
+                                  ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
+                                  : (item.stockQuantity ?? 50) > 0
+                                  ? 'bg-amber-950/60 text-amber-300 border-amber-800/60'
+                                  : 'bg-red-950/60 text-red-400 border-red-800/60'
+                              }`}>
+                                {item.stockQuantity ?? 50} units
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => updateMenuItemStock(item.id, Math.max(0, (item.stockQuantity ?? 50) - 5))}
+                                  className="w-5 h-5 rounded bg-[#1A1A1A] hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 text-xs font-bold flex items-center justify-center transition-colors cursor-pointer"
+                                  title="Reduce 5 units"
+                                >
+                                  -5
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateMenuItemStock(item.id, (item.stockQuantity ?? 50) + 10)}
+                                  className="px-1.5 h-5 rounded bg-[#00ABAB]/15 hover:bg-[#00ABAB] text-[#00ABAB] hover:text-black text-[10px] font-bold font-mono flex items-center justify-center transition-colors cursor-pointer"
+                                  title="Add +10 units"
+                                >
+                                  +10
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateMenuItemStock(item.id, (item.stockQuantity ?? 50) + 50)}
+                                  className="px-1.5 h-5 rounded bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-black text-[10px] font-bold font-mono flex items-center justify-center transition-colors cursor-pointer"
+                                  title="Add +50 units"
+                                >
+                                  +50
+                                </button>
+                              </div>
+                            </div>
                           </td>
                           <td className="p-4">
                             <button
