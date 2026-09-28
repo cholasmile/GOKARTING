@@ -4,7 +4,6 @@ import { useAppContext } from '../context/AppContext';
 import { Activity, Payment } from '../types';
 import { UnifiedTicketingFlow } from './UnifiedTicketingFlow';
 import { printTicket } from '../lib/printTicket';
-import { BulkAddMenuModal } from './BulkAddMenuModal';
 
 const TicketingDashboard: React.FC = () => {
   const { 
@@ -14,7 +13,6 @@ const TicketingDashboard: React.FC = () => {
   } = useAppContext();
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [isBulkMenuModalOpen, setIsBulkMenuModalOpen] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'food_street' | 'history'>('new_booking');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -349,13 +347,6 @@ const TicketingDashboard: React.FC = () => {
                       <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
                   </select>
-
-                  <button
-                    onClick={() => setIsBulkMenuModalOpen(true)}
-                    className="bg-[#00ABAB]/20 hover:bg-[#00ABAB]/30 border border-[#00ABAB]/50 text-[#40E0D0] text-xs font-extrabold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
-                  >
-                    <Plus className="w-4 h-4" /> ⚡ Bulk Add N Items
-                  </button>
                 </div>
               </div>
 
@@ -816,11 +807,6 @@ const TicketingDashboard: React.FC = () => {
           </div>
         </div>
       )}
-      {/* BULK ADD MENU MODAL */}
-      <BulkAddMenuModal
-        isOpen={isBulkMenuModalOpen}
-        onClose={() => setIsBulkMenuModalOpen(false)}
-      />
     </div>
   );
 };
