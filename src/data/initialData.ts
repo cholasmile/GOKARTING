@@ -28,7 +28,7 @@ export const INITIAL_USERS: User[] = [
   { id: 'usr-cafe', name: 'Deuce Cafe Staff', email: 'cafe@deucepark.com', password: 'cafe', role: 'cafe_staff', vendorId: 'vendor-forest-cafe' },
   { id: 'usr-gkm', name: 'Karting Manager', email: 'kartingmanager@deucepark.com', password: 'manager', role: 'go_karting_manager' },
   { id: 'usr-gks', name: 'Karting Staff', email: 'kartingstaff@deucepark.com', password: 'staff', role: 'go_karting_staff' },
-  { id: 'usr-hrs', name: 'Horse Riding Arena Staff', email: 'horseriding@deucepark.com', password: 'staff', role: 'horse_riding_staff' },
+  { id: 'usr-hrs', name: 'Horse Riding Staff', email: 'horseriding@deucepark.com', password: 'staff', role: 'horse_riding_staff' },
   { id: 'usr-sht', name: 'Precision Shooting Range Staff', email: 'shooting@deucepark.com', password: 'staff', role: 'shooting_staff' },
   { id: 'usr-tcs', name: 'Ticket Counter Staff', email: 'ticketing@deucepark.com', password: 'staff', role: 'ticket_counter_staff' },
 ];

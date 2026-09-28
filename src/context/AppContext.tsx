@@ -15,6 +15,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { db } from '../db/db';
 import { syncEngine, SyncStatus } from '../lib/syncEngine';
 import { generateOfflineId } from '../lib/deviceSetup';
+import { INITIAL_USERS, INITIAL_ACTIVITIES } from '../data/initialData';
 
 interface AppContextProps {
   // Authentication & Role
@@ -421,27 +422,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   // ── Core Domain Data ──────────────────────────────────────────────
-  // All initialized as EMPTY. Supabase load populates these.
-  // localStorage is only used as an offline cache, NEVER as primary data.
   const [users, setUsers] = useState<User[]>(() => {
     const cached = localStorage.getItem('ap_users');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const filtered = parsed.filter(u => u.id !== 'usr-gam' && (u.role as string) !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
+          if (filtered.length > 0) return filtered;
+        }
       } catch {}
     }
-    return [];
+    return INITIAL_USERS;
   });
   const [activities, setActivities] = useState<Activity[]>(() => {
     const cached = localStorage.getItem('ap_activities');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const filtered = parsed.filter(a => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
+          if (filtered.length > 0) return filtered;
+        }
       } catch {}
     }
-    return [];
+    return INITIAL_ACTIVITIES;
   });
   const [vendors, setVendors] = useState<FoodVendor[]>(() => {
     const cached = localStorage.getItem('ap_vendors');
@@ -697,7 +702,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (dbActivities && dbActivities.length > 0) {
           // DB is authoritative — replace local state with Supabase data
-          const freshActivities = dbActivities as Activity[];
+          const freshActivities = (dbActivities as Activity[]).filter(a => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
           try { localStorage.setItem('ap_activities', JSON.stringify(freshActivities)); } catch {}
           db.activities.bulkPut(freshActivities);
           setActivities(freshActivities);
@@ -711,15 +716,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (dbNotifications && dbNotifications.length > 0) { setNotifications(dbNotifications); db.notifications.bulkPut(dbNotifications); }
         if (dbPayments && dbPayments.length > 0) { setPayments(dbPayments); try { localStorage.setItem('ap_payments', JSON.stringify(dbPayments)); } catch {} db.payments.bulkPut(dbPayments); }
         if (dbUsers && dbUsers.length > 0) {
-          // Use DB users as-is — no INITIAL_USERS merging to avoid demo account pollution
-          setUsers(dbUsers);
-          try { localStorage.setItem('ap_users', JSON.stringify(dbUsers)); } catch {}
-          db.users.bulkPut(dbUsers);
+          const freshUsers = (dbUsers as User[]).filter(u => u.id !== 'usr-gam' && (u.role as string) !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
+          setUsers(freshUsers);
+          try { localStorage.setItem('ap_users', JSON.stringify(freshUsers)); } catch {}
+          db.users.bulkPut(freshUsers);
         }
       } catch (err) {
         console.error('Failed to load initial data from Supabase, using localStorage:', err);
       }
     };
+
+    // Purge legacy gaming items from local Dexie & localStorage immediately
+    try {
+      db.activities.delete('act-gaming-pc').catch(() => {});
+      db.users.delete('usr-gam').catch(() => {});
+      const storedAct = localStorage.getItem('ap_activities');
+      if (storedAct) {
+        const parsed = JSON.parse(storedAct);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter(a => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
+          localStorage.setItem('ap_activities', JSON.stringify(cleaned));
+        }
+      }
+      const storedUsers = localStorage.getItem('ap_users');
+      if (storedUsers) {
+        const parsedU = JSON.parse(storedUsers);
+        if (Array.isArray(parsedU)) {
+          const cleanedU = parsedU.filter((u: any) => u.id !== 'usr-gam' && u.role !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
+          localStorage.setItem('ap_users', JSON.stringify(cleanedU));
+        }
+      }
+    } catch (e) {}
 
     loadDataFromSupabase();
   }, []);
@@ -733,8 +760,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           if (Array.isArray(serverActivities) && serverActivities.length > 0) {
             setActivities(prev => {
               const map = new Map<string, Activity>();
-              serverActivities.forEach((sa: Activity) => map.set(sa.id, sa));
-              prev.forEach(existing => map.set(existing.id, existing));
+              serverActivities
+                .filter((sa: Activity) => sa.id !== 'act-gaming-pc' && !sa.id?.toLowerCase().includes('gaming') && !(sa.type as string)?.toLowerCase().includes('gaming') && !sa.name?.toLowerCase().includes('gaming'))
+                .forEach((sa: Activity) => map.set(sa.id, sa));
+              prev
+                .filter(existing => existing.id !== 'act-gaming-pc' && !existing.id?.toLowerCase().includes('gaming') && !(existing.type as string)?.toLowerCase().includes('gaming') && !existing.name?.toLowerCase().includes('gaming'))
+                .forEach(existing => map.set(existing.id, existing));
               const mergedList = Array.from(map.values());
               try {
                 localStorage.setItem('ap_activities', JSON.stringify(mergedList));

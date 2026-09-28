@@ -420,7 +420,7 @@ export const CustomerDashboard: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap justify-center items-center gap-6 perspective-1000">
-            {activities.filter(act => act.isActive !== false).map((act, idx) => {
+            {activities.filter(act => act.isActive !== false && act.id !== 'act-gaming-pc' && !act.id.toLowerCase().includes('gaming') && !(act.type as string)?.toLowerCase().includes('gaming') && !act.name?.toLowerCase().includes('gaming')).map((act, idx) => {
               let color = 'from-[#14F1D9]/80 to-[#00B4FF]/80';
               if (idx % 3 === 1) color = 'from-[#FFB703]/80 to-[#F59E0B]/80';
               if (idx % 3 === 2) color = 'from-purple-500/80 to-pink-500/80';

@@ -317,8 +317,8 @@ export default function App() {
               <ProtectedRoute allowedRoles={['horse_riding_staff', 'activity_staff', 'super_admin']}>
                 <ActivityStaffDashboard 
                   activityIdFilter="act-horse-riding" 
-                  title="Horse Riding Arena Staff Portal" 
-                  subtitle="Manage horse arena queue, guide assignments, rider check-ins, and safety checks"
+                  title="Horse Riding Staff Portal" 
+                  subtitle="Manage horse riding queue, guide assignments, rider check-ins, and safety checks"
                 />
               </ProtectedRoute>
             } />
