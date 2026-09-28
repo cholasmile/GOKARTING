@@ -54,11 +54,18 @@ export const FoodVendorDashboard: React.FC = () => {
     name: '',
     description: '',
     price: 5.0,
-    category: '',
+    category: 'Beverages',
+    vendorId: vendors[0]?.id || 'vendor-forest-cafe',
     image: '',
     stockQuantity: 50,
     isAvailable: true
   });
+
+  // Menu catalog filters
+  const [menuCatalogSearch, setMenuCatalogSearch] = useState('');
+  const [menuCatalogVendorFilter, setMenuCatalogVendorFilter] = useState('all');
+  const [menuCatalogCategoryFilter, setMenuCatalogCategoryFilter] = useState('all');
+  const [menuCatalogViewMode, setMenuCatalogViewMode] = useState<'table' | 'grid'>('table');
 
   // Restock amount
   const [restockItem, setRestockItem] = useState<InventoryItem | null>(null);
@@ -164,6 +171,7 @@ export const FoodVendorDashboard: React.FC = () => {
   const handleSaveMenu = (e: React.FormEvent) => {
     e.preventDefault();
     const defaultImage = menuForm.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=300&q=80';
+    const targetVendorId = menuForm.vendorId || currentVendor?.id || vendors[0]?.id || 'vendor-forest-cafe';
     const qty = Number(menuForm.stockQuantity) || 0;
 
     if (editingMenuItem) {
@@ -173,14 +181,14 @@ export const FoodVendorDashboard: React.FC = () => {
         description: menuForm.description,
         price: Number(menuForm.price),
         category: menuForm.category,
+        vendorId: targetVendorId,
         image: defaultImage,
         stockQuantity: qty,
         isAvailable: qty > 0 ? menuForm.isAvailable : false
       });
     } else {
-      if (!currentVendor) return;
       addMenuItem({
-        vendorId: currentVendor.id,
+        vendorId: targetVendorId,
         name: menuForm.name,
         description: menuForm.description,
         price: Number(menuForm.price),
@@ -197,7 +205,8 @@ export const FoodVendorDashboard: React.FC = () => {
       name: '',
       description: '',
       price: 5.0,
-      category: '',
+      category: 'Beverages',
+      vendorId: vendors[0]?.id || 'vendor-forest-cafe',
       image: '',
       stockQuantity: 50,
       isAvailable: true
@@ -211,6 +220,7 @@ export const FoodVendorDashboard: React.FC = () => {
       description: item.description,
       price: item.price,
       category: item.category,
+      vendorId: item.vendorId,
       image: item.image,
       stockQuantity: item.stockQuantity ?? 50,
       isAvailable: item.isAvailable
@@ -661,16 +671,20 @@ export const FoodVendorDashboard: React.FC = () => {
       )}
 
       {/* ----------------------------------------------------------------- */}
-      {/* B. MENU PANEL */}
+      {/* B. MENU & RETAIL CATALOG PANEL */}
       {/* ----------------------------------------------------------------- */}
       {vendorTab === 'menu' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center text-[#FFFFFF]">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-[#FFFFFF]">
             <div>
-              <h3 className="font-bold text-base text-[#FFFFFF] font-sans">Menu Management</h3>
-              <p className="text-xs text-[#9CA3AF] font-sans">Add, edit, or toggle availability of menu items for customers</p>
+              <h3 className="font-bold text-base text-[#FFFFFF] font-sans flex items-center gap-2">
+                <Utensils className="h-5 w-5 text-[#40E0D0]" /> Retail & Food Menu Management
+              </h3>
+              <p className="text-xs text-[#9CA3AF] font-sans">
+                Full retail & food street catalog: manage menu items, stock positions (+/-), pricing, and live availability
+              </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 id="btn-bulk-add-menu-vendor"
                 onClick={() => setIsBulkMenuModalOpen(true)}
@@ -685,99 +699,375 @@ export const FoodVendorDashboard: React.FC = () => {
                   setMenuForm({
                     name: '',
                     description: '',
-                    price: 6.5,
+                    price: 5.0,
                     category: 'Beverages',
+                    vendorId: selectedVendorId === 'all' ? (vendors[0]?.id || 'vendor-forest-cafe') : selectedVendorId,
                     image: '',
+                    stockQuantity: 50,
                     isAvailable: true
                   });
                   setIsMenuModalOpen(true);
                 }}
                 className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold border border-[#00ABAB]/40 text-[#FFFFFF] rounded-xl hover:bg-[#0A0A0A] transition-all cursor-pointer"
               >
-                <Plus className="h-4 w-4" /> Single Item
+                <Plus className="h-4 w-4" /> + Add Item
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {stallMenuItems.map(item => (
-              <div 
-                key={item.id} 
-                id={`menu-item-card-${item.id}`}
-                className={`glass-panel border rounded-2xl overflow-hidden  hover: transition-shadow flex flex-col justify-between ${
-                  !item.isAvailable ? 'opacity-65 border-dashed border-teal-300 bg-[#0A0A0A]/50' : 'border-[#00ABAB]/30'
-                }`}
+          {/* Search and Filters Bar */}
+          <div className="glass-panel border border-[#00ABAB]/30 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+              <Search className="h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search items by name, category, or description..."
+                value={menuCatalogSearch}
+                onChange={(e) => setMenuCatalogSearch(e.target.value)}
+                className="w-full bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-lg px-3 py-1.5 text-white font-sans focus:outline-none focus:border-[#40E0D0]"
+              />
+            </div>
+            
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={menuCatalogVendorFilter}
+                onChange={(e) => setMenuCatalogVendorFilter(e.target.value)}
+                className="bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-lg px-2.5 py-1.5 text-white font-sans focus:outline-none focus:border-[#40E0D0] cursor-pointer"
               >
-                <div className="h-32 relative">
-                  <img src={item.image} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  <div className="absolute top-2 right-2">
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${
-                      item.isAvailable 
-                        ? 'bg-[#0A0A0A] text-[#40E0D0] border-[#00ABAB]/30' 
-                        : 'bg-red-50 text-red-800 border-red-200'
-                    }`}>
-                      {item.isAvailable ? 'In Stock' : 'Sold Out'}
-                    </span>
-                  </div>
-                </div>
+                <option value="all">All Outlets & Retail Counters</option>
+                {vendors.map(v => (
+                  <option key={v.id} value={v.id}>{v.name} ({v.stallNumber})</option>
+                ))}
+              </select>
 
-                <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                  <div>
-                    <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-400 font-mono">
-                      {item.category}
-                    </span>
-                    <h4 className="font-bold text-sm text-[#FFFFFF] mt-0.5">{item.name}</h4>
-                    <p className="text-xs text-[#9CA3AF] mt-1 line-clamp-2 leading-relaxed">
-                      {item.description}
-                    </p>
-                  </div>
+              <select
+                value={menuCatalogCategoryFilter}
+                onChange={(e) => setMenuCatalogCategoryFilter(e.target.value)}
+                className="bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-lg px-2.5 py-1.5 text-white font-sans focus:outline-none focus:border-[#40E0D0] cursor-pointer"
+              >
+                <option value="all">All Categories</option>
+                {Array.from(new Set(menuItems.map(m => m.category))).map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
 
-                  <div className="flex items-center justify-between border-t border-[#00ABAB]/30 pt-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm font-mono text-[#FFFFFF]">₹{item.price.toFixed(2)}</span>
-                      <span className="text-[10px] font-mono text-[#40E0D0] bg-[#0A0A0A] px-2 py-0.5 rounded border border-[#00ABAB]/30 font-bold">
-                        Stock: {item.stockQuantity ?? 50}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      {/* Availability Switch */}
-                      <button
-                        id={`btn-toggle-avail-${item.id}`}
-                        onClick={() => handleToggleAvailability(item)}
-                        className={`text-[10px] font-bold font-mono px-2 py-1 rounded transition-colors cursor-pointer ${
-                          item.isAvailable
-                            ? 'bg-[#0A0A0A] text-[#40E0D0] border border-[#00ABAB]/30 hover:bg-teal-100'
-                            : 'bg-[#121A24] text-[#9CA3AF] border border-slate-250 hover:bg-slate-200'
-                        }`}
-                      >
-                        {item.isAvailable ? 'Set Sold Out' : 'Set Available'}
-                      </button>
-
-                      <button
-                        id={`btn-edit-menu-${item.id}`}
-                        onClick={() => handleEditMenuClick(item)}
-                        className="p-1.5 rounded-lg border border-[#00ABAB]/30 text-[#9CA3AF] hover:bg-[#0A0A0A] transition-colors cursor-pointer"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        id={`btn-delete-menu-${item.id}`}
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to permanently delete "${item.name}" from your menu?`)) {
-                            deleteMenuItem(item.id);
-                          }
-                        }}
-                        className="p-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              <div className="flex border border-[#00ABAB]/30 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setMenuCatalogViewMode('table')}
+                  className={`px-3 py-1.5 text-xs font-bold cursor-pointer transition-colors ${
+                    menuCatalogViewMode === 'table' ? 'bg-[#00ABAB] text-black' : 'bg-[#0A0A0A] text-white hover:bg-white/5'
+                  }`}
+                >
+                  Table
+                </button>
+                <button
+                  onClick={() => setMenuCatalogViewMode('grid')}
+                  className={`px-3 py-1.5 text-xs font-bold cursor-pointer transition-colors ${
+                    menuCatalogViewMode === 'grid' ? 'bg-[#00ABAB] text-black' : 'bg-[#0A0A0A] text-white hover:bg-white/5'
+                  }`}
+                >
+                  Cards
+                </button>
               </div>
-            ))}
+            </div>
           </div>
+
+          {/* Filtered items */}
+          {(() => {
+            const displayedItems = menuItems.filter(item => {
+              const matchesSearch = item.name.toLowerCase().includes(menuCatalogSearch.toLowerCase()) ||
+                                    item.category.toLowerCase().includes(menuCatalogSearch.toLowerCase()) ||
+                                    item.description.toLowerCase().includes(menuCatalogSearch.toLowerCase());
+              const matchesVendor = menuCatalogVendorFilter === 'all' || item.vendorId === menuCatalogVendorFilter;
+              const matchesCat = menuCatalogCategoryFilter === 'all' || item.category === menuCatalogCategoryFilter;
+              return matchesSearch && matchesVendor && matchesCat;
+            });
+
+            if (menuCatalogViewMode === 'table') {
+              return (
+                <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden shadow-xs">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-[#FFFFFF]">
+                      <thead>
+                        <tr className="bg-[#0A0A0A]/80 border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold">
+                          <th className="p-3.5">Item Details</th>
+                          <th className="p-3.5">Vendor / Stall</th>
+                          <th className="p-3.5">Category</th>
+                          <th className="p-3.5">Price (₹)</th>
+                          <th className="p-3.5">Stock Position</th>
+                          <th className="p-3.5">Availability</th>
+                          <th className="p-3.5 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-teal-100/20">
+                        {displayedItems.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="p-8 text-center text-[#9CA3AF] font-mono">
+                              No retail or menu items match the filter criteria.
+                            </td>
+                          </tr>
+                        ) : (
+                          displayedItems.map(item => {
+                            const vendor = vendors.find(v => v.id === item.vendorId);
+                            const stock = item.stockQuantity ?? 50;
+
+                            return (
+                              <tr key={item.id} className="hover:bg-[#0A0A0A]/40 transition-colors">
+                                <td className="p-3.5 font-bold text-[#FFFFFF] flex items-center gap-3">
+                                  <img 
+                                    src={item.image} 
+                                    alt={item.name} 
+                                    className="h-10 w-10 rounded-lg object-cover border border-[#00ABAB]/30 shrink-0" 
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="truncate font-bold">{item.name}</div>
+                                    <div className="text-[10px] text-gray-400 font-sans font-normal truncate max-w-xs">{item.description}</div>
+                                  </div>
+                                </td>
+
+                                <td className="p-3.5 font-mono text-[#9CA3AF]">
+                                  {vendor ? `${vendor.name} (${vendor.stallNumber})` : 'Central Retail'}
+                                </td>
+
+                                <td className="p-3.5">
+                                  <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#121A24] text-[#40E0D0] border border-[#00ABAB]/30">
+                                    {item.category}
+                                  </span>
+                                </td>
+
+                                <td className="p-3.5 font-mono font-extrabold text-[#40E0D0]">
+                                  ₹{item.price.toFixed(2)}
+                                </td>
+
+                                <td className="p-3.5 font-mono">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                      stock > 10
+                                        ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
+                                        : stock > 0
+                                        ? 'bg-amber-950/60 text-amber-300 border-amber-800/60'
+                                        : 'bg-red-950/60 text-red-400 border-red-800/60'
+                                    }`}>
+                                      {stock} units
+                                    </span>
+
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => updateMenuItemStock(item.id, Math.max(0, stock - 5))}
+                                        className="w-5 h-5 rounded bg-[#1A1A1A] hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 text-xs font-bold flex items-center justify-center transition-colors cursor-pointer"
+                                        title="Reduce 5 units"
+                                      >
+                                        -5
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => adjustMenuItemStock(item.id, -1)}
+                                        disabled={stock <= 0}
+                                        className="w-5 h-5 rounded bg-[#1A1A1A] hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 text-xs font-bold flex items-center justify-center transition-colors cursor-pointer disabled:opacity-30"
+                                        title="Reduce 1 unit"
+                                      >
+                                        -1
+                                      </button>
+
+                                      <input 
+                                        type="number"
+                                        min="0"
+                                        value={stock}
+                                        onChange={(e) => updateMenuItemStock(item.id, parseInt(e.target.value) || 0)}
+                                        className="w-12 text-center py-0.5 bg-[#0A0A0A] border border-[#00ABAB]/50 rounded text-xs font-mono font-black text-[#40E0D0] focus:outline-none"
+                                        title="Directly enter stock position"
+                                      />
+
+                                      <button
+                                        type="button"
+                                        onClick={() => adjustMenuItemStock(item.id, 1)}
+                                        className="px-1.5 h-5 rounded bg-[#00ABAB]/15 hover:bg-[#00ABAB] text-[#00ABAB] hover:text-black text-[10px] font-bold font-mono flex items-center justify-center transition-colors cursor-pointer"
+                                        title="Add +1 unit"
+                                      >
+                                        +1
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateMenuItemStock(item.id, stock + 10)}
+                                        className="px-1.5 h-5 rounded bg-[#00ABAB]/15 hover:bg-[#00ABAB] text-[#00ABAB] hover:text-black text-[10px] font-bold font-mono flex items-center justify-center transition-colors cursor-pointer"
+                                        title="Add +10 units"
+                                      >
+                                        +10
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateMenuItemStock(item.id, stock + 50)}
+                                        className="px-1.5 h-5 rounded bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-black text-[10px] font-bold font-mono flex items-center justify-center transition-colors cursor-pointer"
+                                        title="Add +50 units"
+                                      >
+                                        +50
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                <td className="p-3.5">
+                                  <button
+                                    onClick={() => updateMenuItem({ ...item, isAvailable: !item.isAvailable })}
+                                    className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase font-mono border cursor-pointer transition-all ${
+                                      item.isAvailable
+                                        ? 'bg-teal-950/80 text-[#40E0D0] border-[#00ABAB]'
+                                        : 'bg-red-950/80 text-red-400 border-red-800'
+                                    }`}
+                                  >
+                                    {item.isAvailable ? 'In Stock' : 'Out of Stock'}
+                                  </button>
+                                </td>
+
+                                <td className="p-3.5 text-right whitespace-nowrap">
+                                  <button
+                                    onClick={() => handleEditMenuClick(item)}
+                                    className="px-2.5 py-1 text-xs rounded-lg border border-[#00ABAB]/30 hover:bg-[#0A0A0A] text-[#FFFFFF] transition-colors cursor-pointer mr-1.5"
+                                  >
+                                    <Edit className="h-3.5 w-3.5 inline mr-1" /> Edit
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
+                                        deleteMenuItem(item.id);
+                                      }
+                                    }}
+                                    className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/40 transition-colors cursor-pointer"
+                                    title="Delete item"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            }
+
+            // Grid Cards View
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {displayedItems.map(item => {
+                  const vendor = vendors.find(v => v.id === item.vendorId);
+                  const stock = item.stockQuantity ?? 50;
+
+                  return (
+                    <div 
+                      key={item.id} 
+                      id={`menu-item-card-${item.id}`}
+                      className={`glass-panel border rounded-2xl overflow-hidden hover:shadow-lg transition-all flex flex-col justify-between ${
+                        !item.isAvailable ? 'opacity-65 border-dashed border-teal-300 bg-[#0A0A0A]/50' : 'border-[#00ABAB]/30'
+                      }`}
+                    >
+                      <div className="h-36 relative">
+                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <div className="absolute top-2 left-2">
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase bg-black/80 text-[#40E0D0] border border-[#00ABAB]/30 font-mono">
+                            {vendor?.name || item.category}
+                          </span>
+                        </div>
+                        <div className="absolute top-2 right-2">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border font-mono ${
+                            item.isAvailable 
+                              ? 'bg-[#0A0A0A] text-[#40E0D0] border-[#00ABAB]/30' 
+                              : 'bg-red-50 text-red-800 border-red-200'
+                          }`}>
+                            {item.isAvailable ? 'In Stock' : 'Sold Out'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                        <div>
+                          <div className="flex justify-between items-start gap-2">
+                            <h4 className="font-bold text-sm text-[#FFFFFF]">{item.name}</h4>
+                            <span className="font-mono font-black text-sm text-[#40E0D0]">₹{item.price.toFixed(2)}</span>
+                          </div>
+                          <p className="text-xs text-[#9CA3AF] mt-1 line-clamp-2 leading-relaxed">
+                            {item.description}
+                          </p>
+                        </div>
+
+                        {/* Stock Adjustment Row */}
+                        <div className="p-2.5 bg-[#0A0A0A]/60 rounded-xl border border-[#00ABAB]/20 flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-mono text-[#9CA3AF] uppercase font-bold">Stock Position:</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => adjustMenuItemStock(item.id, -1)}
+                              disabled={stock <= 0}
+                              className="w-5 h-5 rounded bg-white/5 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 text-xs font-bold flex items-center justify-center cursor-pointer disabled:opacity-30"
+                            >
+                              -
+                            </button>
+                            <span className="font-mono text-xs font-black text-[#40E0D0] px-1.5">{stock}</span>
+                            <button
+                              type="button"
+                              onClick={() => adjustMenuItemStock(item.id, 1)}
+                              className="w-5 h-5 rounded bg-white/5 hover:bg-[#00ABAB]/20 text-slate-300 hover:text-[#40E0D0] text-xs font-bold flex items-center justify-center cursor-pointer"
+                            >
+                              +
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => adjustMenuItemStock(item.id, 10)}
+                              className="px-1.5 py-0.5 rounded bg-[#00ABAB]/15 hover:bg-[#00ABAB] text-[#00ABAB] hover:text-black text-[9px] font-bold font-mono cursor-pointer"
+                            >
+                              +10
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-[#00ABAB]/30 pt-3">
+                          <button
+                            id={`btn-toggle-avail-${item.id}`}
+                            onClick={() => handleToggleAvailability(item)}
+                            className={`text-[10px] font-bold font-mono px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                              item.isAvailable
+                                ? 'bg-[#0A0A0A] text-[#40E0D0] border border-[#00ABAB]/30 hover:bg-teal-100'
+                                : 'bg-[#121A24] text-[#9CA3AF] border border-slate-250 hover:bg-slate-200'
+                            }`}
+                          >
+                            {item.isAvailable ? 'Set Sold Out' : 'Set Available'}
+                          </button>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              id={`btn-edit-menu-${item.id}`}
+                              onClick={() => handleEditMenuClick(item)}
+                              className="p-1.5 rounded-lg border border-[#00ABAB]/30 text-[#9CA3AF] hover:bg-[#0A0A0A] transition-colors cursor-pointer"
+                              title="Edit item"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              id={`btn-delete-menu-${item.id}`}
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to permanently delete "${item.name}" from your menu?`)) {
+                                  deleteMenuItem(item.id);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-red-950/40 border border-red-800/40 text-red-400 hover:bg-red-900/60 transition-colors cursor-pointer"
+                              title="Delete item"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -918,28 +1208,52 @@ export const FoodVendorDashboard: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Category</label>
-                  <input
-                    type="text"
-                    required
+                  <select
                     id="input-menu-category"
                     value={menuForm.category}
                     onChange={e => setMenuForm({...menuForm, category: e.target.value})}
-                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
-                    placeholder="e.g. Burgers, Beverages"
-                  />
+                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF] cursor-pointer"
+                  >
+                    <option value="Beverages">Beverages</option>
+                    <option value="Wood-Fired Pizza">Wood-Fired Pizza</option>
+                    <option value="Smash Burgers">Smash Burgers</option>
+                    <option value="Starters & Sides">Starters & Sides</option>
+                    <option value="Desserts & Shakes">Desserts & Shakes</option>
+                    <option value="Snacks & Fast Food">Snacks & Fast Food</option>
+                    <option value="Main Course">Main Course</option>
+                    <option value="Retail & Merchandise">Retail & Merchandise</option>
+                    <option value="Souvenirs & Apparel">Souvenirs & Apparel</option>
+                    <option value="Combos & Offers">Combos & Offers</option>
+                  </select>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Promo Image URL</label>
-                <input
-                  type="url"
-                  id="input-menu-image"
-                  value={menuForm.image}
-                  onChange={e => setMenuForm({...menuForm, image: e.target.value})}
-                  className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
-                  placeholder="https://images.unsplash.com..."
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Stall / Vendor Outlet</label>
+                  <select
+                    id="input-menu-vendor"
+                    value={menuForm.vendorId}
+                    onChange={e => setMenuForm({...menuForm, vendorId: e.target.value})}
+                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF] cursor-pointer"
+                  >
+                    {vendors.map(v => (
+                      <option key={v.id} value={v.id}>{v.name} ({v.stallNumber})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Promo Image URL</label>
+                  <input
+                    type="url"
+                    id="input-menu-image"
+                    value={menuForm.image}
+                    onChange={e => setMenuForm({...menuForm, image: e.target.value})}
+                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
+                    placeholder="https://images.unsplash.com..."
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-2 pt-2">

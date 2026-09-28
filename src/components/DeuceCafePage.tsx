@@ -949,6 +949,11 @@ export const DeuceCafePage: React.FC = () => {
                     <option value="Smash Burgers">Smash Burgers</option>
                     <option value="Starters & Sides">Starters & Sides</option>
                     <option value="Desserts & Shakes">Desserts & Shakes</option>
+                    <option value="Snacks & Fast Food">Snacks & Fast Food</option>
+                    <option value="Main Course">Main Course</option>
+                    <option value="Retail & Merchandise">Retail & Merchandise</option>
+                    <option value="Souvenirs & Apparel">Souvenirs & Apparel</option>
+                    <option value="Combos & Offers">Combos & Offers</option>
                   </select>
                 </div>
               </div>
