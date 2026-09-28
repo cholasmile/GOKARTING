@@ -840,15 +840,113 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.setItem('ap_inventory', JSON.stringify(inventory));
     fetch('/api/inventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inventory) }).catch(() => {});
   }, [inventory]);
-  useEffect(() => { localStorage.setItem('ap_bookings', JSON.stringify(bookings)); }, [bookings]);
-  useEffect(() => { localStorage.setItem('ap_tickets', JSON.stringify(tickets)); }, [tickets]);
-  useEffect(() => { localStorage.setItem('ap_orders', JSON.stringify(orders)); }, [orders]);
-  useEffect(() => { localStorage.setItem('ap_notifications', JSON.stringify(notifications)); }, [notifications]);
-  useEffect(() => { localStorage.setItem('ap_payments', JSON.stringify(payments)); }, [payments]);
+  useEffect(() => { 
+    localStorage.setItem('ap_bookings', JSON.stringify(bookings));
+    if (bookings.length > 0) {
+      fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bookings) }).catch(() => {});
+    }
+  }, [bookings]);
+  useEffect(() => { 
+    localStorage.setItem('ap_tickets', JSON.stringify(tickets));
+    if (tickets.length > 0) {
+      fetch('/api/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tickets) }).catch(() => {});
+    }
+  }, [tickets]);
+  useEffect(() => { 
+    localStorage.setItem('ap_orders', JSON.stringify(orders));
+    if (orders.length > 0) {
+      fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(orders) }).catch(() => {});
+    }
+  }, [orders]);
+  useEffect(() => { 
+    localStorage.setItem('ap_notifications', JSON.stringify(notifications));
+    if (notifications.length > 0) {
+      fetch('/api/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(notifications) }).catch(() => {});
+    }
+  }, [notifications]);
+  useEffect(() => { 
+    localStorage.setItem('ap_payments', JSON.stringify(payments));
+    if (payments.length > 0) {
+      fetch('/api/park-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payments) }).catch(() => {});
+    }
+  }, [payments]);
   useEffect(() => { localStorage.setItem('ap_karts', JSON.stringify(karts)); }, [karts]);
   useEffect(() => { localStorage.setItem('ap_sessions', JSON.stringify(sessions)); }, [sessions]);
   useEffect(() => { localStorage.setItem('ap_lapRecords', JSON.stringify(lapRecords)); }, [lapRecords]);
   useEffect(() => { localStorage.setItem('ap_waivers', JSON.stringify(waivers)); }, [waivers]);
+
+  // Periodic multi-terminal synchronization: pulls latest cloud/offline synced data
+  useEffect(() => {
+    const mergeEntities = <T extends { id: string }>(prevList: T[], incomingList: T[]): T[] => {
+      if (!Array.isArray(incomingList) || incomingList.length === 0) return prevList;
+      const map = new Map<string, T>();
+      incomingList.forEach(item => { if (item && item.id) map.set(item.id, item); });
+      prevList.forEach(item => {
+        if (item && item.id) {
+          if (!map.has(item.id)) {
+            map.set(item.id, item);
+          } else {
+            const inc = map.get(item.id)!;
+            map.set(item.id, { ...item, ...inc });
+          }
+        }
+      });
+      return Array.from(map.values());
+    };
+
+    const pullUnifiedSync = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      try {
+        const res = await fetch('/api/sync/all');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data) {
+          if (Array.isArray(data.bookings) && data.bookings.length > 0) {
+            setBookings(prev => mergeEntities(prev, data.bookings));
+          }
+          if (Array.isArray(data.tickets) && data.tickets.length > 0) {
+            setTickets(prev => mergeEntities(prev, data.tickets));
+          }
+          if (Array.isArray(data.payments) && data.payments.length > 0) {
+            setPayments(prev => mergeEntities(prev, data.payments));
+          }
+          if (Array.isArray(data.orders) && data.orders.length > 0) {
+            setOrders(prev => mergeEntities(prev, data.orders));
+          }
+          if (Array.isArray(data.users) && data.users.length > 0) {
+            const cleanUsers = data.users.filter((u: any) => u.id !== 'usr-gam' && u.role !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
+            setUsers(prev => mergeEntities(prev, cleanUsers));
+          }
+          if (Array.isArray(data.activities) && data.activities.length > 0) {
+            const cleanActs = data.activities.filter((a: any) => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
+            setActivities(prev => mergeEntities(prev, cleanActs));
+          }
+        }
+      } catch (err) {
+        // Network or local endpoint unavailable
+      }
+    };
+
+    // Initial pull
+    pullUnifiedSync();
+
+    // Auto-sync polling every 3.5s for real-time admin updates
+    const timerId = setInterval(pullUnifiedSync, 3500);
+
+    const handleFocusSync = () => {
+      pullUnifiedSync();
+      syncEngine.triggerSync();
+    };
+
+    window.addEventListener('focus', handleFocusSync);
+    window.addEventListener('online', handleFocusSync);
+
+    return () => {
+      clearInterval(timerId);
+      window.removeEventListener('focus', handleFocusSync);
+      window.removeEventListener('online', handleFocusSync);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('ap_selected_vendor_id', selectedVendorId);
@@ -1205,9 +1303,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // User Management
   const updateUserRole = (userId: string, role: UserRole) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('users', 'update', { id: userId, role });
-    }
+    writeToLocalAndSync('users', 'update', { id: userId, role });
   };
 
   const addUser = (userData: User | Omit<User, 'id'>) => {
@@ -1233,9 +1329,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return updated;
     });
 
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('users', 'insert', newUser);
-    }
+    writeToLocalAndSync('users', 'insert', newUser);
   };
 
   const createBooking = (data: {
@@ -1428,13 +1522,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     setPayments(prev => [newPayment, ...prev]);
 
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('bookings', 'insert', newBooking);
-      if (newTicket) {
-        writeToLocalAndSync('tickets', 'insert', newTicket);
-      }
-      writeToLocalAndSync('payments', 'insert', newPayment);
+    writeToLocalAndSync('bookings', 'insert', newBooking);
+    if (newTicket) {
+      writeToLocalAndSync('tickets', 'insert', newTicket);
     }
+    writeToLocalAndSync('payments', 'insert', newPayment);
 
     // 5. Trigger Notifications
     if (isPending) {
@@ -1497,9 +1589,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         status: 'valid'
       };
       setTickets(prev => [newTicket!, ...prev]);
-      if (isSupabaseConfigured) {
-        writeToLocalAndSync('tickets', 'insert', newTicket);
-      }
+      writeToLocalAndSync('tickets', 'insert', newTicket);
     }
 
     if (payment) {
@@ -1511,15 +1601,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         paid_at: new Date().toISOString()
       };
       setPayments(prev => prev.map(p => p.id === payment.id ? updatedPayment : p));
-      
-      if (isSupabaseConfigured) {
-        writeToLocalAndSync('payments', 'update', updatedPayment);
-      }
+      writeToLocalAndSync('payments', 'update', updatedPayment);
     }
 
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('bookings', 'update', updatedBooking);
-    }
+    writeToLocalAndSync('bookings', 'update', updatedBooking);
 
     sendMockNotification(
       booking.customerEmail,
@@ -1581,9 +1666,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         status: 'valid'
       };
       setTickets(prev => [newTicket!, ...prev]);
-      if (isSupabaseConfigured) {
-        writeToLocalAndSync('tickets', 'insert', newTicket);
-      }
+      writeToLocalAndSync('tickets', 'insert', newTicket);
     }
 
     // Update existing payment record or insert a new one (using functional state updater to avoid closure staleness)
@@ -1675,11 +1758,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     });
 
-    if (isSupabaseConfigured && finalPaymentRecord) {
+    if (finalPaymentRecord) {
       writeToLocalAndSync('payments', 'update', finalPaymentRecord);
     }
 
-    if (isSupabaseConfigured) writeToLocalAndSync('bookings', 'update', updatedBooking);
+    writeToLocalAndSync('bookings', 'update', updatedBooking);
 
     if (finalStatus === 'paid') {
       sendMockNotification(
@@ -1720,7 +1803,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       refundedBy: params.staffName || currentUser?.name || 'Staff Counter'
     };
     setBookings(prev => prev.map(b => b.id === params.bookingId ? updatedBooking : b));
-    if (isSupabaseConfigured) writeToLocalAndSync('bookings', 'update', updatedBooking);
+    writeToLocalAndSync('bookings', 'update', updatedBooking);
 
     // 2. Update Ticket
     setTickets(prev => prev.map(t => {
@@ -1733,7 +1816,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           refundedAt: now,
           refundedBy: params.staffName || currentUser?.name || 'Staff Counter'
         };
-        if (isSupabaseConfigured) writeToLocalAndSync('tickets', 'update', updatedTicket);
+        writeToLocalAndSync('tickets', 'update', updatedTicket);
         return updatedTicket;
       }
       return t;
@@ -1749,7 +1832,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updated_at: now
       };
       setPayments(prev => prev.map(p => p.id === existingPayment.id ? updatedPayment : p));
-      if (isSupabaseConfigured) writeToLocalAndSync('payments', 'update', updatedPayment);
+      writeToLocalAndSync('payments', 'update', updatedPayment);
     }
 
     sendMockNotification(
@@ -1810,10 +1893,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setTickets(prev => prev.map(t => t.id === foundTicket.id ? updatedTicket : t));
-
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('tickets', 'update', updatedTicket);
-    }
+    writeToLocalAndSync('tickets', 'update', updatedTicket);
     
     // Log notifications to visitors and admin
     sendMockNotification(
@@ -1827,16 +1907,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Vendor Actions
+  // Vendor Actions
   const addVendor = (v: Omit<FoodVendor, 'id'>) => {
     const newVendor: FoodVendor = {
       ...v,
       id: `vendor-dynamic-${Date.now()}`
     };
     setVendors(prev => [...prev, newVendor]);
-
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('vendors', 'insert', newVendor);
-    }
+    writeToLocalAndSync('vendors', 'insert', newVendor);
 
     sendMockNotification(
       'admin@adventurepark.com',
@@ -1848,18 +1926,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateVendor = (v: FoodVendor) => {
     setVendors(prev => prev.map(item => item.id === v.id ? v : item));
-
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('vendors', 'update', v);
-    }
+    writeToLocalAndSync('vendors', 'update', v);
   };
 
   const deleteVendor = (id: string) => {
     setVendors(prev => prev.filter(item => item.id !== id));
-
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('vendors', 'delete', { id });
-    }
+    writeToLocalAndSync('vendors', 'delete', { id });
   };
 
   // Menu Actions
@@ -1876,9 +1948,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return updated;
     });
 
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('menuItems', 'insert', newItem);
-    }
+    writeToLocalAndSync('menuItems', 'insert', newItem);
   };
 
   const addBulkMenuItems = (items: Array<Omit<MenuItem, 'id'>>) => {
@@ -1895,25 +1965,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return updated;
     });
 
-    if (isSupabaseConfigured) {
-      newItems.forEach(item => writeToLocalAndSync('menuItems', 'insert', item));
-    }
+    newItems.forEach(item => writeToLocalAndSync('menuItems', 'insert', item));
   };
 
   const updateMenuItem = (item: MenuItem) => {
     setMenuItems(prev => prev.map(m => m.id === item.id ? item : m));
-
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('menuItems', 'update', item);
-    }
+    writeToLocalAndSync('menuItems', 'update', item);
   };
 
   const deleteMenuItem = (id: string) => {
     setMenuItems(prev => prev.filter(m => m.id !== id));
-
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('menuItems', 'delete', { id });
-    }
+    writeToLocalAndSync('menuItems', 'delete', { id });
   };
 
   // Inventory Management
@@ -1923,16 +1985,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const nextStock = mode === 'set' ? amount : item.currentStock + amount;
         const boundedStock = Math.max(0, nextStock);
 
-        if (isSupabaseConfigured) {
-          writeToLocalAndSync('inventory', 'update', { id, currentStock: boundedStock });
-        }
+        writeToLocalAndSync('inventory', 'update', { id, currentStock: boundedStock });
 
         // Check if stock dips below minimum level
         if (boundedStock <= item.minStockLevel && item.currentStock > item.minStockLevel) {
           const ownerEmail = vendors.find(v => v.id === item.vendorId)?.ownerName.toLowerCase().replace(' ', '') + '@example.com';
           sendMockNotification(
             ownerEmail || 'vendor@example.com',
-            'âš ï¸ CRITICAL: Low Stock Alert!',
+            '⚠️ CRITICAL: Low Stock Alert!',
             `Ingredient "${item.name}" has reached low stock: ${boundedStock} ${item.unit} remaining. Minimum alert level: ${item.minStockLevel} ${item.unit}. Please purchase restocking items!`,
             'email'
           );
@@ -1950,10 +2010,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       id: `inv-dynamic-${Date.now()}`
     };
     setInventory(prev => [...prev, newItem]);
-
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('inventory', 'insert', newItem);
-    }
+    writeToLocalAndSync('inventory', 'insert', newItem);
   };
 
   // Food Cart Actions
@@ -2019,10 +2076,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setOrders(prev => [newOrder, ...prev]);
     setPayments(prev => [newPayment, ...prev]);
 
-    if (isSupabaseConfigured) {
-      writeToLocalAndSync('orders', 'insert', newOrder);
+    writeToLocalAndSync('orders', 'insert', newOrder);
     writeToLocalAndSync('payments', 'insert', newPayment);
-    }
 
     // Reduce inventory stocks & direct menu item stock quantity for ordering simulation
     setMenuItems(prev => prev.map(m => {
@@ -2059,7 +2114,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Notify Customer & Stall owners
     sendMockNotification(
       customerEmail,
-      'Food Order Received! ðŸ”â˜•',
+      'Food Order Received! 🍔☕',
       `Your order ${orderId} has been successfully placed at Food Street. Total amount: ₹${totalAmount.toFixed(2)}. Stalls are preparing your fresh items!`,
       'email'
     );
@@ -2072,7 +2127,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const ownerEmail = v.ownerName.toLowerCase().replace(' ', '') + '@example.com';
         sendMockNotification(
           ownerEmail,
-          'ðŸ”” New Live Food Order!',
+          '🔔 New Live Food Order!',
           `Hey ${v.ownerName}, you have a new incoming order (${orderId}) at ${v.name}. Open your vendor panel to start preparing.`,
           'email'
         );
@@ -2086,10 +2141,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
         const updated = { ...o, status };
-
-        if (isSupabaseConfigured) {
-          writeToLocalAndSync('orders', 'update', { id: orderId, status });
-        }
+        writeToLocalAndSync('orders', 'update', { id: orderId, status });
 
         let title = '';
         let body = '';

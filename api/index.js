@@ -537,6 +537,14 @@ const menuItemsStore = createJsonStore('menu_items_store.json', []);
 const vendorsStore = createJsonStore('vendors_store.json', []);
 const inventoryStore = createJsonStore('inventory_store.json', []);
 const usersStore = createJsonStore('users_store.json', []);
+const bookingsStore = createJsonStore('bookings_store.json', []);
+const ticketsStore = createJsonStore('tickets_store.json', []);
+const paymentsStore = createJsonStore('payments_store.json', []);
+const ordersStore = createJsonStore('orders_store.json', []);
+const notificationsStore = createJsonStore('notifications_store.json', []);
+const kartsStore = createJsonStore('karts_store.json', []);
+const sessionsStore = createJsonStore('sessions_store.json', []);
+const waiversStore = createJsonStore('waivers_store.json', []);
 
 app.get('/api/menu-items', (req, res) => res.json(menuItemsStore.get()));
 app.post('/api/menu-items', (req, res) => {
@@ -562,12 +570,42 @@ app.post('/api/users', (req, res) => {
   res.status(400).json({ success: false });
 });
 
+app.get('/api/bookings', (req, res) => res.json(bookingsStore.get()));
+app.post('/api/bookings', (req, res) => {
+  if (bookingsStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
+app.get('/api/tickets', (req, res) => res.json(ticketsStore.get()));
+app.post('/api/tickets', (req, res) => {
+  if (ticketsStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
+app.get('/api/park-payments', (req, res) => res.json(paymentsStore.get()));
+app.post('/api/park-payments', (req, res) => {
+  if (paymentsStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
+app.get('/api/orders', (req, res) => res.json(ordersStore.get()));
+app.post('/api/orders', (req, res) => {
+  if (ordersStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
+app.get('/api/notifications', (req, res) => res.json(notificationsStore.get()));
+app.post('/api/notifications', (req, res) => {
+  if (notificationsStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
 // ─── ACTIVITIES BACKEND PERSISTENCE ─────────────────────────────────────────
 const persistentActivitiesFile = path.join(__dirname, 'activities_store.json');
 const tmpActivitiesPath = path.join('/tmp', 'activities.json');
 let inMemoryActivities = null;
 
-app.get('/api/activities', (req, res) => {
+const getActivitiesHelper = () => {
   try {
     let acts = inMemoryActivities;
     if (!acts && fs.existsSync(persistentActivitiesFile)) {
@@ -578,12 +616,16 @@ app.get('/api/activities', (req, res) => {
     }
     if (Array.isArray(acts) && acts.length > 0) {
       inMemoryActivities = acts;
-      return res.json(acts);
+      return acts;
     }
   } catch (e) {
     console.error('[backend] Failed to read activities file:', e);
   }
-  res.json([]);
+  return [];
+};
+
+app.get('/api/activities', (req, res) => {
+  res.json(getActivitiesHelper());
 });
 
 app.post('/api/activities', (req, res) => {
@@ -619,6 +661,88 @@ app.post('/api/activities', (req, res) => {
   } catch (e) {
     console.error('[backend] Failed to save activities:', e);
     res.status(500).json({ success: false, error: String(e) });
+  }
+});
+
+// ─── UNIFIED CLOUD & OFFLINE REALTIME SYNC API ──────────────────────────────
+app.get('/api/sync/all', (req, res) => {
+  res.json({
+    bookings: bookingsStore.get(),
+    tickets: ticketsStore.get(),
+    payments: paymentsStore.get(),
+    orders: ordersStore.get(),
+    notifications: notificationsStore.get(),
+    users: usersStore.get(),
+    activities: getActivitiesHelper(),
+    menuItems: menuItemsStore.get(),
+    vendors: vendorsStore.get(),
+    inventory: inventoryStore.get(),
+    karts: kartsStore.get(),
+    sessions: sessionsStore.get(),
+    waivers: waiversStore.get(),
+    serverTime: new Date().toISOString()
+  });
+});
+
+app.post('/api/sync/batch', (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ success: false, message: 'Expected items array' });
+    }
+
+    const storesMap = {
+      'bookings': bookingsStore,
+      'tickets': ticketsStore,
+      'payments': paymentsStore,
+      'food_orders': ordersStore,
+      'orders': ordersStore,
+      'notifications': notificationsStore,
+      'users': usersStore,
+      'karts': kartsStore,
+      'sessions': sessionsStore,
+      'waivers': waiversStore,
+      'menu_items': menuItemsStore,
+      'menuItems': menuItemsStore,
+      'food_vendors': vendorsStore,
+      'vendors': vendorsStore,
+      'inventory': inventoryStore
+    };
+
+    let processedCount = 0;
+    for (const item of items) {
+      const { table, action, payload } = item;
+      const targetStore = storesMap[table];
+      if (!targetStore || !payload || !payload.id) continue;
+
+      let currentList = targetStore.get();
+      if (!Array.isArray(currentList)) currentList = [];
+
+      if (action === 'insert') {
+        const existingIdx = currentList.findIndex(x => x.id === payload.id);
+        if (existingIdx >= 0) {
+          currentList[existingIdx] = { ...currentList[existingIdx], ...payload };
+        } else {
+          currentList.unshift(payload);
+        }
+      } else if (action === 'update') {
+        const existingIdx = currentList.findIndex(x => x.id === payload.id);
+        if (existingIdx >= 0) {
+          currentList[existingIdx] = { ...currentList[existingIdx], ...payload };
+        } else {
+          currentList.unshift(payload);
+        }
+      } else if (action === 'delete') {
+        currentList = currentList.filter(x => x.id !== payload.id);
+      }
+      targetStore.set(currentList);
+      processedCount++;
+    }
+
+    res.json({ success: true, processedCount, serverTime: new Date().toISOString() });
+  } catch (err) {
+    console.error('[sync-batch error]', err);
+    res.status(500).json({ success: false, error: String(err) });
   }
 });
 
