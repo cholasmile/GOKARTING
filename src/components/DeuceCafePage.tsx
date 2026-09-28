@@ -9,9 +9,10 @@ import { MenuItem, FoodOrder } from '../types';
 import { 
   Coffee, Utensils, ShoppingBag, Search, Plus, Minus, Edit,
   Trash2, ArrowRight, CheckCircle2, Clock, Sparkles, X, 
-  CreditCard, Flame, ChevronRight, Ticket, Package
+  CreditCard, Flame, ChevronRight, Ticket, Package, AlertCircle, Layers
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { BulkAddMenuModal } from './BulkAddMenuModal';
 
 export const DeuceCafePage: React.FC = () => {
   const { 
@@ -24,6 +25,10 @@ export const DeuceCafePage: React.FC = () => {
   const [selectedVendorFilter, setSelectedVendorFilter] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showStockManager, setShowStockManager] = useState(false);
+  const [stockSearchQuery, setStockSearchQuery] = useState('');
+  const [stockVendorFilter, setStockVendorFilter] = useState('all');
+  const [stockCategoryFilter, setStockCategoryFilter] = useState('all');
+  const [isBulkMenuModalOpen, setIsBulkMenuModalOpen] = useState(false);
 
   // Extract repeat / frequently ordered items
   const repeatOrderItems = React.useMemo(() => {
@@ -190,6 +195,12 @@ export const DeuceCafePage: React.FC = () => {
                   <Package className="w-4 h-4" /> {showStockManager ? 'Hide Stock Panel' : 'Stock Positions'}
                 </button>
                 <button
+                  onClick={() => setIsBulkMenuModalOpen(true)}
+                  className="px-3.5 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Bulk Add Items
+                </button>
+                <button
                   onClick={() => {
                     setEditingMenuItem(null);
                     setMenuForm({
@@ -219,75 +230,259 @@ export const DeuceCafePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Stock Position Management Panel (Staff / Admin) */}
+        {/* Comprehensive Cafe & Retail Stock Positions Manager Panel (Staff / Admin) */}
         {isStaffOrAdmin && showStockManager && (
-          <div className="mt-6 p-4 rounded-2xl bg-[#0B1120] border border-amber-400/40 shadow-[0_0_25px_rgba(245,158,11,0.15)] space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <Package className="w-5 h-5 text-amber-400" />
+          <div className="mt-6 p-5 rounded-2xl bg-[#0B1120] border border-amber-400/40 shadow-[0_0_30px_rgba(245,158,11,0.15)] space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            {/* Header & Metric Summary */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-400">
+                  <Package className="w-6 h-6" />
+                </div>
                 <div>
-                  <h3 className="text-sm font-black text-white font-mono uppercase tracking-wider">Live Cafe & Snack Stock Position Manager</h3>
-                  <p className="text-[11px] text-[#9CA3AF]">Directly update stock counts for inventory. Selling items at POS automatically deducts these positions.</p>
+                  <h3 className="text-base font-black text-white font-mono uppercase tracking-wider flex items-center gap-2">
+                    Live Cafe & Snack Stock Position Manager
+                  </h3>
+                  <p className="text-xs text-[#9CA3AF]">
+                    Full retail stock management: add, adjust (+/-), toggle availability, and delete stock positions. POS billing auto-deducts live units.
+                  </p>
                 </div>
               </div>
-              <button 
-                onClick={() => setShowStockManager(false)}
-                className="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
+
+              {/* Quick Summary Badges */}
+              <div className="flex items-center gap-2 text-[10px] font-mono font-bold flex-wrap">
+                <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-white">
+                  Total Items: {menuItems.length}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                  In Stock: {menuItems.filter(i => (i.stockQuantity ?? 50) > 10 && i.isAvailable).length}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300">
+                  Low Stock (&lt;10): {menuItems.filter(i => (i.stockQuantity ?? 50) > 0 && (i.stockQuantity ?? 50) <= 10).length}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400">
+                  Sold Out: {menuItems.filter(i => (i.stockQuantity ?? 50) <= 0 || !i.isAvailable).length}
+                </span>
+                <button 
+                  onClick={() => setShowStockManager(false)}
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors cursor-pointer"
+                  title="Close Stock Manager"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
-              {menuItems.map(item => {
-                const stock = item.stockQuantity ?? 50;
-                return (
-                  <div key={`stock-mgr-${item.id}`} className="p-3 bg-[#050816] border border-white/10 rounded-xl flex items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-bold text-xs text-white truncate">{item.name}</div>
-                      <div className="text-[10px] text-[#9CA3AF] font-mono flex items-center gap-1">
-                        <span>{item.category}</span>
-                        <span>•</span>
-                        <span className="text-[#14F1D9]">₹{item.price.toFixed(2)}</span>
-                      </div>
-                    </div>
+            {/* Stock Search & Filter Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-[#9CA3AF]" />
+                <input 
+                  type="text"
+                  placeholder="Filter stock by name or category..."
+                  value={stockSearchQuery}
+                  onChange={e => setStockSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-[#050816] border border-white/10 rounded-xl text-xs text-white placeholder-white/40 focus:outline-none focus:border-amber-400 font-mono"
+                />
+              </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        onClick={() => adjustMenuItemStock(item.id, -1)}
-                        disabled={stock <= 0}
-                        className="w-6 h-6 rounded bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 flex items-center justify-center font-bold text-xs disabled:opacity-30 cursor-pointer"
-                        title="Deduct 1"
-                      >
-                        -1
-                      </button>
-                      
-                      <input 
-                        type="number"
-                        min="0"
-                        value={stock}
-                        onChange={(e) => updateMenuItemStock(item.id, parseInt(e.target.value) || 0)}
-                        className="w-14 text-center py-1 bg-[#0B1120] border border-amber-400/50 rounded text-xs font-mono font-black text-amber-300 focus:outline-none focus:border-amber-400"
-                      />
+              <select
+                value={stockVendorFilter}
+                onChange={e => setStockVendorFilter(e.target.value)}
+                className="px-3 py-2 bg-[#050816] border border-white/10 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-amber-400 cursor-pointer font-mono"
+              >
+                <option value="all">All Outlets & Vendors</option>
+                {vendors.map(v => (
+                  <option key={v.id} value={v.id}>{v.name} ({v.stallNumber})</option>
+                ))}
+              </select>
 
-                      <button
-                        onClick={() => adjustMenuItemStock(item.id, 5)}
-                        className="px-1.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 font-bold text-[10px] font-mono cursor-pointer"
-                        title="Add 5"
-                      >
-                        +5
-                      </button>
-                      <button
-                        onClick={() => adjustMenuItemStock(item.id, 20)}
-                        className="px-1.5 py-1 rounded bg-[#14F1D9]/20 hover:bg-[#14F1D9]/40 text-[#14F1D9] font-bold text-[10px] font-mono cursor-pointer"
-                        title="Add 20"
-                      >
-                        +20
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsBulkMenuModalOpen(true)}
+                  className="flex-1 py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> ⚡ Bulk Add
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingMenuItem(null);
+                    setMenuForm({
+                      name: '',
+                      description: '',
+                      price: 5.0,
+                      category: 'Beverages',
+                      vendorId: vendors[0]?.id || 'vendor-forest-cafe',
+                      image: '',
+                      isAvailable: true,
+                      stockQuantity: 50
+                    });
+                    setIsMenuModalOpen(true);
+                  }}
+                  className="flex-1 py-2 px-3 rounded-xl bg-[#14F1D9]/15 hover:bg-[#14F1D9]/25 border border-[#14F1D9]/40 text-[#14F1D9] text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> + New Item
+                </button>
+              </div>
+            </div>
+
+            {/* Detailed Stock Position Table */}
+            <div className="border border-white/10 rounded-xl overflow-hidden bg-[#050816]">
+              <div className="overflow-x-auto max-h-96 custom-scrollbar">
+                <table className="w-full text-left text-xs text-white">
+                  <thead>
+                    <tr className="bg-[#0B1120] border-b border-white/10 text-[#9CA3AF] font-mono font-bold text-[10px] uppercase">
+                      <th className="p-3">Item Name</th>
+                      <th className="p-3">Outlet / Category</th>
+                      <th className="p-3">Price</th>
+                      <th className="p-3">Stock Position</th>
+                      <th className="p-3">Availability</th>
+                      <th className="p-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {menuItems
+                      .filter(item => {
+                        const matchesSearch = item.name.toLowerCase().includes(stockSearchQuery.toLowerCase()) ||
+                                              item.category.toLowerCase().includes(stockSearchQuery.toLowerCase());
+                        const matchesVendor = stockVendorFilter === 'all' || item.vendorId === stockVendorFilter;
+                        return matchesSearch && matchesVendor;
+                      })
+                      .map(item => {
+                        const vendor = vendors.find(v => v.id === item.vendorId);
+                        const stock = item.stockQuantity ?? 50;
+
+                        return (
+                          <tr key={`stock-row-${item.id}`} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="p-3 font-bold text-white flex items-center gap-2.5">
+                              <img 
+                                src={item.image} 
+                                alt={item.name} 
+                                className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0" 
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="min-w-0">
+                                <div className="truncate">{item.name}</div>
+                                <div className="text-[9px] text-[#9CA3AF] font-normal truncate max-w-xs">{item.description}</div>
+                              </div>
+                            </td>
+
+                            <td className="p-3 font-mono text-[11px] text-[#9CA3AF]">
+                              <div className="text-white font-bold">{vendor?.name || 'Cafe Counter'}</div>
+                              <div className="text-[9px] text-[#14F1D9]">{item.category}</div>
+                            </td>
+
+                            <td className="p-3 font-mono font-black text-[#14F1D9]">
+                              ₹{item.price.toFixed(2)}
+                            </td>
+
+                            <td className="p-3 font-mono">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                  stock > 10
+                                    ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
+                                    : stock > 0
+                                    ? 'bg-amber-950/60 text-amber-300 border-amber-800/60'
+                                    : 'bg-red-950/60 text-red-400 border-red-800/60'
+                                }`}>
+                                  {stock} units
+                                </span>
+
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateMenuItemStock(item.id, Math.max(0, stock - 5))}
+                                    className="w-5 h-5 rounded bg-white/5 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 text-xs font-bold flex items-center justify-center transition-colors cursor-pointer border border-white/5"
+                                    title="Reduce 5 units"
+                                  >
+                                    -5
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => adjustMenuItemStock(item.id, -1)}
+                                    disabled={stock <= 0}
+                                    className="w-5 h-5 rounded bg-white/5 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 text-xs font-bold flex items-center justify-center transition-colors cursor-pointer border border-white/5 disabled:opacity-30"
+                                    title="Reduce 1 unit"
+                                  >
+                                    -1
+                                  </button>
+                                  
+                                  <input 
+                                    type="number"
+                                    min="0"
+                                    value={stock}
+                                    onChange={(e) => updateMenuItemStock(item.id, parseInt(e.target.value) || 0)}
+                                    className="w-12 text-center py-0.5 bg-[#0B1120] border border-amber-400/50 rounded text-xs font-mono font-black text-amber-300 focus:outline-none focus:border-amber-400"
+                                    title="Directly enter stock position"
+                                  />
+
+                                  <button
+                                    type="button"
+                                    onClick={() => adjustMenuItemStock(item.id, 1)}
+                                    className="px-1.5 h-5 rounded bg-[#14F1D9]/15 hover:bg-[#14F1D9] text-[#14F1D9] hover:text-black text-[10px] font-bold font-mono flex items-center justify-center transition-colors cursor-pointer"
+                                    title="Add +1 unit"
+                                  >
+                                    +1
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateMenuItemStock(item.id, stock + 10)}
+                                    className="px-1.5 h-5 rounded bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-black text-[10px] font-bold font-mono flex items-center justify-center transition-colors cursor-pointer"
+                                    title="Add +10 units"
+                                  >
+                                    +10
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateMenuItemStock(item.id, stock + 50)}
+                                    className="px-1.5 h-5 rounded bg-[#00B4FF]/15 hover:bg-[#00B4FF] text-[#00B4FF] hover:text-black text-[10px] font-bold font-mono flex items-center justify-center transition-colors cursor-pointer"
+                                    title="Add +50 units"
+                                  >
+                                    +50
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="p-3">
+                              <button
+                                onClick={() => updateMenuItem({ ...item, isAvailable: !item.isAvailable })}
+                                className={`px-2 py-1 rounded text-[10px] font-bold font-mono uppercase border cursor-pointer transition-all ${
+                                  item.isAvailable
+                                    ? 'bg-emerald-950/60 text-emerald-400 border-emerald-700/60 hover:bg-emerald-900/60'
+                                    : 'bg-red-950/60 text-red-400 border-red-800/60 hover:bg-red-900/60'
+                                }`}
+                              >
+                                {item.isAvailable ? 'In Stock' : 'Out of Stock'}
+                              </button>
+                            </td>
+
+                            <td className="p-3 text-right whitespace-nowrap">
+                              <button
+                                onClick={() => handleEditClick(item)}
+                                className="px-2 py-1 text-xs rounded-lg border border-white/10 hover:border-amber-400 text-amber-300 hover:bg-amber-500/10 transition-colors cursor-pointer mr-1.5"
+                                title="Edit Stock Item"
+                              >
+                                <Edit className="h-3 w-3 inline mr-1" /> Edit
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Are you sure you want to permanently delete "${item.name}" and remove its stock position?`)) {
+                                    deleteMenuItem(item.id);
+                                  }
+                                }}
+                                className="px-2 py-1 text-xs rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-colors cursor-pointer"
+                                title="Delete Stock Position"
+                              >
+                                <Trash2 className="h-3 w-3 inline mr-1" /> Delete
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -819,6 +1014,13 @@ export const DeuceCafePage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Bulk Add Menu Items Modal */}
+      <BulkAddMenuModal
+        isOpen={isBulkMenuModalOpen}
+        onClose={() => setIsBulkMenuModalOpen(false)}
+        defaultVendorId={vendors[0]?.id || 'vendor-forest-cafe'}
+      />
     </div>
   );
 };
