@@ -2,8 +2,7 @@ import Dexie, { Table } from 'dexie';
 import { 
   User, Activity, FoodVendor, MenuItem, InventoryItem, 
   Booking, Ticket, FoodOrder, Payment, NotificationLog,
-  Kart, GoKartingSession, LapRecord, GoKartingWaiver,
-  GamingPC, GamingGame, GamingPackage, GamingSession, GamingPCEvent
+  Kart, GoKartingSession, LapRecord, GoKartingWaiver
 } from '../types';
 
 export interface SyncQueueItem {
@@ -34,13 +33,6 @@ export class AppDB extends Dexie {
   lapRecords!: Table<LapRecord, string>;
   waivers!: Table<GoKartingWaiver, string>;
 
-  // Gaming PC Tables
-  gamingPcs!: Table<GamingPC, string>;
-  gamingGames!: Table<GamingGame, string>;
-  gamingPackages!: Table<GamingPackage, string>;
-  gamingSessions!: Table<GamingSession, string>;
-  gamingEvents!: Table<GamingPCEvent, string>;
-
   syncQueue!: Table<SyncQueueItem, number>;
 
   constructor() {
@@ -60,12 +52,6 @@ export class AppDB extends Dexie {
       sessions: 'id, status',
       lapRecords: 'id, sessionId, driverId',
       waivers: 'id, ticketId',
-      // Gaming PC Stores
-      gamingPcs: 'id, status, pcName',
-      gamingGames: 'id, name, isEnabled',
-      gamingPackages: 'id, name, isActive',
-      gamingSessions: 'id, pcId, status, startTime',
-      gamingEvents: 'id, eventId, pcId, eventType',
       syncQueue: '++id, table, action, status, createdAt'
     });
   }

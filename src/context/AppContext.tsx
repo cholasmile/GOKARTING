@@ -9,15 +9,8 @@ import {
   InventoryItem, Booking, Ticket, FoodOrder, Payment, 
   NotificationLog, OrderStatus, FoodOrderItem, ActivityPackage,
   Kart, GoKartingSession, LapRecord, GoKartingWaiver, KartStatus, SessionStatus,
-  ActivityPhoto, ActivityOffer,
-  GamingPC, GamingGame, GamingPackage, GamingSession, GamingPCStatus
+  ActivityPhoto, ActivityOffer
 } from '../types';
-import { 
-  INITIAL_ACTIVITIES, INITIAL_FOOD_VENDORS, INITIAL_MENU_ITEMS, 
-  INITIAL_INVENTORY, INITIAL_BOOKINGS, INITIAL_TICKETS, INITIAL_FOOD_ORDERS,
-  INITIAL_USERS
-} from '../data/initialData';
-import { mockKarts, mockSessions, mockLapRecords } from '../data/kartingMockData';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { db } from '../db/db';
 import { syncEngine, SyncStatus } from '../lib/syncEngine';
@@ -174,39 +167,6 @@ interface AppContextProps {
   updateSessionStatus: (sessionId: string, status: SessionStatus) => void;
   recordLapTime: (lapData: Omit<LapRecord, 'id'>) => void;
   submitWaiver: (waiverData: Omit<GoKartingWaiver, 'id'>) => void;
-
-  // Gaming PC Module State & Actions
-  gamingPcs: GamingPC[];
-  gamingGames: GamingGame[];
-  gamingPackages: GamingPackage[];
-  gamingSessions: GamingSession[];
-  addGamingPC: (pc: GamingPC) => void;
-  updateGamingPC: (pc: GamingPC) => void;
-  deleteGamingPC: (pcId: string) => void;
-  addGamingGame: (game: Omit<GamingGame, 'id' | 'createdAt'> & { id?: string }) => void;
-  updateGamingGame: (game: GamingGame) => void;
-  deleteGamingGame: (gameId: string) => void;
-  addGamingPackage: (pkg: Omit<GamingPackage, 'id' | 'createdAt'> & { id?: string }) => void;
-  updateGamingPackage: (pkg: GamingPackage) => void;
-  deleteGamingPackage: (pkgId: string) => void;
-  startGamingSession: (params: {
-    pcId: string;
-    customerName: string;
-    customerPhone?: string;
-    packageId: string;
-    packageName: string;
-    gameId?: string;
-    gameName?: string;
-    durationMinutes: number;
-    price: number;
-    paymentMethod: 'cash' | 'upi' | 'card' | 'razorpay';
-  }) => GamingSession;
-  extendGamingSession: (sessionId: string, extraMinutes: number) => void;
-  stopGamingSession: (sessionId: string) => void;
-  lockGamingPC: (pcId: string) => void;
-  unlockGamingPC: (pcId: string) => void;
-  togglePCMaintenance: (pcId: string) => void;
-  refetchGamingDataFromBackend: () => Promise<void>;
 
   // Utility Actions
   sendMockNotification: (recipient: string, title: string, body: string, channel: 'email' | 'sms' | 'whatsapp') => void;
@@ -460,56 +420,124 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return saved || 'vendor-forest-cafe';
   });
 
-  // Load standard states with localStorage persistence synchronously to prevent empty first-render crashes
+  // ── Core Domain Data ──────────────────────────────────────────────
+  // All initialized as EMPTY. Supabase load populates these.
+  // localStorage is only used as an offline cache, NEVER as primary data.
   const [users, setUsers] = useState<User[]>(() => {
-    const loaded = localLoadHelper('ap_users', INITIAL_USERS);
-    const merged = [...loaded];
-    INITIAL_USERS.forEach(initUser => {
-      if (!merged.some(u => u.email.toLowerCase() === initUser.email.toLowerCase())) {
-        merged.push(initUser);
-      }
-    });
-    return merged;
+    const cached = localStorage.getItem('ap_users');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return [];
   });
   const [activities, setActivities] = useState<Activity[]>(() => {
-    const loaded = localLoadHelper<Activity[]>('ap_activities', INITIAL_ACTIVITIES);
-    const merged = [...loaded];
-    INITIAL_ACTIVITIES.forEach(initAct => {
-      if (!merged.some(a => a.id === initAct.id)) {
-        merged.push(initAct);
-      }
-    });
-    return merged;
+    const cached = localStorage.getItem('ap_activities');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return [];
   });
-  const [vendors, setVendors] = useState<FoodVendor[]>(() => localLoadHelper('ap_vendors', INITIAL_FOOD_VENDORS));
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(() => localLoadHelper('ap_menu_items', INITIAL_MENU_ITEMS));
-  const [inventory, setInventory] = useState<InventoryItem[]>(() => localLoadHelper('ap_inventory', INITIAL_INVENTORY));
-  const isDummyRecord = (item: { id: string; customerEmail?: string; customer_id?: string }) => {
+  const [vendors, setVendors] = useState<FoodVendor[]>(() => {
+    const cached = localStorage.getItem('ap_vendors');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(() => {
+    const cached = localStorage.getItem('ap_menu_items');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => {
+    const cached = localStorage.getItem('ap_inventory');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+
+  // Bookings, tickets, orders — always load from localStorage cache
+  // (populated by Supabase sync), never from demo data
+  const isDummyRecord = (item: any) => {
+    if (!item || typeof item !== 'object') return false;
     const email = (item.customerEmail || item.customer_id || '').toLowerCase();
-    const id = item.id || '';
+    const id = (item.id || '').toString();
     return id.startsWith('bk-100') || id.startsWith('ord-500') || id.startsWith('pay-bk-100') || id.startsWith('pay-ord-500') ||
            email.endsWith('@example.com') || email.includes('gotham.com') || email.includes('themyscira.gov') ||
            email.includes('dailybugle.com') || email.includes('ccpd.gov');
   };
 
   const [bookings, setBookings] = useState<Booking[]>(() => {
-    const loaded = localLoadHelper<Booking[]>('ap_bookings', INITIAL_BOOKINGS);
-    return loaded.filter(b => !isDummyRecord(b));
+    const cached = localStorage.getItem('ap_bookings');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed.filter((b: any) => !isDummyRecord(b));
+      } catch {}
+    }
+    return [];
   });
   const [tickets, setTickets] = useState<Ticket[]>(() => {
-    const loaded = localLoadHelper<Ticket[]>('ap_tickets', INITIAL_TICKETS);
-    return loaded.filter(t => !isDummyRecord(t));
+    const cached = localStorage.getItem('ap_tickets');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed.filter((t: any) => !isDummyRecord(t));
+      } catch {}
+    }
+    return [];
   });
   const [orders, setOrders] = useState<FoodOrder[]>(() => {
-    const loaded = localLoadHelper<FoodOrder[]>('ap_orders', INITIAL_FOOD_ORDERS);
-    return loaded.filter(o => !isDummyRecord(o));
+    const cached = localStorage.getItem('ap_orders');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed.filter((o: any) => !isDummyRecord(o));
+      } catch {}
+    }
+    return [];
   });
-  const [notifications, setNotifications] = useState<NotificationLog[]>(() => localLoadHelper('ap_notifications', []));
+  const [notifications, setNotifications] = useState<NotificationLog[]>(() => {
+    const cached = localStorage.getItem('ap_notifications');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
   const [payments, setPayments] = useState<Payment[]>(() => {
-    const loaded = localLoadHelper<Payment[]>('ap_payments', []).filter(p => !isDummyRecord(p));
-    const realBookings = localLoadHelper<Booking[]>('ap_bookings', []).filter(b => !isDummyRecord(b));
-    const realOrders = localLoadHelper<FoodOrder[]>('ap_orders', []).filter(o => !isDummyRecord(o));
-    return synthesizePayments(loaded, realBookings, realOrders);
+    const cachedPayments = localStorage.getItem('ap_payments');
+    const cachedBookings = localStorage.getItem('ap_bookings');
+    const cachedOrders = localStorage.getItem('ap_orders');
+    let loadedPayments: Payment[] = [];
+    let realBookings: Booking[] = [];
+    let realOrders: FoodOrder[] = [];
+    try {
+      if (cachedPayments) { const p = JSON.parse(cachedPayments); if (Array.isArray(p)) loadedPayments = p.filter((x: any) => !isDummyRecord(x)); }
+      if (cachedBookings) { const b = JSON.parse(cachedBookings); if (Array.isArray(b)) realBookings = b.filter((x: any) => !isDummyRecord(x)); }
+      if (cachedOrders) { const o = JSON.parse(cachedOrders); if (Array.isArray(o)) realOrders = o.filter((x: any) => !isDummyRecord(x)); }
+    } catch {}
+    return synthesizePayments(loadedPayments, realBookings, realOrders);
   });
 
   // Auto-sync payments whenever bookings or orders are modified
@@ -526,379 +554,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   }, [bookings, orders]);
 
-  // Go Karting specific states
-  const [karts, setKarts] = useState<Kart[]>(() => localLoadHelper('ap_karts', mockKarts));
-  const [sessions, setSessions] = useState<GoKartingSession[]>(() => localLoadHelper('ap_sessions', mockSessions));
-  const [lapRecords, setLapRecords] = useState<LapRecord[]>(() => localLoadHelper('ap_lapRecords', mockLapRecords));
-  const [waivers, setWaivers] = useState<GoKartingWaiver[]>(() => localLoadHelper('ap_waivers', []));
-
-  // Gaming PC Specific States
-  const [gamingPcs, setGamingPcs] = useState<GamingPC[]>(() => localLoadHelper('ap_gamingPcs', [
-    { id: 'DEUCE-PC-01', pcName: 'Gaming Station 01 (RTX 4080)', ipAddress: '192.168.1.101', status: 'AVAILABLE', isKioskLocked: true, clientVersion: '1.0.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'DEUCE-PC-02', pcName: 'Gaming Station 02 (RTX 4080)', ipAddress: '192.168.1.102', status: 'AVAILABLE', isKioskLocked: true, clientVersion: '1.0.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'DEUCE-PC-03', pcName: 'Gaming Station 03 (RTX 4070)', ipAddress: '192.168.1.103', status: 'AVAILABLE', isKioskLocked: true, clientVersion: '1.0.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'DEUCE-PC-04', pcName: 'Gaming Station 04 (RTX 4070)', ipAddress: '192.168.1.104', status: 'AVAILABLE', isKioskLocked: true, clientVersion: '1.0.0', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-  ]));
-
-  const [gamingGames, setGamingGames] = useState<GamingGame[]>(() => localLoadHelper('ap_gamingGames', [
-    { id: 'game-gta5', name: 'GTA V', executablePath: 'C:\\Games\\GTAV\\GTA5.exe', processName: 'GTA5.exe', launchArguments: '-fullscreen', iconUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=300&q=80', isEnabled: true, category: 'Action / Open World', createdAt: new Date().toISOString() },
-    { id: 'game-nfs', name: 'Need For Speed Unbound', executablePath: 'C:\\Games\\NFS\\NFS.exe', processName: 'NFS.exe', launchArguments: '', iconUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=300&q=80', isEnabled: true, category: 'Racing', createdAt: new Date().toISOString() },
-    { id: 'game-valorant', name: 'Valorant', executablePath: 'C:\\Riot Games\\VALORANT\\live\\VALORANT.exe', processName: 'VALORANT.exe', launchArguments: '', iconUrl: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=300&q=80', isEnabled: true, category: 'FPS Shooter', createdAt: new Date().toISOString() },
-    { id: 'game-cyberpunk', name: 'Cyberpunk 2077', executablePath: 'C:\\Games\\Cyberpunk2077\\bin\\x64\\Cyberpunk2077.exe', processName: 'Cyberpunk2077.exe', launchArguments: '', iconUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=300&q=80', isEnabled: true, category: 'RPG / Open World', createdAt: new Date().toISOString() }
-  ]));
-
-  const [gamingPackages, setGamingPackages] = useState<GamingPackage[]>(() => localLoadHelper('ap_gamingPackages', [
-    { id: 'pkg-gaming-5m', name: '5 Minutes Test Drive', durationMinutes: 5, price: 10, description: 'Quick 5 minute trial session.', isActive: true, createdAt: new Date().toISOString() },
-    { id: 'pkg-gaming-15m', name: '15 Minutes Speed Play', durationMinutes: 15, price: 50, description: '15 minute high speed gaming session.', isActive: true, createdAt: new Date().toISOString() },
-    { id: 'pkg-gaming-30m', name: '30 Minutes Pro Gaming', durationMinutes: 30, price: 90, description: '30 minute full match session.', isActive: true, createdAt: new Date().toISOString() },
-    { id: 'pkg-gaming-60m', name: '60 Minutes Ultimate Gaming', durationMinutes: 60, price: 150, description: '1 Hour ultimate gaming experience.', isActive: true, createdAt: new Date().toISOString() }
-  ]));
-
-  const [gamingSessions, setGamingSessions] = useState<GamingSession[]>(() => localLoadHelper('ap_gamingSessions', []));
-
-  // Sync gaming states to localStorage & Dexie DB
-  useEffect(() => {
-    try {
-      localStorage.setItem('ap_gamingPcs', JSON.stringify(gamingPcs));
-      db.gamingPcs.bulkPut(gamingPcs).catch(() => {});
-    } catch (e) {}
-  }, [gamingPcs]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('ap_gamingGames', JSON.stringify(gamingGames));
-      db.gamingGames.bulkPut(gamingGames).catch(() => {});
-    } catch (e) {}
-  }, [gamingGames]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('ap_gamingPackages', JSON.stringify(gamingPackages));
-      db.gamingPackages.bulkPut(gamingPackages).catch(() => {});
-    } catch (e) {}
-    if (gamingPackages && gamingPackages.length > 0) {
-      syncGamingPackagesToActivities(gamingPackages);
-    }
-  }, [gamingPackages]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('ap_gamingSessions', JSON.stringify(gamingSessions));
-      db.gamingSessions.bulkPut(gamingSessions).catch(() => {});
-    } catch (e) {}
-  }, [gamingSessions]);
-
-  // Helper to sync gaming packages into activities state
-  const syncGamingPackagesToActivities = (pkgs: GamingPackage[]) => {
-    setActivities(prev => {
-      const updated = prev.map(act => {
-        if (act.id === 'act-gaming-pc') {
-          return {
-            ...act,
-            packages: pkgs.map(p => ({
-              id: p.id,
-              name: p.name,
-              price: p.price,
-              description: p.description || ''
-            }))
-          };
-        }
-        return act;
-      });
-      try {
-        localStorage.setItem('ap_activities', JSON.stringify(updated));
-      } catch (e) {}
-      fetch('/api/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-  };
-
-  // Initial Fetch & Periodic Heartbeat Sync from Backend
-  const refetchGamingDataFromBackend = async () => {
-    try {
-      const [pcsRes, gamesRes, pkgsRes, sessionsRes] = await Promise.all([
-        fetch('/api/gaming/pcs').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/gaming/games').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/gaming/packages').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/gaming/sessions').then(r => r.ok ? r.json() : null).catch(() => null)
-      ]);
-
-      if (Array.isArray(pcsRes) && pcsRes.length > 0) setGamingPcs(pcsRes);
-      if (Array.isArray(gamesRes) && gamesRes.length > 0) setGamingGames(gamesRes);
-      if (Array.isArray(pkgsRes) && pkgsRes.length > 0) {
-        setGamingPackages(pkgsRes);
-        syncGamingPackagesToActivities(pkgsRes);
-      }
-      if (Array.isArray(sessionsRes)) setGamingSessions(sessionsRes);
-    } catch (e) {
-      console.warn('[frontend] Gaming backend fetch error:', e);
-    }
-  };
-
-  useEffect(() => {
-    refetchGamingDataFromBackend();
-    const interval = setInterval(refetchGamingDataFromBackend, 4000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Gaming PC Actions
-  const addGamingPC = (pc: GamingPC) => {
-    setGamingPcs(prev => {
-      const updated = [...prev.filter(p => p.id !== pc.id), pc];
-      fetch('/api/gaming/pcs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-  };
-
-  const updateGamingPC = (pc: GamingPC) => {
-    setGamingPcs(prev => {
-      const updated = prev.map(p => p.id === pc.id ? pc : p);
-      fetch('/api/gaming/pcs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-  };
-
-  const deleteGamingPC = (pcId: string) => {
-    setGamingPcs(prev => {
-      const updated = prev.filter(p => p.id !== pcId);
-      fetch('/api/gaming/pcs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-  };
-
-  const addGamingGame = (gameData: Omit<GamingGame, 'id' | 'createdAt'> & { id?: string }) => {
-    const newGame: GamingGame = {
-      ...gameData,
-      id: gameData.id || `game-${Date.now()}`,
-      createdAt: new Date().toISOString()
-    };
-    setGamingGames(prev => {
-      const updated = [...prev, newGame];
-      fetch('/api/gaming/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-  };
-
-  const updateGamingGame = (game: GamingGame) => {
-    setGamingGames(prev => {
-      const updated = prev.map(g => g.id === game.id ? game : g);
-      fetch('/api/gaming/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-  };
-
-  const deleteGamingGame = (gameId: string) => {
-    setGamingGames(prev => {
-      const updated = prev.filter(g => g.id !== gameId);
-      fetch('/api/gaming/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-  };
-
-  const addGamingPackage = (pkgData: Omit<GamingPackage, 'id' | 'createdAt'> & { id?: string }) => {
-    const newPkg: GamingPackage = {
-      ...pkgData,
-      id: pkgData.id || `pkg-gaming-${Date.now()}`,
-      createdAt: new Date().toISOString()
-    };
-    setGamingPackages(prev => {
-      const updated = [...prev, newPkg];
-      fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      syncGamingPackagesToActivities(updated);
-      return updated;
-    });
-  };
-
-  const updateGamingPackage = (pkg: GamingPackage) => {
-    setGamingPackages(prev => {
-      const updated = prev.map(p => p.id === pkg.id ? pkg : p);
-      fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      syncGamingPackagesToActivities(updated);
-      return updated;
-    });
-  };
-
-  const deleteGamingPackage = (pkgId: string) => {
-    setGamingPackages(prev => {
-      const updated = prev.filter(p => p.id !== pkgId);
-      fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      syncGamingPackagesToActivities(updated);
-      return updated;
-    });
-  };
-
-  const startGamingSession = (params: {
-    pcId: string;
-    customerName: string;
-    customerPhone?: string;
-    packageId: string;
-    packageName: string;
-    gameId?: string;
-    gameName?: string;
-    durationMinutes: number;
-    price: number;
-    paymentMethod: 'cash' | 'upi' | 'card' | 'razorpay';
-  }): GamingSession => {
-    const now = new Date();
-    const expiry = new Date(now.getTime() + params.durationMinutes * 60000);
-    const sessionId = `G-${Date.now().toString().slice(-6)}`;
-
-    const newSession: GamingSession = {
-      id: sessionId,
-      pcId: params.pcId,
-      customerName: params.customerName,
-      customerPhone: params.customerPhone,
-      packageId: params.packageId,
-      packageName: params.packageName,
-      gameId: params.gameId,
-      gameName: params.gameName,
-      startTime: now.toISOString(),
-      expiryTime: expiry.toISOString(),
-      durationMinutes: params.durationMinutes,
-      status: 'AUTHORIZED',
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString()
-    };
-
-    // 1. Update Gaming Sessions
-    setGamingSessions(prev => {
-      const updated = [newSession, ...prev];
-      fetch('/api/gaming/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-
-    // 2. Update Target Gaming PC Status
-    setGamingPcs(prev => {
-      const updated = prev.map(pc => {
-        if (pc.id === params.pcId) {
-          return {
-            ...pc,
-            status: 'PLAYING' as GamingPCStatus,
-            currentSessionId: sessionId,
-            currentCustomerName: params.customerName,
-            currentGameName: params.gameName,
-            remainingSeconds: params.durationMinutes * 60,
-            isKioskLocked: false,
-            updatedAt: now.toISOString()
-          };
-        }
-        return pc;
-      });
-      fetch('/api/gaming/pcs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-
-    // 3. Integrate into Existing Booking & Payment system so sales appear in reports!
-    const todayStr = now.toISOString().split('T')[0];
-    const newBooking: Booking = {
-      id: `bk-gaming-${sessionId}`,
-      customerName: params.customerName,
-      customerEmail: `${params.customerName.toLowerCase().replace(/\s+/g, '')}@gaming.station`,
-      customerPhone: params.customerPhone,
-      activityId: 'act-gaming-pc',
-      activityName: `Gaming PC (${params.pcId})`,
-      date: todayStr,
-      timeSlot: `${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${expiry.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-      ticketType: 'package',
-      details: `Package: ${params.packageName} (${params.durationMinutes} Mins) - ${params.gameName || 'Any Game'}`,
-      quantity: 1,
-      totalAmount: params.price,
-      paymentStatus: 'paid',
-      bookingDate: now.toISOString(),
-      packageId: params.packageId,
-      packageName: params.packageName,
-      unitPrice: params.price
-    };
-
-    setBookings(prev => [newBooking, ...prev]);
-
-    return newSession;
-  };
-
-  const extendGamingSession = (sessionId: string, extraMinutes: number) => {
-    setGamingSessions(prev => {
-      const updated = prev.map(s => {
-        if (s.id === sessionId) {
-          const currentExp = new Date(s.expiryTime).getTime();
-          const newExp = new Date(currentExp + extraMinutes * 60000).toISOString();
-          return {
-            ...s,
-            expiryTime: newExp,
-            durationMinutes: s.durationMinutes + extraMinutes,
-            updatedAt: new Date().toISOString()
-          };
-        }
-        return s;
-      });
-      fetch('/api/gaming/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-
-    setGamingPcs(prev => {
-      const targetSession = gamingSessions.find(s => s.id === sessionId);
-      if (!targetSession) return prev;
-      return prev.map(pc => {
-        if (pc.id === targetSession.pcId) {
-          return {
-            ...pc,
-            remainingSeconds: (pc.remainingSeconds || 0) + extraMinutes * 60,
-            updatedAt: new Date().toISOString()
-          };
-        }
-        return pc;
-      });
-    });
-  };
-
-  const stopGamingSession = (sessionId: string) => {
-    const targetSession = gamingSessions.find(s => s.id === sessionId);
-    const nowIso = new Date().toISOString();
-
-    setGamingSessions(prev => {
-      const updated = prev.map(s => {
-        if (s.id === sessionId) {
-          return { ...s, status: 'STOPPED' as const, actualEndTime: nowIso, updatedAt: nowIso };
-        }
-        return s;
-      });
-      fetch('/api/gaming/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-      return updated;
-    });
-
-    if (targetSession) {
-      setGamingPcs(prev => {
-        const updated = prev.map(pc => {
-          if (pc.id === targetSession.pcId) {
-            return {
-              ...pc,
-              status: 'AVAILABLE' as GamingPCStatus,
-              currentSessionId: undefined,
-              currentCustomerName: undefined,
-              currentGameName: undefined,
-              remainingSeconds: 0,
-              isKioskLocked: true,
-              updatedAt: nowIso
-            };
-          }
-          return pc;
-        });
-        fetch('/api/gaming/pcs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-        return updated;
-      });
-    }
-  };
-
-  const lockGamingPC = (pcId: string) => {
-    setGamingPcs(prev => prev.map(p => p.id === pcId ? { ...p, isKioskLocked: true, status: p.status === 'PLAYING' ? 'PLAYING' : 'LOCKED' } : p));
-  };
-
-  const unlockGamingPC = (pcId: string) => {
-    setGamingPcs(prev => prev.map(p => p.id === pcId ? { ...p, isKioskLocked: false } : p));
-  };
-
-  const togglePCMaintenance = (pcId: string) => {
-    setGamingPcs(prev => prev.map(p => p.id === pcId ? { ...p, status: p.status === 'MAINTENANCE' ? 'AVAILABLE' : 'MAINTENANCE', isKioskLocked: true } : p));
-  };
+  // ── Go Karting State (empty — loaded from Supabase or localStorage cache) ──
+  const [karts, setKarts] = useState<Kart[]>(() => {
+    const cached = localStorage.getItem('ap_karts');
+    if (cached) { try { const p = JSON.parse(cached); if (Array.isArray(p)) return p; } catch {} }
+    return [];
+  });
+  const [sessions, setSessions] = useState<GoKartingSession[]>(() => {
+    const cached = localStorage.getItem('ap_sessions');
+    if (cached) { try { const p = JSON.parse(cached); if (Array.isArray(p)) return p; } catch {} }
+    return [];
+  });
+  const [lapRecords, setLapRecords] = useState<LapRecord[]>(() => {
+    const cached = localStorage.getItem('ap_lapRecords');
+    if (cached) { try { const p = JSON.parse(cached); if (Array.isArray(p)) return p; } catch {} }
+    return [];
+  });
+  const [waivers, setWaivers] = useState<GoKartingWaiver[]>(() => {
+    const cached = localStorage.getItem('ap_waivers');
+    if (cached) { try { const p = JSON.parse(cached); if (Array.isArray(p)) return p; } catch {} }
+    return [];
+  });
 
   const [foodCart, setFoodCart] = useState<FoodOrderItem[]>([]);
 
@@ -957,17 +633,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const { data: dbActivities, error } = await supabase!.from('activities').select('*');
         if (!error && dbActivities && dbActivities.length > 0) {
           freshList = dbActivities;
-          setActivities(prev => {
-            const map = new Map<string, Activity>();
-            dbActivities.forEach((dba: Activity) => map.set(dba.id, dba));
-            prev.forEach(existing => map.set(existing.id, existing));
-            const mergedList = Array.from(map.values());
-            try {
-              localStorage.setItem('ap_activities', JSON.stringify(mergedList));
-            } catch (err) {}
-            db.activities.bulkPut(mergedList);
-            return mergedList;
-          });
+          setActivities(freshList);
+          try {
+            localStorage.setItem('ap_activities', JSON.stringify(freshList));
+          } catch (err) {}
+          db.activities.bulkPut(freshList);
           return freshList;
         }
       } catch (err) {
@@ -980,16 +650,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const serverActivities = await res.json();
       if (Array.isArray(serverActivities) && serverActivities.length > 0) {
         freshList = serverActivities;
-        setActivities(prev => {
-          const map = new Map<string, Activity>();
-          serverActivities.forEach((sa: Activity) => map.set(sa.id, sa));
-          prev.forEach(existing => map.set(existing.id, existing));
-          const mergedList = Array.from(map.values());
-          try {
-            localStorage.setItem('ap_activities', JSON.stringify(mergedList));
-          } catch (err) {}
-          return mergedList;
-        });
+        setActivities(freshList);
+        try {
+          localStorage.setItem('ap_activities', JSON.stringify(freshList));
+        } catch (err) {}
         return freshList;
       }
     } catch (err) {
@@ -1032,35 +696,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ]);
 
         if (dbActivities && dbActivities.length > 0) {
-          setActivities(prev => {
-            const map = new Map<string, Activity>();
-            dbActivities.forEach((dba: Activity) => map.set(dba.id, dba));
-            prev.forEach(existing => map.set(existing.id, existing));
-            const mergedList = Array.from(map.values());
-            try {
-              localStorage.setItem('ap_activities', JSON.stringify(mergedList));
-            } catch (err) {}
-            db.activities.bulkPut(mergedList);
-            return mergedList;
-          });
+          // DB is authoritative — replace local state with Supabase data
+          const freshActivities = dbActivities as Activity[];
+          try { localStorage.setItem('ap_activities', JSON.stringify(freshActivities)); } catch {}
+          db.activities.bulkPut(freshActivities);
+          setActivities(freshActivities);
         }
-        if (dbVendors && dbVendors.length > 0) { setVendors(dbVendors); db.vendors.bulkPut(dbVendors); }
-        if (dbMenuItems && dbMenuItems.length > 0) { setMenuItems(dbMenuItems); db.menuItems.bulkPut(dbMenuItems); }
-        if (dbInventory && dbInventory.length > 0) { setInventory(dbInventory); db.inventory.bulkPut(dbInventory); }
-        if (dbBookings && dbBookings.length > 0) { setBookings(dbBookings); db.bookings.bulkPut(dbBookings); }
-        if (dbTickets && dbTickets.length > 0) { setTickets(dbTickets); db.tickets.bulkPut(dbTickets); }
-        if (dbOrders && dbOrders.length > 0) { setOrders(dbOrders); db.orders.bulkPut(dbOrders); }
+        if (dbVendors && dbVendors.length > 0) { setVendors(dbVendors); try { localStorage.setItem('ap_vendors', JSON.stringify(dbVendors)); } catch {} db.vendors.bulkPut(dbVendors); }
+        if (dbMenuItems && dbMenuItems.length > 0) { setMenuItems(dbMenuItems); try { localStorage.setItem('ap_menu_items', JSON.stringify(dbMenuItems)); } catch {} db.menuItems.bulkPut(dbMenuItems); }
+        if (dbInventory && dbInventory.length > 0) { setInventory(dbInventory); try { localStorage.setItem('ap_inventory', JSON.stringify(dbInventory)); } catch {} db.inventory.bulkPut(dbInventory); }
+        if (dbBookings && dbBookings.length > 0) { setBookings(dbBookings); try { localStorage.setItem('ap_bookings', JSON.stringify(dbBookings)); } catch {} db.bookings.bulkPut(dbBookings); }
+        if (dbTickets && dbTickets.length > 0) { setTickets(dbTickets); try { localStorage.setItem('ap_tickets', JSON.stringify(dbTickets)); } catch {} db.tickets.bulkPut(dbTickets); }
+        if (dbOrders && dbOrders.length > 0) { setOrders(dbOrders); try { localStorage.setItem('ap_orders', JSON.stringify(dbOrders)); } catch {} db.orders.bulkPut(dbOrders); }
         if (dbNotifications && dbNotifications.length > 0) { setNotifications(dbNotifications); db.notifications.bulkPut(dbNotifications); }
-        if (dbPayments && dbPayments.length > 0) { setPayments(dbPayments); db.payments.bulkPut(dbPayments); }
+        if (dbPayments && dbPayments.length > 0) { setPayments(dbPayments); try { localStorage.setItem('ap_payments', JSON.stringify(dbPayments)); } catch {} db.payments.bulkPut(dbPayments); }
         if (dbUsers && dbUsers.length > 0) {
-          const mergedUsers = [...dbUsers];
-          INITIAL_USERS.forEach(initUser => {
-            if (!mergedUsers.some(u => u.email.toLowerCase() === initUser.email.toLowerCase())) {
-              mergedUsers.push(initUser);
-            }
-          });
-          setUsers(mergedUsers);
-          db.users.bulkPut(mergedUsers);
+          // Use DB users as-is — no INITIAL_USERS merging to avoid demo account pollution
+          setUsers(dbUsers);
+          try { localStorage.setItem('ap_users', JSON.stringify(dbUsers)); } catch {}
+          db.users.bulkPut(dbUsers);
         }
       } catch (err) {
         console.error('Failed to load initial data from Supabase, using localStorage:', err);
@@ -1348,29 +1002,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       // 5. Refetch fresh data from DB to confirm application state
       await refetchActivitiesFromDatabase();
       return updatedDbRow || act;
-    }
-
-    // Synchronize act-gaming-pc package edits back to gamingPackages
-    if (act.id === 'act-gaming-pc' && act.packages && Array.isArray(act.packages)) {
-      setGamingPackages(prev => {
-        const updated = act.packages!.map(ap => {
-          const existing = prev.find(p => p.id === ap.id);
-          return {
-            id: ap.id,
-            name: ap.name,
-            durationMinutes: existing?.durationMinutes || 30,
-            price: ap.price,
-            description: ap.description || existing?.description || '',
-            isActive: existing?.isActive !== false,
-            createdAt: existing?.createdAt || new Date().toISOString()
-          };
-        });
-        try {
-          localStorage.setItem('ap_gamingPackages', JSON.stringify(updated));
-        } catch (e) {}
-        fetch('/api/gaming/packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }).catch(() => {});
-        return updated;
-      });
     }
 
     // Local server mode fallback
@@ -2454,60 +2085,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }));
   };
 
+  /**
+   * ⚠️  LOCAL SESSION RESET ONLY
+   * Clears browser localStorage cache and resets React state to empty.
+   * Does NOT touch Supabase production database.
+   * After reset, the app will reload fresh data from Supabase on next render.
+   * 
+   * This function must ONLY be called from an explicit admin action with confirmation.
+   * Never called automatically on startup, login, or deployment.
+   */
   const resetAllData = () => {
-    localStorage.removeItem('ap_activities');
-    localStorage.removeItem('ap_vendors');
-    localStorage.removeItem('ap_menu_items');
-    localStorage.removeItem('ap_inventory');
-    localStorage.removeItem('ap_bookings');
-    localStorage.removeItem('ap_tickets');
-    localStorage.removeItem('ap_orders');
-    localStorage.removeItem('ap_notifications');
-    localStorage.removeItem('ap_payments');
-
-    setActivities(INITIAL_ACTIVITIES);
-    setVendors(INITIAL_FOOD_VENDORS);
-    setMenuItems(INITIAL_MENU_ITEMS);
-    setInventory(INITIAL_INVENTORY);
-    setBookings(INITIAL_BOOKINGS);
-    setTickets(INITIAL_TICKETS);
-    setOrders(INITIAL_FOOD_ORDERS);
+    console.warn('[SECURITY] resetAllData() called — clearing local session cache only. Production Supabase database is NOT affected.');
+    
+    // Clear browser localStorage cache
+    const keysToRemove = [
+      'ap_activities', 'ap_vendors', 'ap_menu_items', 'ap_inventory',
+      'ap_bookings', 'ap_tickets', 'ap_orders', 'ap_notifications', 'ap_payments',
+      'ap_karts', 'ap_sessions', 'ap_lapRecords', 'ap_waivers',
+      'ap_users'
+    ];
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+    
+    // Reset React state to empty (Supabase will repopulate on next load)
+    setActivities([]);
+    setVendors([]);
+    setMenuItems([]);
+    setInventory([]);
+    setBookings([]);
+    setTickets([]);
+    setOrders([]);
     setNotifications([]);
     setPayments([]);
     setFoodCart([]);
-    setUsers(INITIAL_USERS);
+    setUsers([]);
+    setKarts([]);
+    setSessions([]);
+    setLapRecords([]);
+    setWaivers([]);
 
+    // ✅ NO Supabase delete/insert operations — production data is preserved
+    // Reload from Supabase immediately after clearing cache
     if (isSupabaseConfigured) {
-      writeToSupabase(
-        Promise.all([
-          supabase!.from('payments').delete().neq('id', ''),
-          supabase!.from('tickets').delete().neq('id', ''),
-          supabase!.from('bookings').delete().neq('id', ''),
-          supabase!.from('food_orders').delete().neq('id', ''),
-          supabase!.from('inventory').delete().neq('id', ''),
-          supabase!.from('menu_items').delete().neq('id', ''),
-          supabase!.from('food_vendors').delete().neq('id', ''),
-          supabase!.from('activities').delete().neq('id', ''),
-          supabase!.from('notifications').delete().neq('id', '')
-        ]).then(() => {
-          return Promise.all([
-            supabase!.from('activities').insert(INITIAL_ACTIVITIES),
-            supabase!.from('food_vendors').insert(INITIAL_FOOD_VENDORS),
-            supabase!.from('menu_items').insert(INITIAL_MENU_ITEMS),
-            supabase!.from('inventory').insert(INITIAL_INVENTORY),
-            supabase!.from('bookings').insert(INITIAL_BOOKINGS),
-            supabase!.from('tickets').insert(INITIAL_TICKETS),
-            supabase!.from('food_orders').insert(INITIAL_FOOD_ORDERS)
-          ]);
-        }),
-        'resetAllData'
-      );
+      setTimeout(() => {
+        refetchActivitiesFromDatabase();
+      }, 500);
     }
     
     sendMockNotification(
-      'admin@adventurepark.com',
-      'System Database Reset Completed',
-      'The multi-activity database and local storage states have been fully reset to factory settings.',
+      'admin@deucepark.com',
+      'Local Session Cache Cleared',
+      'Browser cache has been cleared. Production data in Supabase is preserved. Reloading from database...',
       'email'
     );
   };
@@ -2590,15 +2217,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       // Go Karting Exports
       karts, sessions, lapRecords, waivers,
-      updateKartStatus, createGoKartingSession, updateSessionStatus, recordLapTime, submitWaiver,
-
-      // Gaming PC Exports
-      gamingPcs, gamingGames, gamingPackages, gamingSessions,
-      addGamingPC, updateGamingPC, deleteGamingPC,
-      addGamingGame, updateGamingGame, deleteGamingGame,
-      addGamingPackage, updateGamingPackage, deleteGamingPackage,
-      startGamingSession, extendGamingSession, stopGamingSession,
-      lockGamingPC, unlockGamingPC, togglePCMaintenance, refetchGamingDataFromBackend
+      updateKartStatus, createGoKartingSession, updateSessionStatus, recordLapTime, submitWaiver
     }}>
       {children}
     </AppContext.Provider>

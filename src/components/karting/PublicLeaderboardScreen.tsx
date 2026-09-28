@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Trophy, Timer, Zap, Flag } from 'lucide-react';
-import { mockLapRecords } from '../../data/kartingMockData';
+import { useAppContext } from '../../context/AppContext';
 
 const formatTime = (ms: number) => {
   const seconds = Math.floor(ms / 1000);
@@ -9,13 +9,14 @@ const formatTime = (ms: number) => {
 };
 
 const PublicLeaderboardScreen: React.FC = () => {
+  const { lapRecords } = useAppContext();
   const [fastestDrivers, setFastestDrivers] = useState<any[]>([]);
 
   useEffect(() => {
-    // Deduplicate drivers, getting their fastest lap only
+    // Deduplicate drivers, getting their fastest lap only — from real Supabase data
     const driverBest = new Map();
     
-    mockLapRecords.forEach(record => {
+    lapRecords.forEach(record => {
       if (!driverBest.has(record.driverId) || driverBest.get(record.driverId).lapTime > record.lapTime) {
         driverBest.set(record.driverId, record);
       }
@@ -23,7 +24,7 @@ const PublicLeaderboardScreen: React.FC = () => {
 
     const sorted = Array.from(driverBest.values()).sort((a, b) => a.lapTime - b.lapTime).slice(0, 10);
     setFastestDrivers(sorted);
-  }, []);
+  }, [lapRecords]);
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white overflow-hidden flex flex-col font-sans select-none">

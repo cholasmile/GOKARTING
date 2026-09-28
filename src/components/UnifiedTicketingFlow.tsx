@@ -78,6 +78,33 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
   const [enableSecondPackage, setEnableSecondPackage] = useState<Record<string, boolean>>({});
 
+  // Synchronize package selection whenever activity packages or pricing change in context
+  useEffect(() => {
+    setSelectedPackages(prev => {
+      const updated = { ...prev };
+      activities.forEach(act => {
+        if (act.packages && act.packages.length > 0) {
+          if (!updated[act.id] || !act.packages.some(p => p.id === updated[act.id])) {
+            updated[act.id] = act.packages[0].id;
+          }
+        }
+      });
+      return updated;
+    });
+
+    setSecondSelectedPackages(prev => {
+      const updated = { ...prev };
+      activities.forEach(act => {
+        if (act.packages && act.packages.length > 1) {
+          if (!updated[act.id] || !act.packages.some(p => p.id === updated[act.id])) {
+            updated[act.id] = act.packages[1].id;
+          }
+        }
+      });
+      return updated;
+    });
+  }, [activities]);
+
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');

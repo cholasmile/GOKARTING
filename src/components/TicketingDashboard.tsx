@@ -36,6 +36,14 @@ const TicketingDashboard: React.FC = () => {
   const [foodPaymentMethod, setFoodPaymentMethod] = useState<'cash' | 'upi' | 'card'>('cash');
   const [foodOrderSuccess, setFoodOrderSuccess] = useState<any>(null);
 
+  // Auto-sync selectedActivities whenever activities updates in AppContext
+  React.useEffect(() => {
+    setSelectedActivities(prev => {
+      if (prev.length === 0) return prev;
+      return prev.map(pAct => activities.find(a => a.id === pAct.id) || pAct);
+    });
+  }, [activities]);
+
   const toggleActivity = (act: Activity) => {
     setSelectedActivities(prev => 
       prev.find(a => a.id === act.id) 
@@ -205,7 +213,7 @@ const TicketingDashboard: React.FC = () => {
           </button>
         </div>
         <div className="overflow-y-auto h-[calc(100vh-80px)]">
-          <UnifiedTicketingFlow activities={selectedActivities} onCancel={() => setIsCheckoutOpen(false)} />
+          <UnifiedTicketingFlow activities={selectedActivities.map(s => activities.find(a => a.id === s.id) || s)} onCancel={() => setIsCheckoutOpen(false)} />
         </div>
       </div>
     );
@@ -287,9 +295,17 @@ const TicketingDashboard: React.FC = () => {
                     {isSelected && <div className="absolute inset-0 bg-[#00ABAB]/20" />}
                   </div>
                   <h3 className="text-lg font-bold text-white group-hover:text-[#40E0D0] transition-colors">{act.name}</h3>
-                  <p className="text-[#94A3B8] text-sm mt-2 font-mono">
-                    Adult: ₹{act.adultPrice} | Child: ₹{act.childPrice}
-                  </p>
+                  <div className="text-sm mt-2 font-mono">
+                    {act.packages && act.packages.length > 0 ? (
+                      <span className="text-[#00ABAB] font-bold">
+                        Packages from ₹{Math.min(...act.packages.map(p => p.price))} ({act.packages.length} Options)
+                      </span>
+                    ) : (
+                      <span className="text-[#94A3B8]">
+                        Adult: ₹{act.adultPrice || 0} | Child: ₹{act.childPrice || 0}
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}

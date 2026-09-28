@@ -13,9 +13,9 @@ export const AdventureHero: React.FC<AdventureHeroProps> = ({ onOpenMemberModal 
 
   const heroImages = (activities && activities.length > 0)
     ? activities.map(act => ({
-        url: act.image || (act.type === 'go_karting' ? '/gokart-night.png' : 'https://www.huntleyequestrian.com/cdn/shop/articles/Is-Horse-Riding-a-Sport-Huntley-Equestrian-110301396.jpg?crop=center&height=1200&v=1743859147&width=1200'),
+        url: act.image || (act.type === 'go_karting' ? '/gokart-night.png' : 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80'),
         title: act.name,
-        badge: act.type === 'go_karting' ? 'Top Activity' : act.type === 'horse_riding' ? 'Horse Riding' : 'Air Rifle'
+        badge: act.type === 'go_karting' ? 'Top Activity' : act.type === 'horse_riding' ? 'Horse Riding' : act.type === 'shooting' ? 'Air Rifle' : 'Adventure'
       }))
     : [
         {

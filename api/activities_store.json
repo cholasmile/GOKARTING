@@ -71,30 +71,5 @@
       { "id": "pkg-horse-guided", "name": "Guided Trail Ride (30 Mins)", "price": 45, "description": "Scenic guided nature trail ride with an experienced handler." },
       { "id": "pkg-horse-advanced", "name": "Advanced Forest Trek (60 Mins)", "price": 80, "description": "Full forest trail with trotting/cantering for confident riders." }
     ]
-  },
-  {
-    "id": "act-gaming-pc",
-    "name": "DEUCE Gaming PC Arena",
-    "description": "High performance standalone gaming PC stations with RTX 4080 GPUs, 240Hz monitors, and top titles (GTA V, Valorant, NFS, Cyberpunk 2077).",
-    "adultPrice": 50,
-    "childPrice": 50,
-    "image": "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80",
-    "photos": [
-      { "id": "photo-gaming-1", "url": "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80", "caption": "Gaming Station Rig", "uploadedAt": "2026-01-01T00:00:00.000Z", "order": 0 }
-    ],
-    "dailyLimit": 200,
-    "safetyInstructions": [
-      "Keep food and beverages clear of PC peripherals.",
-      "Do not modify Windows system settings or hardware cables.",
-      "Sessions auto-terminate when countdown timer reaches zero.",
-      "Use CTRL+SHIFT+A for Admin assistance."
-    ],
-    "type": "dynamic",
-    "packages": [
-      { "id": "pkg-gaming-5m", "name": "5 Minutes Test Drive", "price": 10, "description": "Quick 5 minute trial session." },
-      { "id": "pkg-gaming-15m", "name": "15 Minutes Speed Play", "price": 50, "description": "15 minute high speed gaming session." },
-      { "id": "pkg-gaming-30m", "name": "30 Minutes Pro Gaming", "price": 90, "description": "30 minute full match session." },
-      { "id": "pkg-gaming-60m", "name": "60 Minutes Ultimate Gaming", "price": 150, "description": "1 Hour ultimate gaming experience." }
-    ]
   }
 ]

@@ -18,11 +18,8 @@ import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { CustomerMobileRaceView } from './components/karting/timingSystem/CustomerMobileRaceView';
 import { CustomerTvDisplayView } from './components/karting/timingSystem/CustomerTvDisplayView';
 import { RaceTimingMaster } from './components/karting/timingSystem/RaceTimingMaster';
-import { GamingKioskApp } from './gaming-client/GamingKioskApp';
-import { GamingManagementPanel } from './components/admin/GamingManagementPanel';
-import { Mail, Lock, KeyRound, LogIn, User as UserIcon } from 'lucide-react';
-
 import { INITIAL_USERS } from './data/initialData';
+import { Mail, Lock, KeyRound, LogIn } from 'lucide-react';
 
 function LoginPage() {
   const { setCurrentUser, users } = useAppContext();
@@ -40,15 +37,15 @@ function LoginPage() {
     setTimeout(() => {
       const rawInput = email.trim().toLowerCase();
       
-      // Combine users from Context with INITIAL_USERS fallback to ensure staff accounts always exist
+      // Combine Supabase users with predefined staff credentials for login authentication
       const allAvailableUsers = [...users];
       INITIAL_USERS.forEach(init => {
         if (!allAvailableUsers.some(u => u.email.toLowerCase() === init.email.toLowerCase())) {
           allAvailableUsers.push(init);
         }
       });
-
-      // Match credentials against users (supports full email or short username prefix e.g. kartingstaff)
+      
+      // Match credentials against users (supports full email or short username prefix e.g. kartingstaff, admin, staff)
       const matchedUser = allAvailableUsers.find(u => {
         const uEmail = u.email.toLowerCase();
         const uPrefix = uEmail.split('@')[0];
@@ -227,21 +224,6 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
                 <p className="text-[9px] text-[#40E0D0] tracking-widest font-mono uppercase font-bold mt-1">Live The Rush • Yelagiri</p>
               </div>
             </Link>
-
-            <div className="hidden md:flex items-center gap-2">
-              <Link
-                to="/gaming/kiosk"
-                className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold transition flex items-center gap-1.5"
-              >
-                🎮 Gaming Kiosk UI
-              </Link>
-              <Link
-                to="/admin"
-                className="px-3 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 text-xs font-bold transition flex items-center gap-1.5"
-              >
-                🖥️ Admin / Gaming Mgmt
-              </Link>
-            </div>
           </div>
 
           {/* Member Status & Guest Controls in Header */}
@@ -319,20 +301,11 @@ export default function App() {
           <Route path="/race/live" element={<CustomerMobileRaceView />} />
           <Route path="/race/display/tv" element={<CustomerTvDisplayView />} />
           <Route path="/race/timing/*" element={<RaceTimingMaster />} />
-
-          {/* Standalone Gaming PC Client Kiosk Route */}
-          <Route path="/gaming/kiosk" element={<GamingKioskApp />} />
-          <Route path="/gaming/client" element={<GamingKioskApp />} />
           
           <Route element={<ProtectedLayout />}>
             <Route path="/admin/*" element={
               <ProtectedRoute allowedRoles={['super_admin']}>
                 <AdminDashboard />
-              </ProtectedRoute>
-            } />
-            <Route path="/staff/gaming/*" element={
-              <ProtectedRoute allowedRoles={['activity_staff', 'super_admin']}>
-                <GamingManagementPanel />
               </ProtectedRoute>
             } />
             <Route path="/staff/*" element={
