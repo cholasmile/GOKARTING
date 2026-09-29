@@ -223,6 +223,51 @@ const writeToLocalAndSync = (table: string, action: 'insert' | 'update' | 'delet
   });
 };
 
+/**
+ * Robust Entity Merger with Admin Protection
+ * Protects locally updated records against stale / unversioned server or dummy static data.
+ * If local item has been updated by admin (or is newer), local version is strictly preserved.
+ */
+export const mergeEntitiesWithProtection = <T extends { id: string; updatedAt?: string }>(
+  localList: T[],
+  incomingList: T[]
+): T[] => {
+  if (!Array.isArray(incomingList) || incomingList.length === 0) return localList || [];
+  if (!Array.isArray(localList) || localList.length === 0) return incomingList || [];
+
+  const map = new Map<string, T>();
+
+  // 1. Load all incoming items
+  incomingList.forEach(incoming => {
+    if (incoming && incoming.id) {
+      map.set(incoming.id, incoming);
+    }
+  });
+
+  // 2. Protect local items from being overwritten by stale incoming data
+  localList.forEach(localItem => {
+    if (localItem && localItem.id) {
+      if (!map.has(localItem.id)) {
+        // Admin created or preserved local entity
+        map.set(localItem.id, localItem);
+      } else {
+        const incomingItem = map.get(localItem.id)!;
+        const localTime = localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
+        const incomingTime = incomingItem.updatedAt ? new Date(incomingItem.updatedAt).getTime() : 0;
+
+        // If local item has a newer timestamp or was explicitly updated by admin (localTime > 0 and incomingTime === 0), LOCAL WINS!
+        if (localTime >= incomingTime) {
+          map.set(localItem.id, { ...incomingItem, ...localItem });
+        } else {
+          map.set(localItem.id, { ...localItem, ...incomingItem });
+        }
+      }
+    }
+  });
+
+  return Array.from(map.values());
+};
+
 const synthesizePayments = (currentPayments: Payment[], currentBookings: Booking[], currentOrders: FoodOrder[]): Payment[] => {
   const paymentMap = new Map<string, Payment>();
 
@@ -638,18 +683,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // -----------------------------------------------------------------
   // REFETCH ACTIVITIES FROM DATABASE (SINGLE SOURCE OF TRUTH)
   // -----------------------------------------------------------------
+  // -----------------------------------------------------------------
+  // REFETCH ACTIVITIES FROM DATABASE (SINGLE SOURCE OF TRUTH WITH PROTECTION)
+  // -----------------------------------------------------------------
   const refetchActivitiesFromDatabase = async (): Promise<Activity[]> => {
     let freshList: Activity[] = [];
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && supabase) {
       try {
-        const { data: dbActivities, error } = await supabase!.from('activities').select('*');
+        const { data: dbActivities, error } = await supabase.from('activities').select('*');
         if (!error && dbActivities && dbActivities.length > 0) {
-          freshList = dbActivities;
-          setActivities(freshList);
-          try {
-            localStorage.setItem('ap_activities', JSON.stringify(freshList));
-          } catch (err) {}
-          db.activities.bulkPut(freshList);
+          const cleanActs = (dbActivities as Activity[]).filter(a => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
+          setActivities(prev => {
+            const merged = mergeEntitiesWithProtection(prev, cleanActs);
+            try {
+              localStorage.setItem('ap_activities', JSON.stringify(merged));
+            } catch (err) {}
+            db.activities.bulkPut(merged);
+            freshList = merged;
+            return merged;
+          });
           return freshList;
         }
       } catch (err) {
@@ -661,11 +713,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const res = await fetch('/api/activities');
       const serverActivities = await res.json();
       if (Array.isArray(serverActivities) && serverActivities.length > 0) {
-        freshList = serverActivities;
-        setActivities(freshList);
-        try {
-          localStorage.setItem('ap_activities', JSON.stringify(freshList));
-        } catch (err) {}
+        const cleanActs = serverActivities.filter((sa: Activity) => sa.id !== 'act-gaming-pc' && !sa.id?.toLowerCase().includes('gaming') && !(sa.type as string)?.toLowerCase().includes('gaming') && !sa.name?.toLowerCase().includes('gaming'));
+        setActivities(prev => {
+          const merged = mergeEntitiesWithProtection(prev, cleanActs);
+          try {
+            localStorage.setItem('ap_activities', JSON.stringify(merged));
+          } catch (err) {}
+          freshList = merged;
+          return merged;
+        });
         return freshList;
       }
     } catch (err) {
@@ -676,10 +732,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // -----------------------------------------------------------------
-  // SUPABASE INITIAL LOAD & AUTOMATIC SYNC
+  // SUPABASE INITIAL LOAD & AUTOMATIC SYNC (PROTECTED AGAINST DUMMY OVERWRITES)
   // -----------------------------------------------------------------
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured || !supabase) return;
 
     const loadDataFromSupabase = async () => {
       try {
@@ -695,41 +751,98 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           { data: dbPayments },
           { data: dbUsers }
         ] = await Promise.all([
-          supabase!.from('activities').select('*'),
-          supabase!.from('food_vendors').select('*'),
-          supabase!.from('menu_items').select('*'),
-          supabase!.from('inventory').select('*'),
-          supabase!.from('bookings').select('*'),
-          supabase!.from('tickets').select('*'),
-          supabase!.from('food_orders').select('*'),
-          supabase!.from('notifications').select('*'),
-          supabase!.from('payments').select('*'),
-          supabase!.from('users').select('*')
+          supabase.from('activities').select('*'),
+          supabase.from('food_vendors').select('*'),
+          supabase.from('menu_items').select('*'),
+          supabase.from('inventory').select('*'),
+          supabase.from('bookings').select('*'),
+          supabase.from('tickets').select('*'),
+          supabase.from('food_orders').select('*'),
+          supabase.from('notifications').select('*'),
+          supabase.from('payments').select('*'),
+          supabase.from('users').select('*')
         ]);
 
         if (dbActivities && dbActivities.length > 0) {
-          // DB is authoritative — replace local state with Supabase data
-          const freshActivities = (dbActivities as Activity[]).filter(a => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
-          try { localStorage.setItem('ap_activities', JSON.stringify(freshActivities)); } catch {}
-          db.activities.bulkPut(freshActivities);
-          setActivities(freshActivities);
+          const cleanActivities = (dbActivities as Activity[]).filter(a => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
+          setActivities(prev => {
+            const merged = mergeEntitiesWithProtection(prev, cleanActivities);
+            try { localStorage.setItem('ap_activities', JSON.stringify(merged)); } catch {}
+            db.activities.bulkPut(merged);
+            return merged;
+          });
         }
-        if (dbVendors && dbVendors.length > 0) { setVendors(dbVendors); try { localStorage.setItem('ap_vendors', JSON.stringify(dbVendors)); } catch {} db.vendors.bulkPut(dbVendors); }
-        if (dbMenuItems && dbMenuItems.length > 0) { setMenuItems(dbMenuItems); try { localStorage.setItem('ap_menu_items', JSON.stringify(dbMenuItems)); } catch {} db.menuItems.bulkPut(dbMenuItems); }
-        if (dbInventory && dbInventory.length > 0) { setInventory(dbInventory); try { localStorage.setItem('ap_inventory', JSON.stringify(dbInventory)); } catch {} db.inventory.bulkPut(dbInventory); }
-        if (dbBookings && dbBookings.length > 0) { setBookings(dbBookings); try { localStorage.setItem('ap_bookings', JSON.stringify(dbBookings)); } catch {} db.bookings.bulkPut(dbBookings); }
-        if (dbTickets && dbTickets.length > 0) { setTickets(dbTickets); try { localStorage.setItem('ap_tickets', JSON.stringify(dbTickets)); } catch {} db.tickets.bulkPut(dbTickets); }
-        if (dbOrders && dbOrders.length > 0) { setOrders(dbOrders); try { localStorage.setItem('ap_orders', JSON.stringify(dbOrders)); } catch {} db.orders.bulkPut(dbOrders); }
-        if (dbNotifications && dbNotifications.length > 0) { setNotifications(dbNotifications); db.notifications.bulkPut(dbNotifications); }
-        if (dbPayments && dbPayments.length > 0) { setPayments(dbPayments); try { localStorage.setItem('ap_payments', JSON.stringify(dbPayments)); } catch {} db.payments.bulkPut(dbPayments); }
+        if (dbVendors && dbVendors.length > 0) {
+          setVendors(prev => {
+            const merged = mergeEntitiesWithProtection(prev, dbVendors);
+            try { localStorage.setItem('ap_vendors', JSON.stringify(merged)); } catch {}
+            db.vendors.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (dbMenuItems && dbMenuItems.length > 0) {
+          setMenuItems(prev => {
+            const merged = mergeEntitiesWithProtection(prev, dbMenuItems);
+            try { localStorage.setItem('ap_menu_items', JSON.stringify(merged)); } catch {}
+            db.menuItems.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (dbInventory && dbInventory.length > 0) {
+          setInventory(prev => {
+            const merged = mergeEntitiesWithProtection(prev, dbInventory);
+            try { localStorage.setItem('ap_inventory', JSON.stringify(merged)); } catch {}
+            db.inventory.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (dbBookings && dbBookings.length > 0) {
+          setBookings(prev => {
+            const merged = mergeEntitiesWithProtection(prev, dbBookings);
+            try { localStorage.setItem('ap_bookings', JSON.stringify(merged)); } catch {}
+            db.bookings.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (dbTickets && dbTickets.length > 0) {
+          setTickets(prev => {
+            const merged = mergeEntitiesWithProtection(prev, dbTickets);
+            try { localStorage.setItem('ap_tickets', JSON.stringify(merged)); } catch {}
+            db.tickets.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (dbOrders && dbOrders.length > 0) {
+          setOrders(prev => {
+            const merged = mergeEntitiesWithProtection(prev, dbOrders);
+            try { localStorage.setItem('ap_orders', JSON.stringify(merged)); } catch {}
+            db.orders.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (dbNotifications && dbNotifications.length > 0) {
+          setNotifications(dbNotifications);
+          db.notifications.bulkPut(dbNotifications);
+        }
+        if (dbPayments && dbPayments.length > 0) {
+          setPayments(prev => {
+            const merged = mergeEntitiesWithProtection(prev, dbPayments);
+            try { localStorage.setItem('ap_payments', JSON.stringify(merged)); } catch {}
+            db.payments.bulkPut(merged);
+            return merged;
+          });
+        }
         if (dbUsers && dbUsers.length > 0) {
           const freshUsers = (dbUsers as User[]).filter(u => u.id !== 'usr-gam' && (u.role as string) !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
-          setUsers(freshUsers);
-          try { localStorage.setItem('ap_users', JSON.stringify(freshUsers)); } catch {}
-          db.users.bulkPut(freshUsers);
+          setUsers(prev => {
+            const merged = mergeEntitiesWithProtection(prev, freshUsers);
+            try { localStorage.setItem('ap_users', JSON.stringify(merged)); } catch {}
+            db.users.bulkPut(merged);
+            return merged;
+          });
         }
       } catch (err) {
-        console.error('Failed to load initial data from Supabase, using localStorage:', err);
+        console.error('Failed to load initial data from Supabase, preserving local storage data:', err);
       }
     };
 
@@ -769,15 +882,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         .then(res => res.json())
         .then(serverActivities => {
           if (Array.isArray(serverActivities) && serverActivities.length > 0) {
+            const cleanActs = serverActivities.filter((sa: Activity) => sa.id !== 'act-gaming-pc' && !sa.id?.toLowerCase().includes('gaming') && !(sa.type as string)?.toLowerCase().includes('gaming') && !sa.name?.toLowerCase().includes('gaming'));
             setActivities(prev => {
-              const map = new Map<string, Activity>();
-              serverActivities
-                .filter((sa: Activity) => sa.id !== 'act-gaming-pc' && !sa.id?.toLowerCase().includes('gaming') && !(sa.type as string)?.toLowerCase().includes('gaming') && !sa.name?.toLowerCase().includes('gaming'))
-                .forEach((sa: Activity) => map.set(sa.id, sa));
-              prev
-                .filter(existing => existing.id !== 'act-gaming-pc' && !existing.id?.toLowerCase().includes('gaming') && !(existing.type as string)?.toLowerCase().includes('gaming') && !existing.name?.toLowerCase().includes('gaming'))
-                .forEach(existing => map.set(existing.id, existing));
-              const mergedList = Array.from(map.values());
+              const mergedList = mergeEntitiesWithProtection(prev, cleanActs);
               try {
                 localStorage.setItem('ap_activities', JSON.stringify(mergedList));
               } catch (err) {}
@@ -790,32 +897,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     fetch('/api/menu-items')
       .then(res => res.json())
-      .then(items => { if (Array.isArray(items) && items.length > 0) setMenuItems(items); })
+      .then(items => {
+        if (Array.isArray(items) && items.length > 0) {
+          setMenuItems(prev => mergeEntitiesWithProtection(prev, items));
+        }
+      })
       .catch(() => {});
 
     fetch('/api/vendors')
       .then(res => res.json())
-      .then(v => { if (Array.isArray(v) && v.length > 0) setVendors(v); })
+      .then(v => {
+        if (Array.isArray(v) && v.length > 0) {
+          setVendors(prev => mergeEntitiesWithProtection(prev, v));
+        }
+      })
       .catch(() => {});
 
     fetch('/api/inventory')
       .then(res => res.json())
-      .then(inv => { if (Array.isArray(inv) && inv.length > 0) setInventory(inv); })
+      .then(inv => {
+        if (Array.isArray(inv) && inv.length > 0) {
+          setInventory(prev => mergeEntitiesWithProtection(prev, inv));
+        }
+      })
       .catch(() => {});
 
     fetch('/api/users')
       .then(res => res.json())
       .then(u => {
         if (Array.isArray(u) && u.length > 0) {
-          setUsers(prev => {
-            const mergedUsers = [...u];
-            prev.forEach(pu => {
-              if (!mergedUsers.some(mu => mu.email.toLowerCase() === pu.email.toLowerCase())) {
-                mergedUsers.push(pu);
-              }
-            });
-            return mergedUsers;
-          });
+          setUsers(prev => mergeEntitiesWithProtection(prev, u));
         }
       })
       .catch(() => {});
@@ -886,25 +997,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => { localStorage.setItem('ap_lapRecords', JSON.stringify(lapRecords)); }, [lapRecords]);
   useEffect(() => { localStorage.setItem('ap_waivers', JSON.stringify(waivers)); }, [waivers]);
 
-  // Periodic multi-terminal synchronization: pulls latest cloud/offline synced data
+  // Periodic multi-terminal synchronization: pulls latest cloud/offline synced data with protection
   useEffect(() => {
-    const mergeEntities = <T extends { id: string }>(prevList: T[], incomingList: T[]): T[] => {
-      if (!Array.isArray(incomingList) || incomingList.length === 0) return prevList;
-      const map = new Map<string, T>();
-      incomingList.forEach(item => { if (item && item.id) map.set(item.id, item); });
-      prevList.forEach(item => {
-        if (item && item.id) {
-          if (!map.has(item.id)) {
-            map.set(item.id, item);
-          } else {
-            const inc = map.get(item.id)!;
-            map.set(item.id, { ...item, ...inc });
-          }
-        }
-      });
-      return Array.from(map.values());
-    };
-
     const pullUnifiedSync = async () => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) return;
       try {
@@ -913,24 +1007,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const data = await res.json();
         if (data) {
           if (Array.isArray(data.bookings) && data.bookings.length > 0) {
-            setBookings(prev => mergeEntities(prev, data.bookings));
+            setBookings(prev => mergeEntitiesWithProtection(prev, data.bookings));
           }
           if (Array.isArray(data.tickets) && data.tickets.length > 0) {
-            setTickets(prev => mergeEntities(prev, data.tickets));
+            setTickets(prev => mergeEntitiesWithProtection(prev, data.tickets));
           }
           if (Array.isArray(data.payments) && data.payments.length > 0) {
-            setPayments(prev => mergeEntities(prev, data.payments));
+            setPayments(prev => mergeEntitiesWithProtection(prev, data.payments));
           }
           if (Array.isArray(data.orders) && data.orders.length > 0) {
-            setOrders(prev => mergeEntities(prev, data.orders));
+            setOrders(prev => mergeEntitiesWithProtection(prev, data.orders));
           }
           if (Array.isArray(data.users) && data.users.length > 0) {
             const cleanUsers = data.users.filter((u: any) => u.id !== 'usr-gam' && u.role !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
-            setUsers(prev => mergeEntities(prev, cleanUsers));
+            setUsers(prev => mergeEntitiesWithProtection(prev, cleanUsers));
           }
           if (Array.isArray(data.activities) && data.activities.length > 0) {
             const cleanActs = data.activities.filter((a: any) => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
-            setActivities(prev => mergeEntities(prev, cleanActs));
+            setActivities(prev => mergeEntitiesWithProtection(prev, cleanActs));
+          }
+          if (Array.isArray(data.menuItems) && data.menuItems.length > 0) {
+            setMenuItems(prev => mergeEntitiesWithProtection(prev, data.menuItems));
+          }
+          if (Array.isArray(data.vendors) && data.vendors.length > 0) {
+            setVendors(prev => mergeEntitiesWithProtection(prev, data.vendors));
+          }
+          if (Array.isArray(data.inventory) && data.inventory.length > 0) {
+            setInventory(prev => mergeEntitiesWithProtection(prev, data.inventory));
           }
         }
       } catch (err) {
@@ -1024,13 +1127,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Activity Actions
   const addActivity = (act: Omit<Activity, 'id'>) => {
+    const now = new Date().toISOString();
     const newAct: Activity = {
       ...act,
-      id: `act-dynamic-${Date.now()}`
+      id: `act-dynamic-${Date.now()}`,
+      updatedAt: now
     };
     setActivities(prev => {
       const updatedList = [...prev, newAct];
       persistActivities(updatedList);
+      try {
+        db.activities.put(newAct);
+      } catch (e) {}
       return updatedList;
     });
 
@@ -1072,92 +1180,110 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
-    if (isSupabaseConfigured) {
-      // 2. Fetch current record to audit price changes
-      const { data: oldDbAct } = await supabase!.from('activities').select('*').eq('id', act.id).single();
+    const stampedAct: Activity = {
+      ...act,
+      updatedAt: new Date().toISOString()
+    };
 
-      // 3. Write directly to Supabase using UPSERT (handles existing rows and missing rows seamlessly)
-      const strictBasePayload = {
-        id: act.id,
-        name: act.name,
-        description: act.description,
-        adultPrice: act.adultPrice,
-        childPrice: act.childPrice,
-        image: act.image,
-        dailyLimit: act.dailyLimit,
-        safetyInstructions: act.safetyInstructions,
-        packages: act.packages,
-        type: act.type
-      };
-
-      let { data: updatedDbRow, error } = await supabase!
-        .from('activities')
-        .upsert(act, { onConflict: 'id' })
-        .select()
-        .single();
-
-      // If full payload fails due to schema/column mismatch or constraint, fall back to strict base columns with upsert
-      if (error) {
-        console.warn('[updateActivity] Full upsert failed, falling back to strict base columns:', error.message);
-        const fallbackRes = await supabase!
-          .from('activities')
-          .upsert(strictBasePayload, { onConflict: 'id' })
-          .select()
-          .single();
-        
-        updatedDbRow = fallbackRes.data;
-        error = fallbackRes.error;
-      }
-
-      if (error) {
-        console.error('[updateActivity] Database upsert failed:', error);
-        throw new Error(`Failed to save package changes to database: ${error.message}`);
-      }
-
-      // 4. Audit Log price modifications
-      if (oldDbAct && act.packages && oldDbAct.packages) {
-        const oldPackagesMap = new Map<string, number>();
-        (oldDbAct.packages as ActivityPackage[]).forEach((p: ActivityPackage) => oldPackagesMap.set(p.id, p.price));
-
-        for (const pkg of act.packages) {
-          const oldPrice = oldPackagesMap.get(pkg.id);
-          if (oldPrice !== undefined && oldPrice !== pkg.price) {
-            try {
-              await supabase!.from('package_price_history').insert({
-                activity_id: act.id,
-                package_id: pkg.id,
-                package_name: pkg.name,
-                old_price: oldPrice,
-                new_price: pkg.price,
-                changed_by: currentUser?.name || currentUser?.email || 'admin',
-                changed_at: new Date().toISOString()
-              });
-            } catch (e) {
-              console.warn('[audit-log] Price history insert error:', e);
-            }
-          }
-        }
-      }
-
-      // 5. Refetch fresh data from DB to confirm application state
-      await refetchActivitiesFromDatabase();
-      return updatedDbRow || act;
-    }
-
-    // Local server mode fallback
+    // Always update local React state, localStorage, and IndexedDB immediately!
     setActivities(prev => {
-      const updatedList = prev.map(item => item.id === act.id ? act : item);
+      const updatedList = prev.map(item => item.id === stampedAct.id ? stampedAct : item);
       persistActivities(updatedList);
+      try {
+        db.activities.put(stampedAct);
+      } catch (e) {}
       return updatedList;
     });
 
-    return act;
+    if (isSupabaseConfigured) {
+      try {
+        // 2. Fetch current record to audit price changes
+        const { data: oldDbAct } = await supabase!.from('activities').select('*').eq('id', stampedAct.id).single();
+
+        // 3. Write directly to Supabase using UPSERT (handles existing rows and missing rows seamlessly)
+        const strictBasePayload = {
+          id: stampedAct.id,
+          name: stampedAct.name,
+          description: stampedAct.description,
+          adultPrice: stampedAct.adultPrice,
+          childPrice: stampedAct.childPrice,
+          image: stampedAct.image,
+          dailyLimit: stampedAct.dailyLimit,
+          safetyInstructions: stampedAct.safetyInstructions,
+          packages: stampedAct.packages,
+          type: stampedAct.type,
+          updatedAt: stampedAct.updatedAt
+        };
+
+        let { data: updatedDbRow, error } = await supabase!
+          .from('activities')
+          .upsert(stampedAct, { onConflict: 'id' })
+          .select()
+          .single();
+
+        // If full payload fails due to schema/column mismatch or constraint, fall back to strict base columns with upsert
+        if (error) {
+          console.warn('[updateActivity] Full upsert failed, falling back to strict base columns:', error.message);
+          const fallbackRes = await supabase!
+            .from('activities')
+            .upsert(strictBasePayload, { onConflict: 'id' })
+            .select()
+            .single();
+          
+          updatedDbRow = fallbackRes.data;
+          error = fallbackRes.error;
+        }
+
+        if (error) {
+          console.warn('[updateActivity] Database upsert returned error, preserving local copy:', error);
+          writeToLocalAndSync('activities', 'update', stampedAct);
+        }
+
+        // 4. Audit Log price modifications
+        if (oldDbAct && stampedAct.packages && oldDbAct.packages) {
+          const oldPackagesMap = new Map<string, number>();
+          (oldDbAct.packages as ActivityPackage[]).forEach((p: ActivityPackage) => oldPackagesMap.set(p.id, p.price));
+
+          for (const pkg of stampedAct.packages) {
+            const oldPrice = oldPackagesMap.get(pkg.id);
+            if (oldPrice !== undefined && oldPrice !== pkg.price) {
+              try {
+                await supabase!.from('package_price_history').insert({
+                  activity_id: stampedAct.id,
+                  package_id: pkg.id,
+                  package_name: pkg.name,
+                  old_price: oldPrice,
+                  new_price: pkg.price,
+                  changed_by: currentUser?.name || currentUser?.email || 'admin',
+                  changed_at: new Date().toISOString()
+                });
+              } catch (e) {
+                console.warn('[audit-log] Price history insert error:', e);
+              }
+            }
+          }
+        }
+
+        // 5. Refetch fresh data from DB to confirm application state
+        await refetchActivitiesFromDatabase();
+        return updatedDbRow || stampedAct;
+      } catch (e) {
+        console.warn('[updateActivity] Supabase interaction exception, local updates securely retained:', e);
+        writeToLocalAndSync('activities', 'update', stampedAct);
+        return stampedAct;
+      }
+    }
+
+    return stampedAct;
   };
 
   const deleteActivity = (id: string) => {
     setActivities(prev => {
       const updatedList = prev.filter(item => item.id !== id);
       persistActivities(updatedList);
+      try {
+        db.activities.delete(id);
+      } catch (e) {}
       return updatedList;
     });
 
@@ -1181,8 +1307,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           uploadedAt: new Date().toISOString(),
           order: existingPhotos.length
         };
-        const updated = { ...act, photos: [...existingPhotos, newPhoto] };
+        const updated = { ...act, photos: [...existingPhotos, newPhoto], updatedAt: new Date().toISOString() };
         if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        try {
+          db.activities.put(updated);
+        } catch (e) {}
         return updated;
       });
       persistActivities(updatedList);
@@ -1199,9 +1328,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const updated = {
           ...act,
           photos: reordered,
-          coverPhotoId: act.coverPhotoId === photoId ? undefined : act.coverPhotoId
+          coverPhotoId: act.coverPhotoId === photoId ? undefined : act.coverPhotoId,
+          updatedAt: new Date().toISOString()
         };
         if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        try {
+          db.activities.put(updated);
+        } catch (e) {}
         return updated;
       });
       persistActivities(updatedList);
@@ -1213,8 +1346,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActivities(prev => {
       const updatedList = prev.map(act => {
         if (act.id !== activityId) return act;
-        const updated = { ...act, photos: reorderedPhotos.map((p, idx) => ({ ...p, order: idx })) };
+        const updated = { ...act, photos: reorderedPhotos.map((p, idx) => ({ ...p, order: idx })), updatedAt: new Date().toISOString() };
         if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        try {
+          db.activities.put(updated);
+        } catch (e) {}
         return updated;
       });
       persistActivities(updatedList);
@@ -1231,9 +1367,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           ...act,
           coverPhotoId: photoId,
           // Also update the main image to the selected cover photo
-          image: photo ? photo.url : act.image
+          image: photo ? photo.url : act.image,
+          updatedAt: new Date().toISOString()
         };
         if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        try {
+          db.activities.put(updated);
+        } catch (e) {}
         return updated;
       });
       persistActivities(updatedList);
@@ -1245,8 +1385,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActivities(prev => {
       const updatedList = prev.map(act => {
         if (act.id !== activityId) return act;
-        const updated = { ...act, ...fields };
+        const updated = { ...act, ...fields, updatedAt: new Date().toISOString() };
         if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        try {
+          db.activities.put(updated);
+        } catch (e) {}
         return updated;
       });
       persistActivities(updatedList);
@@ -1263,8 +1406,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           id: `offer-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           createdAt: new Date().toISOString()
         };
-        const updated = { ...act, offers: [...(act.offers || []), newOffer] };
+        const updated = { ...act, offers: [...(act.offers || []), newOffer], updatedAt: new Date().toISOString() };
         if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        try {
+          db.activities.put(updated);
+        } catch (e) {}
         return updated;
       });
       persistActivities(updatedList);
@@ -1276,8 +1422,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActivities(prev => {
       const updatedList = prev.map(act => {
         if (act.id !== activityId) return act;
-        const updated = { ...act, offers: (act.offers || []).map(o => o.id === offer.id ? offer : o) };
+        const updated = { ...act, offers: (act.offers || []).map(o => o.id === offer.id ? offer : o), updatedAt: new Date().toISOString() };
         if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        try {
+          db.activities.put(updated);
+        } catch (e) {}
         return updated;
       });
       persistActivities(updatedList);
@@ -1289,8 +1438,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActivities(prev => {
       const updatedList = prev.map(act => {
         if (act.id !== activityId) return act;
-        const updated = { ...act, offers: (act.offers || []).filter(o => o.id !== offerId) };
+        const updated = { ...act, offers: (act.offers || []).filter(o => o.id !== offerId), updatedAt: new Date().toISOString() };
         if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        try {
+          db.activities.put(updated);
+        } catch (e) {}
         return updated;
       });
       persistActivities(updatedList);
@@ -1302,8 +1454,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActivities(prev => {
       const updatedList = prev.map(act => {
         if (act.id !== activityId) return act;
-        const updated = { ...act, offers: (act.offers || []).map(o => o.id === offerId ? { ...o, isActive: active } : o) };
+        const updated = { ...act, offers: (act.offers || []).map(o => o.id === offerId ? { ...o, isActive: active } : o), updatedAt: new Date().toISOString() };
         if (isSupabaseConfigured) writeToLocalAndSync('activities', 'update', updated);
+        try {
+          db.activities.put(updated);
+        } catch (e) {}
         return updated;
       });
       persistActivities(updatedList);
@@ -1313,14 +1468,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // User Management
   const updateUserRole = (userId: string, role: UserRole) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
-    writeToLocalAndSync('users', 'update', { id: userId, role });
+    const now = new Date().toISOString();
+    setUsers(prev => {
+      const updated = prev.map(u => u.id === userId ? { ...u, role, updatedAt: now } : u);
+      try {
+        localStorage.setItem('ap_users', JSON.stringify(updated));
+        db.users.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+    writeToLocalAndSync('users', 'update', { id: userId, role, updatedAt: now });
   };
 
   const addUser = (userData: User | Omit<User, 'id'>) => {
+    const now = new Date().toISOString();
     const newUser: User = {
       ...userData,
-      id: ('id' in userData && userData.id) ? userData.id : `usr-cust-${Date.now()}`
+      id: ('id' in userData && userData.id) ? userData.id : `usr-cust-${Date.now()}`,
+      updatedAt: now
     };
 
     setUsers(prev => {
@@ -1334,6 +1499,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       try {
         localStorage.setItem('ap_users', JSON.stringify(updated));
+        db.users.bulkPut(updated);
       } catch (err) {
         console.warn('[frontend] Failed to save users to localStorage:', err);
       }
@@ -1918,13 +2084,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Vendor Actions
-  // Vendor Actions
   const addVendor = (v: Omit<FoodVendor, 'id'>) => {
+    const now = new Date().toISOString();
     const newVendor: FoodVendor = {
       ...v,
-      id: `vendor-dynamic-${Date.now()}`
+      id: `vendor-dynamic-${Date.now()}`,
+      updatedAt: now
     };
-    setVendors(prev => [...prev, newVendor]);
+    setVendors(prev => {
+      const updated = [...prev, newVendor];
+      try {
+        localStorage.setItem('ap_vendors', JSON.stringify(updated));
+        db.vendors.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
     writeToLocalAndSync('vendors', 'insert', newVendor);
 
     sendMockNotification(
@@ -1936,25 +2110,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateVendor = (v: FoodVendor) => {
-    setVendors(prev => prev.map(item => item.id === v.id ? v : item));
-    writeToLocalAndSync('vendors', 'update', v);
+    const stampedVendor: FoodVendor = {
+      ...v,
+      updatedAt: new Date().toISOString()
+    };
+    setVendors(prev => {
+      const updated = prev.map(item => item.id === stampedVendor.id ? stampedVendor : item);
+      try {
+        localStorage.setItem('ap_vendors', JSON.stringify(updated));
+        db.vendors.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+    writeToLocalAndSync('vendors', 'update', stampedVendor);
   };
 
   const deleteVendor = (id: string) => {
-    setVendors(prev => prev.filter(item => item.id !== id));
+    setVendors(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      try {
+        localStorage.setItem('ap_vendors', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
     writeToLocalAndSync('vendors', 'delete', { id });
   };
 
   // Menu Actions
   const addMenuItem = (item: Omit<MenuItem, 'id'>) => {
+    const now = new Date().toISOString();
     const newItem: MenuItem = {
       ...item,
-      id: `menu-dynamic-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+      id: `menu-dynamic-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      updatedAt: now
     };
     setMenuItems(prev => {
       const updated = [...prev, newItem];
       try {
         localStorage.setItem('ap_menu_items', JSON.stringify(updated));
+        db.menuItems.bulkPut(updated);
       } catch (e) {}
       return updated;
     });
@@ -1963,15 +2157,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addBulkMenuItems = (items: Array<Omit<MenuItem, 'id'>>) => {
+    const now = new Date().toISOString();
     const newItems: MenuItem[] = items.map((item, idx) => ({
       ...item,
-      id: `menu-dynamic-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`
+      id: `menu-dynamic-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+      updatedAt: now
     }));
 
     setMenuItems(prev => {
       const updated = [...prev, ...newItems];
       try {
         localStorage.setItem('ap_menu_items', JSON.stringify(updated));
+        db.menuItems.bulkPut(updated);
       } catch (e) {}
       return updated;
     });
@@ -1980,24 +2177,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateMenuItem = (item: MenuItem) => {
-    setMenuItems(prev => prev.map(m => m.id === item.id ? item : m));
-    writeToLocalAndSync('menuItems', 'update', item);
+    const stampedItem: MenuItem = {
+      ...item,
+      updatedAt: new Date().toISOString()
+    };
+    setMenuItems(prev => {
+      const updated = prev.map(m => m.id === stampedItem.id ? stampedItem : m);
+      try {
+        localStorage.setItem('ap_menu_items', JSON.stringify(updated));
+        db.menuItems.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+    writeToLocalAndSync('menuItems', 'update', stampedItem);
   };
 
   const deleteMenuItem = (id: string) => {
-    setMenuItems(prev => prev.filter(m => m.id !== id));
+    setMenuItems(prev => {
+      const updated = prev.filter(m => m.id !== id);
+      try {
+        localStorage.setItem('ap_menu_items', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
     writeToLocalAndSync('menuItems', 'delete', { id });
   };
 
   const updateMenuItemStock = (itemId: string, newStock: number) => {
     const cleanStock = Math.max(0, newStock);
+    const now = new Date().toISOString();
     setMenuItems(prev => {
       const updatedList = prev.map(m => {
         if (m.id === itemId) {
           const updated = {
             ...m,
             stockQuantity: cleanStock,
-            isAvailable: cleanStock > 0
+            isAvailable: cleanStock > 0,
+            updatedAt: now
           };
           writeToLocalAndSync('menuItems', 'update', updated);
           return updated;
@@ -2013,6 +2229,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const adjustMenuItemStock = (itemId: string, delta: number) => {
+    const now = new Date().toISOString();
     setMenuItems(prev => {
       const updatedList = prev.map(m => {
         if (m.id === itemId) {
@@ -2021,7 +2238,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const updated = {
             ...m,
             stockQuantity: cleanStock,
-            isAvailable: cleanStock > 0
+            isAvailable: cleanStock > 0,
+            updatedAt: now
           };
           writeToLocalAndSync('menuItems', 'update', updated);
           return updated;
@@ -2038,36 +2256,54 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Inventory Management
   const updateInventoryStock = (id: string, amount: number, mode: 'set' | 'adjust') => {
-    setInventory(prev => prev.map(item => {
-      if (item.id === id) {
-        const nextStock = mode === 'set' ? amount : item.currentStock + amount;
-        const boundedStock = Math.max(0, nextStock);
+    const now = new Date().toISOString();
+    setInventory(prev => {
+      const updatedList = prev.map(item => {
+        if (item.id === id) {
+          const nextStock = mode === 'set' ? amount : item.currentStock + amount;
+          const boundedStock = Math.max(0, nextStock);
+          const updatedItem = { ...item, currentStock: boundedStock, updatedAt: now };
 
-        writeToLocalAndSync('inventory', 'update', { id, currentStock: boundedStock });
+          writeToLocalAndSync('inventory', 'update', updatedItem);
 
-        // Check if stock dips below minimum level
-        if (boundedStock <= item.minStockLevel && item.currentStock > item.minStockLevel) {
-          const ownerEmail = vendors.find(v => v.id === item.vendorId)?.ownerName.toLowerCase().replace(' ', '') + '@example.com';
-          sendMockNotification(
-            ownerEmail || 'vendor@example.com',
-            '⚠️ CRITICAL: Low Stock Alert!',
-            `Ingredient "${item.name}" has reached low stock: ${boundedStock} ${item.unit} remaining. Minimum alert level: ${item.minStockLevel} ${item.unit}. Please purchase restocking items!`,
-            'email'
-          );
+          // Check if stock dips below minimum level
+          if (boundedStock <= item.minStockLevel && item.currentStock > item.minStockLevel) {
+            const ownerEmail = vendors.find(v => v.id === item.vendorId)?.ownerName.toLowerCase().replace(' ', '') + '@example.com';
+            sendMockNotification(
+              ownerEmail || 'vendor@example.com',
+              '⚠️ CRITICAL: Low Stock Alert!',
+              `Ingredient "${item.name}" has reached low stock: ${boundedStock} ${item.unit} remaining. Minimum alert level: ${item.minStockLevel} ${item.unit}. Please purchase restocking items!`,
+              'email'
+            );
+          }
+
+          return updatedItem;
         }
-
-        return { ...item, currentStock: boundedStock };
-      }
-      return item;
-    }));
+        return item;
+      });
+      try {
+        localStorage.setItem('ap_inventory', JSON.stringify(updatedList));
+        db.inventory.bulkPut(updatedList);
+      } catch (e) {}
+      return updatedList;
+    });
   };
 
   const addInventoryItem = (item: Omit<InventoryItem, 'id'>) => {
+    const now = new Date().toISOString();
     const newItem: InventoryItem = {
       ...item,
-      id: `inv-dynamic-${Date.now()}`
+      id: `inv-dynamic-${Date.now()}`,
+      updatedAt: now
     };
-    setInventory(prev => [...prev, newItem]);
+    setInventory(prev => {
+      const updated = [...prev, newItem];
+      try {
+        localStorage.setItem('ap_inventory', JSON.stringify(updated));
+        db.inventory.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
     writeToLocalAndSync('inventory', 'insert', newItem);
   };
 

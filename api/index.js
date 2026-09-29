@@ -545,6 +545,7 @@ const notificationsStore = createJsonStore('notifications_store.json', []);
 const kartsStore = createJsonStore('karts_store.json', []);
 const sessionsStore = createJsonStore('sessions_store.json', []);
 const waiversStore = createJsonStore('waivers_store.json', []);
+const activitiesStore = createJsonStore('activities_store.json', []);
 
 app.get('/api/menu-items', (req, res) => res.json(menuItemsStore.get()));
 app.post('/api/menu-items', (req, res) => {
@@ -601,31 +602,8 @@ app.post('/api/notifications', (req, res) => {
 });
 
 // ─── ACTIVITIES BACKEND PERSISTENCE ─────────────────────────────────────────
-const persistentActivitiesFile = path.join(__dirname, 'activities_store.json');
-const tmpActivitiesPath = path.join('/tmp', 'activities.json');
-let inMemoryActivities = null;
-
-const getActivitiesHelper = () => {
-  try {
-    let acts = inMemoryActivities;
-    if (!acts && fs.existsSync(persistentActivitiesFile)) {
-      acts = JSON.parse(fs.readFileSync(persistentActivitiesFile, 'utf8'));
-    }
-    if (!acts && fs.existsSync(tmpActivitiesPath)) {
-      acts = JSON.parse(fs.readFileSync(tmpActivitiesPath, 'utf8'));
-    }
-    if (Array.isArray(acts) && acts.length > 0) {
-      inMemoryActivities = acts;
-      return acts;
-    }
-  } catch (e) {
-    console.error('[backend] Failed to read activities file:', e);
-  }
-  return [];
-};
-
 app.get('/api/activities', (req, res) => {
-  res.json(getActivitiesHelper());
+  res.json(activitiesStore.get());
 });
 
 app.post('/api/activities', (req, res) => {
@@ -644,17 +622,7 @@ app.post('/api/activities', (req, res) => {
           }
         }
       }
-      inMemoryActivities = activities;
-      try {
-        fs.writeFileSync(persistentActivitiesFile, JSON.stringify(activities, null, 2), 'utf8');
-      } catch (err) {
-        console.warn('[backend] Could not write persistent activities store:', err);
-      }
-      try {
-        fs.writeFileSync(tmpActivitiesPath, JSON.stringify(activities, null, 2), 'utf8');
-      } catch (err) {
-        console.warn('[backend] Could not write activities to /tmp:', err);
-      }
+      activitiesStore.set(activities);
       return res.json({ success: true, count: activities.length });
     }
     res.status(400).json({ success: false, message: 'Expected array of activities' });
@@ -673,7 +641,7 @@ app.get('/api/sync/all', (req, res) => {
     orders: ordersStore.get(),
     notifications: notificationsStore.get(),
     users: usersStore.get(),
-    activities: getActivitiesHelper(),
+    activities: activitiesStore.get(),
     menuItems: menuItemsStore.get(),
     vendors: vendorsStore.get(),
     inventory: inventoryStore.get(),
@@ -706,7 +674,8 @@ app.post('/api/sync/batch', (req, res) => {
       'menuItems': menuItemsStore,
       'food_vendors': vendorsStore,
       'vendors': vendorsStore,
-      'inventory': inventoryStore
+      'inventory': inventoryStore,
+      'activities': activitiesStore
     };
 
     let processedCount = 0;

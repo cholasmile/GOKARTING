@@ -13,6 +13,7 @@ export interface User {
   role: UserRole;
   password?: string;
   vendorId?: string; // If role is 'food_vendor'
+  updatedAt?: string;
 }
 
 export interface ActivityPackage {
@@ -73,6 +74,7 @@ export interface Activity {
   isActive?: boolean;
   displayOrder?: number;
   offers?: ActivityOffer[];
+  updatedAt?: string;
 }
 
 export interface Booking {
@@ -102,6 +104,7 @@ export interface Booking {
   packageId?: string;
   packageName?: string;
   unitPrice?: number;
+  updatedAt?: string;
 }
 
 export interface Ticket {
@@ -126,6 +129,7 @@ export interface Ticket {
   packageId?: string;
   packageName?: string;
   unitPrice?: number;
+  updatedAt?: string;
 }
 
 export interface FoodVendor {
@@ -135,6 +139,7 @@ export interface FoodVendor {
   image: string;
   ownerName: string;
   stallNumber: string;
+  updatedAt?: string;
 }
 
 export interface MenuItem {
@@ -148,6 +153,7 @@ export interface MenuItem {
   isAvailable: boolean;
   image: string;
   stockQuantity?: number;
+  updatedAt?: string;
 }
 
 export interface FoodOrderItem {
@@ -171,6 +177,7 @@ export interface FoodOrder {
   status: OrderStatus;
   paymentStatus: 'pending' | 'paid';
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface InventoryItem {
@@ -180,6 +187,7 @@ export interface InventoryItem {
   currentStock: number;
   minStockLevel: number;
   unit: string;
+  updatedAt?: string;
 }
 
 export interface Payment {
