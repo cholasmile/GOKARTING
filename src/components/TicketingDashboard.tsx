@@ -18,7 +18,6 @@ const TicketingDashboard: React.FC = () => {
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'food_street' | 'history'>('new_booking');
-  const [historyDateFilter, setHistoryDateFilter] = useState<'today' | 'all'>('today');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Cancel & Refund Modal States
@@ -179,15 +178,18 @@ const TicketingDashboard: React.FC = () => {
     if (!timestampStr) return false;
     const d = new Date(timestampStr);
     if (isNaN(d.getTime())) return false;
-    return d.toDateString() === new Date().toDateString();
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() &&
+           d.getMonth() === now.getMonth() &&
+           d.getDate() === now.getDate();
   };
 
   const filteredRawPayments = payments.filter(p => {
     const isCounter = p.counterId === 'counter_1' || p.staffId || p.method === 'cash' || p.method === 'qrcode' || p.method === 'upi' || p.method.startsWith('card');
     if (!isCounter) return false;
 
-    // Filter by Today / All
-    if (historyDateFilter === 'today' && !isDateToday(p.timestamp)) {
+    // Show strictly CURRENT DAY history only on the ticketing page
+    if (!isDateToday(p.timestamp)) {
       return false;
     }
 
@@ -296,9 +298,9 @@ const TicketingDashboard: React.FC = () => {
         </button>
         <button 
           onClick={() => setActiveSubTab('history')}
-          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 ${activeSubTab === 'history' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
+          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 ${activeSubTab === 'history' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
         >
-          Counter Transaction History
+          <Clock className="w-4 h-4" /> Today's Transactions ({counterPayments.length})
         </button>
       </div>
 
@@ -366,7 +368,7 @@ const TicketingDashboard: React.FC = () => {
                 </span>
                 <div>
                   <h3 className="text-sm font-bold text-white font-sans">
-                    Today's Counter Transactions ({todayCounterList.length})
+                    Today's Counter Transactions ({counterPayments.length})
                   </h3>
                   <p className="text-[10px] text-[#94A3B8]">
                     Live walk-in bookings processed today • Total Collection: <strong className="text-[#40E0D0]">₹{todayTotalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
@@ -376,12 +378,11 @@ const TicketingDashboard: React.FC = () => {
 
               <button
                 onClick={() => {
-                  setHistoryDateFilter('today');
                   setActiveSubTab('history');
                 }}
                 className="text-xs font-mono text-[#40E0D0] hover:underline flex items-center gap-1 cursor-pointer font-bold"
               >
-                View Full Today History <ArrowRight className="w-3.5 h-3.5" />
+                View Today's Full Ledger <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -596,7 +597,7 @@ const TicketingDashboard: React.FC = () => {
       ) : (
         <div className="glass-panel rounded-2xl p-6 border border-[#00ABAB]/30 space-y-6 animate-fade-in">
           
-          {/* ── 1. HEADER & DATE FILTER CONTROLS ── */}
+          {/* ── 1. HEADER & TODAY FILTER BADGE ── */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#1C1C1C] pb-5">
             <div>
               <div className="flex items-center gap-2">
@@ -605,45 +606,26 @@ const TicketingDashboard: React.FC = () => {
                 </span>
                 <div>
                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                    Counter Walk-in Transaction Ledger
-                    <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-[#00ABAB]/20 text-[#40E0D0] border border-[#00ABAB]/40">
-                      {historyDateFilter === 'today' ? "Today's Only" : "All History"}
+                    Today's Counter Transaction Ledger
+                    <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-[#00ABAB]/20 text-[#40E0D0] border border-[#00ABAB]/40 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Today's Transactions Only
                     </span>
                   </h2>
                   <p className="text-xs text-[#94A3B8]">
-                    Audit stream of walk-in ticket sales, cash tendered with change returned, and UPI QR settlements
+                    Live audit stream of today's walk-in ticket sales, cash tendered with change returned, and UPI QR settlements
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* Date Scope Filter Buttons */}
-              <div className="flex items-center bg-[#0A0A0A] p-1 rounded-xl border border-[#1C1C1C]">
-                <button
-                  type="button"
-                  onClick={() => setHistoryDateFilter('today')}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                    historyDateFilter === 'today'
-                      ? 'bg-[#00ABAB] text-black shadow-[0_0_12px_rgba(0,171,171,0.5)]'
-                      : 'text-[#94A3B8] hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>Today ({todayCounterList.length})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHistoryDateFilter('all')}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                    historyDateFilter === 'all'
-                      ? 'bg-[#00ABAB] text-black shadow-[0_0_12px_rgba(0,171,171,0.5)]'
-                      : 'text-[#94A3B8] hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>All History ({payments.length})</span>
-                </button>
+              {/* Date Indicator Badge */}
+              <div className="flex items-center gap-2 bg-[#0A0A0A] px-3.5 py-2 rounded-xl border border-[#00ABAB]/30 text-[#40E0D0] text-xs font-bold font-mono">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                <span className="bg-[#00ABAB]/20 px-2 py-0.5 rounded-md text-[10px] text-white">
+                  {counterPayments.length} Today
+                </span>
               </div>
 
               {/* Search Bar */}
@@ -655,7 +637,7 @@ const TicketingDashboard: React.FC = () => {
                   type="text"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  placeholder="Search guest, ticket, UTR..."
+                  placeholder="Search today's transactions..."
                   className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl py-2 pl-9 pr-4 text-xs text-white placeholder-[#94A3B8] focus:outline-none focus:border-[#00ABAB] transition-all font-mono"
                 />
               </div>
@@ -757,11 +739,9 @@ const TicketingDashboard: React.FC = () => {
                   <tr>
                     <td colSpan={8} className="p-12 text-center text-[#94A3B8] font-mono space-y-2">
                       <Receipt className="w-8 h-8 mx-auto text-[#1C1C1C]" />
-                      <p className="font-bold text-sm text-white">No Counter Transactions Found</p>
-                      <p className="text-xs">
-                        {historyDateFilter === 'today' 
-                          ? "No counter walk-in tickets were issued today yet. Switch to 'All History' to inspect older transactions."
-                          : "No historical counter transactions found matching your query."}
+                      <p className="font-bold text-sm text-white">No Counter Transactions Today</p>
+                      <p className="text-xs text-[#94A3B8]">
+                        No counter walk-in tickets or transactions have been processed today yet.
                       </p>
                     </td>
                   </tr>
