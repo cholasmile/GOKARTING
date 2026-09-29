@@ -14,7 +14,8 @@ import {
   TrendingUp, Users, Ticket, Utensils, Award, ShieldAlert,
   Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle,
   MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check,
-  Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag, RotateCcw, Monitor, Gamepad2
+  Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag, RotateCcw, Monitor, Gamepad2,
+  CalendarRange, Clock, ArrowUpRight, ChevronDown, CalendarDays, ShoppingBag, Sparkles
 } from 'lucide-react';
 import ActivityManagementPanel from './admin/ActivityManagementPanel';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
@@ -33,82 +34,10 @@ export const AdminDashboard: React.FC = () => {
 
   const activeActivities = activities.filter(a => !a.id.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('arena'));
 
-  // Bulk & Single add menu modal state
-  const [isBulkMenuModalOpen, setIsBulkMenuModalOpen] = useState(false);
-  const [isAdminMenuModalOpen, setIsAdminMenuModalOpen] = useState(false);
-  const [editingAdminMenuItem, setEditingAdminMenuItem] = useState<MenuItem | null>(null);
-  const [adminMenuForm, setAdminMenuForm] = useState({
-    name: '',
-    description: '',
-    price: 5.0,
-    category: 'Beverages',
-    vendorId: '',
-    image: '',
-    stockQuantity: 50,
-    isAvailable: true
-  });
+  // Cafe & Retail Sales Sync Filter State
   const [adminMenuSearch, setAdminMenuSearch] = useState('');
   const [adminVendorFilter, setAdminVendorFilter] = useState('all');
-
-  const handleSaveAdminMenu = (e: React.FormEvent) => {
-    e.preventDefault();
-    const defaultImage = adminMenuForm.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=300&q=80';
-    const targetVendorId = adminMenuForm.vendorId || (vendors[0]?.id || 'vendor-forest-cafe');
-    const qty = Number(adminMenuForm.stockQuantity) || 0;
-
-    if (editingAdminMenuItem) {
-      updateMenuItem({
-        ...editingAdminMenuItem,
-        name: adminMenuForm.name,
-        description: adminMenuForm.description,
-        price: Number(adminMenuForm.price),
-        category: adminMenuForm.category,
-        vendorId: targetVendorId,
-        image: defaultImage,
-        stockQuantity: qty,
-        isAvailable: qty > 0 ? adminMenuForm.isAvailable : false
-      });
-    } else {
-      addMenuItem({
-        vendorId: targetVendorId,
-        name: adminMenuForm.name,
-        description: adminMenuForm.description,
-        price: Number(adminMenuForm.price),
-        category: adminMenuForm.category,
-        image: defaultImage,
-        stockQuantity: qty,
-        isAvailable: qty > 0 ? adminMenuForm.isAvailable : false
-      });
-    }
-
-    setIsAdminMenuModalOpen(false);
-    setEditingAdminMenuItem(null);
-    setAdminMenuForm({
-      name: '',
-      description: '',
-      price: 5.0,
-      category: 'Beverages',
-      vendorId: '',
-      image: '',
-      stockQuantity: 50,
-      isAvailable: true
-    });
-  };
-
-  const handleEditAdminMenuClick = (item: MenuItem) => {
-    setEditingAdminMenuItem(item);
-    setAdminMenuForm({
-      name: item.name,
-      description: item.description,
-      price: item.price,
-      category: item.category,
-      vendorId: item.vendorId,
-      image: item.image,
-      stockQuantity: item.stockQuantity ?? 50,
-      isAvailable: item.isAvailable
-    });
-    setIsAdminMenuModalOpen(true);
-  };
+  const [salesDateFilter, setSalesDateFilter] = useState<'all' | 'today' | 'week'>('all');
 
   // Payment settings local state
   const {
@@ -294,31 +223,152 @@ export const AdminDashboard: React.FC = () => {
   const [exportAlert, setExportAlert] = useState<string | null>(null);
 
   // -----------------------------------------------------------------
-  // COMPUTE ANALYTICS METRICS
+  // ANALYTICS SALES FILTER STATE & COMPUTATION
   // -----------------------------------------------------------------
-  const totalActivityRevenue = bookings.reduce((sum, b) => sum + b.totalAmount, 0);
-  const totalFoodRevenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
-  const totalRevenue = totalActivityRevenue + totalFoodRevenue;
-  const totalVisitors = bookings.reduce((sum, b) => sum + b.quantity, 0);
+  const [analyticsDateFilter, setAnalyticsDateFilter] = useState<'all' | 'today' | 'yesterday' | '7days' | '30days' | 'this_month' | 'last_month' | 'custom'>('all');
+  const [analyticsCustomStart, setAnalyticsCustomStart] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [analyticsCustomEnd, setAnalyticsCustomEnd] = useState<string>(() => {
+    return new Date().toISOString().split('T')[0];
+  });
 
-  // Activity performance metric (by total bookings)
-  const activityPerformanceData = activeActivities.map(act => {
-    const actBookings = bookings.filter(b => b.activityId === act.id);
-    const revenue = actBookings.reduce((sum, b) => sum + b.totalAmount, 0);
-    const ticketsSold = actBookings.reduce((sum, b) => sum + b.quantity, 0);
+  const parseSafeDate = (str?: string): Date | null => {
+    if (!str) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      const [y, m, d] = str.split('-').map(Number);
+      return new Date(y, m - 1, d, 12, 0, 0);
+    }
+    const parsed = new Date(str);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const isDateInFilter = (
+    dateObj: Date | null,
+    filter: 'all' | 'today' | 'yesterday' | '7days' | '30days' | 'this_month' | 'last_month' | 'custom',
+    customStart?: string,
+    customEnd?: string
+  ): boolean => {
+    if (!dateObj) return filter === 'all';
+    if (filter === 'all') return true;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    if (filter === 'today') {
+      return dateObj >= startOfToday && dateObj <= endOfToday;
+    }
+    if (filter === 'yesterday') {
+      const startOfYesterday = new Date(startOfToday);
+      startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+      const endOfYesterday = new Date(endOfToday);
+      endOfYesterday.setDate(endOfYesterday.getDate() - 1);
+      return dateObj >= startOfYesterday && dateObj <= endOfYesterday;
+    }
+    if (filter === '7days') {
+      const start7 = new Date(startOfToday);
+      start7.setDate(start7.getDate() - 6);
+      return dateObj >= start7 && dateObj <= endOfToday;
+    }
+    if (filter === '30days') {
+      const start30 = new Date(startOfToday);
+      start30.setDate(start30.getDate() - 29);
+      return dateObj >= start30 && dateObj <= endOfToday;
+    }
+    if (filter === 'this_month') {
+      const startMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      const endMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return dateObj >= startMonth && dateObj <= endMonth;
+    }
+    if (filter === 'last_month') {
+      const startLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      const endLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return dateObj >= startLastMonth && dateObj <= endLastMonth;
+    }
+    if (filter === 'custom') {
+      let valid = true;
+      if (customStart) {
+        const [sy, sm, sd] = customStart.split('-').map(Number);
+        const s = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
+        valid = valid && dateObj >= s;
+      }
+      if (customEnd) {
+        const [ey, em, ed] = customEnd.split('-').map(Number);
+        const e = new Date(ey, em - 1, ed, 23, 59, 59, 999);
+        valid = valid && dateObj <= e;
+      }
+      return valid;
+    }
+    return true;
+  };
+
+  const computePeriodSales = (
+    filterType: 'all' | 'today' | 'yesterday' | '7days' | '30days' | 'this_month' | 'last_month' | 'custom',
+    cStart?: string,
+    cEnd?: string
+  ) => {
+    const periodBookings = bookings.filter(b => isDateInFilter(parseSafeDate(b.bookingDate || b.date), filterType, cStart, cEnd));
+    const periodOrders = orders.filter(o => isDateInFilter(parseSafeDate(o.createdAt), filterType, cStart, cEnd));
+    
+    const activityRev = periodBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+    const foodRev = periodOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    const totalRev = activityRev + foodRev;
+    const visitorsCount = periodBookings.reduce((sum, b) => sum + (b.quantity || 0), 0);
+    const bookingsCount = periodBookings.length;
+    const ordersCount = periodOrders.length;
+    const totalTransactions = bookingsCount + ordersCount;
+    const avgTransactionValue = totalTransactions > 0 ? (totalRev / totalTransactions) : 0;
+
     return {
-      name: act.name.split(' ').slice(-2).join(' '), // Shorten name for charts
+      bookings: periodBookings,
+      orders: periodOrders,
+      activityRev,
+      foodRev,
+      totalRev,
+      visitorsCount,
+      bookingsCount,
+      ordersCount,
+      totalTransactions,
+      avgTransactionValue
+    };
+  };
+
+  // Fixed Quick Metric Snapshots
+  const todaySales = computePeriodSales('today');
+  const last7DaysSales = computePeriodSales('7days');
+  const last30DaysSales = computePeriodSales('30days');
+  const allTimeSales = computePeriodSales('all');
+
+  // Currently Filtered View Sales
+  const filteredSalesData = computePeriodSales(analyticsDateFilter, analyticsCustomStart, analyticsCustomEnd);
+
+  // Core metrics for backwards compatibility
+  const totalActivityRevenue = allTimeSales.activityRev;
+  const totalFoodRevenue = allTimeSales.foodRev;
+  const totalRevenue = allTimeSales.totalRev;
+  const totalVisitors = allTimeSales.visitorsCount;
+
+  // Activity performance metric (by filtered bookings)
+  const activityPerformanceData = activeActivities.map(act => {
+    const actBookings = filteredSalesData.bookings.filter(b => b.activityId === act.id);
+    const revenue = actBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+    const ticketsSold = actBookings.reduce((sum, b) => sum + (b.quantity || 0), 0);
+    return {
+      name: act.name.split(' ').slice(-2).join(' '),
       revenue,
       ticketsSold
     };
   });
 
-  // Food split performance
+  // Food split performance (by filtered orders)
   const foodSplitData = vendors.map(v => {
-    const vOrders = orders.filter(o => o.items.some(i => i.vendorId === v.id));
+    const vOrders = filteredSalesData.orders.filter(o => o.items.some(i => i.vendorId === v.id));
     const totalSales = vOrders.reduce((sum, o) => {
       const vItems = o.items.filter(i => i.vendorId === v.id);
-      return sum + vItems.reduce((s, i) => s + (i.price * i.quantity), 0);
+      return sum + vItems.reduce((s, i) => s + ((i.price || 0) * (i.quantity || 0)), 0);
     }, 0);
     return {
       name: v.name,
@@ -326,30 +376,147 @@ export const AdminDashboard: React.FC = () => {
     };
   }).filter(v => v.value > 0);
 
-  // Daily revenue charts
-  const getDailySalesData = () => {
-    const last5Days = [4, 3, 2, 1, 0].map(daysAgo => {
+  // Dynamic revenue charts for the selected filter
+  const getDynamicSalesChartData = () => {
+    if (analyticsDateFilter === 'today' || analyticsDateFilter === 'yesterday') {
+      const hours = [8, 10, 12, 14, 16, 18, 20, 22];
+      return hours.map(h => {
+        const slotLabel = `${h > 12 ? h - 12 : h}${h >= 12 ? ' PM' : ' AM'}`;
+        const slotBookings = filteredSalesData.bookings.filter(b => {
+          const d = parseSafeDate(b.bookingDate || b.date);
+          return d && d.getHours() >= h && d.getHours() < h + 2;
+        });
+        const slotOrders = filteredSalesData.orders.filter(o => {
+          const d = parseSafeDate(o.createdAt);
+          return d && d.getHours() >= h && d.getHours() < h + 2;
+        });
+
+        const actRev = slotBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+        const foodRev = slotOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+        return {
+          date: slotLabel,
+          'Activities': actRev,
+          'Food Street': foodRev,
+          'Total': actRev + foodRev
+        };
+      });
+    }
+
+    if (analyticsDateFilter === '7days') {
+      return [6, 5, 4, 3, 2, 1, 0].map(daysAgo => {
+        const d = new Date();
+        d.setDate(d.getDate() - daysAgo);
+        const dStr = d.toISOString().split('T')[0];
+
+        const dayBookings = bookings.filter(b => {
+          const bD = parseSafeDate(b.bookingDate || b.date);
+          return bD && bD.toISOString().split('T')[0] === dStr;
+        });
+        const dayOrders = orders.filter(o => {
+          const oD = parseSafeDate(o.createdAt);
+          return oD && oD.toISOString().split('T')[0] === dStr;
+        });
+
+        const activityRev = dayBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+        const foodRev = dayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+        return {
+          date: d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
+          'Activities': activityRev,
+          'Food Street': foodRev,
+          'Total': activityRev + foodRev
+        };
+      });
+    }
+
+    if (analyticsDateFilter === '30days') {
+      return Array.from({ length: 30 }, (_, i) => 29 - i).map(daysAgo => {
+        const d = new Date();
+        d.setDate(d.getDate() - daysAgo);
+        const dStr = d.toISOString().split('T')[0];
+
+        const dayBookings = bookings.filter(b => {
+          const bD = parseSafeDate(b.bookingDate || b.date);
+          return bD && bD.toISOString().split('T')[0] === dStr;
+        });
+        const dayOrders = orders.filter(o => {
+          const oD = parseSafeDate(o.createdAt);
+          return oD && oD.toISOString().split('T')[0] === dStr;
+        });
+
+        const activityRev = dayBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+        const foodRev = dayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+        return {
+          date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          'Activities': activityRev,
+          'Food Street': foodRev,
+          'Total': activityRev + foodRev
+        };
+      });
+    }
+
+    if (analyticsDateFilter === 'custom' && analyticsCustomStart && analyticsCustomEnd) {
+      const s = parseSafeDate(analyticsCustomStart);
+      const e = parseSafeDate(analyticsCustomEnd);
+      if (s && e && s <= e) {
+        const diffDays = Math.min(60, Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 3600 * 24)) + 1));
+        return Array.from({ length: diffDays }, (_, i) => {
+          const d = new Date(s);
+          d.setDate(d.getDate() + i);
+          const dStr = d.toISOString().split('T')[0];
+
+          const dayBookings = bookings.filter(b => {
+            const bD = parseSafeDate(b.bookingDate || b.date);
+            return bD && bD.toISOString().split('T')[0] === dStr;
+          });
+          const dayOrders = orders.filter(o => {
+            const oD = parseSafeDate(o.createdAt);
+            return oD && oD.toISOString().split('T')[0] === dStr;
+          });
+
+          const activityRev = dayBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+          const foodRev = dayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+          return {
+            date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            'Activities': activityRev,
+            'Food Street': foodRev,
+            'Total': activityRev + foodRev
+          };
+        });
+      }
+    }
+
+    // Default (all / this_month / last_month): Past 7 days
+    return [6, 5, 4, 3, 2, 1, 0].map(daysAgo => {
       const date = new Date();
       date.setDate(date.getDate() - daysAgo);
       const dateStr = date.toISOString().split('T')[0];
 
-      const dayBookings = bookings.filter(b => b.date === dateStr);
-      const dayOrders = orders.filter(o => o.createdAt.startsWith(dateStr));
+      const dayBookings = filteredSalesData.bookings.filter(b => {
+        const bD = parseSafeDate(b.bookingDate || b.date);
+        return bD && bD.toISOString().split('T')[0] === dateStr;
+      });
+      const dayOrders = filteredSalesData.orders.filter(o => {
+        const oD = parseSafeDate(o.createdAt);
+        return oD && oD.toISOString().split('T')[0] === dateStr;
+      });
 
-      const activityRev = dayBookings.reduce((sum, b) => sum + b.totalAmount, 0);
-      const foodRev = dayOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+      const activityRev = dayBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+      const foodRev = dayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
       return {
-        date: new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
+        date: date.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
         'Activities': activityRev,
         'Food Street': foodRev,
         'Total': activityRev + foodRev
       };
     });
-    return last5Days;
   };
 
-  const salesTrendData = getDailySalesData();
+  const salesTrendData = getDynamicSalesChartData();
 
   // Colors
   const COLORS = ['#007B8B', '#134E4A', '#99F6E4', '#F59E0B', '#10B981'];
@@ -358,13 +525,13 @@ export const AdminDashboard: React.FC = () => {
   // DETAILED DASHBOARD BREAKDOWNS (ACTIVITY-WISE & PACKAGE-WISE)
   // -----------------------------------------------------------------
   
-  // 1. Activity-Wise Detailed Metrics
+  // 1. Activity-Wise Detailed Metrics (Filtered)
   const activityDetailedStats = activeActivities.map(act => {
-    const actBookings = bookings.filter(b => b.activityId.includes(act.id));
-    const visitorsCount = actBookings.reduce((sum, b) => sum + b.quantity, 0);
-    const amountCollected = actBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+    const actBookings = filteredSalesData.bookings.filter(b => b.activityId.includes(act.id));
+    const visitorsCount = actBookings.reduce((sum, b) => sum + (b.quantity || 0), 0);
+    const amountCollected = actBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
     const bookingsCount = actBookings.length;
-    const sharePercentage = totalActivityRevenue > 0 ? (amountCollected / totalActivityRevenue) * 100 : 0;
+    const sharePercentage = filteredSalesData.activityRev > 0 ? (amountCollected / filteredSalesData.activityRev) * 100 : 0;
     return {
       id: act.id,
       name: act.name,
@@ -376,7 +543,7 @@ export const AdminDashboard: React.FC = () => {
     };
   });
 
-  // 2. Package-Wise Detailed Metrics
+  // 2. Package-Wise Detailed Metrics (Filtered)
   const packageDetailedStats: Array<{
     activityId: string;
     activityName: string;
@@ -390,8 +557,8 @@ export const AdminDashboard: React.FC = () => {
   }> = [];
 
   activities.forEach(act => {
-    const actBookings = bookings.filter(b => b.activityId.includes(act.id));
-    const actTotalAmount = actBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+    const actBookings = filteredSalesData.bookings.filter(b => b.activityId.includes(act.id));
+    const actTotalAmount = actBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
 
     if (act.packages && act.packages.length > 0) {
       act.packages.forEach(pkg => {
@@ -400,8 +567,8 @@ export const AdminDashboard: React.FC = () => {
           (b.packageName && b.packageName.toLowerCase() === pkg.name.toLowerCase()) ||
           (b.details && b.details.toLowerCase().includes(pkg.name.toLowerCase()))
         );
-        const visitorsCount = pkgBookings.reduce((sum, b) => sum + b.quantity, 0);
-        const amountCollected = pkgBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+        const visitorsCount = pkgBookings.reduce((sum, b) => sum + (b.quantity || 0), 0);
+        const amountCollected = pkgBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
         const shareOfActivity = actTotalAmount > 0 ? (amountCollected / actTotalAmount) * 100 : 0;
 
         packageDetailedStats.push({
@@ -417,8 +584,8 @@ export const AdminDashboard: React.FC = () => {
         });
       });
     } else {
-      const visitorsCount = actBookings.reduce((sum, b) => sum + b.quantity, 0);
-      const amountCollected = actBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+      const visitorsCount = actBookings.reduce((sum, b) => sum + (b.quantity || 0), 0);
+      const amountCollected = actBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
       packageDetailedStats.push({
         activityId: act.id,
         activityName: act.name,
@@ -432,6 +599,20 @@ export const AdminDashboard: React.FC = () => {
       });
     }
   });
+
+  // Helper to format filter display label
+  const getAnalyticsFilterTitle = () => {
+    switch (analyticsDateFilter) {
+      case 'today': return "Today's Sales";
+      case 'yesterday': return "Yesterday's Sales";
+      case '7days': return "Last 7 Days Sales";
+      case '30days': return "Last 30 Days Sales";
+      case 'this_month': return "This Month's Sales";
+      case 'last_month': return "Last Month's Sales";
+      case 'custom': return `Custom Range (${analyticsCustomStart} to ${analyticsCustomEnd})`;
+      default: return "All-Time Lifetime Sales";
+    }
+  };
 
   // 3. Complete Dashboard Transaction Logs Filters
   const [dashLogSearch, setDashLogSearch] = useState('');
@@ -713,7 +894,7 @@ export const AdminDashboard: React.FC = () => {
               : tab === 'pay_settings' ? 'Pay Settings'
               : tab === 'payments' ? 'Pay Reports'
               : tab === 'activity_mgmt' ? 'Activity Mgmt'
-              : tab === 'retail_menu' ? 'Retail & Food Menu'
+              : tab === 'retail_menu' ? 'Cafe & Retail Sales Sync'
               : tab}
           </button>
         ))}
@@ -724,58 +905,441 @@ export const AdminDashboard: React.FC = () => {
       {/* ----------------------------------------------------------------- */}
       {activeTab === 'analytics' && (
         <div className="space-y-6">
-          
-          {/* KPI Dashboard Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 glass-card border border-[#00ABAB]/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)] transition-all">
-              <div className="flex items-center justify-between text-[#9CA3AF]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Total Revenue Collected</span>
-                <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30"><TrendingUp className="h-4 w-4" /></span>
+
+          {/* ── 1. FIXED SALES SUMMARY HIGHLIGHT CARDS (TODAY, 7 DAYS, 30 DAYS, ALL-TIME) ── */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-[#00ABAB]/10 border border-[#00ABAB]/30 text-[#40E0D0]">
+                  <TrendingUp className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-white tracking-wide uppercase font-sans">
+                    Sales Overview & Performance Periods
+                  </h3>
+                  <p className="text-[11px] text-[#9CA3AF]">
+                    Consolidated gross revenue benchmarks across adventure sports and Food Street cafe
+                  </p>
+                </div>
               </div>
-              <div className="text-2xl font-extrabold text-[#40E0D0] font-mono">₹{totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <p className="text-[10px] text-[#9CA3AF] font-mono">Activities + Food Street</p>
             </div>
 
-            <div className="p-4 glass-card border border-[#00ABAB]/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)] transition-all">
-              <div className="flex items-center justify-between text-[#9CA3AF]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Total Visitors Count</span>
-                <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30"><Users className="h-4 w-4" /></span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Today's Sales */}
+              <div 
+                onClick={() => setAnalyticsDateFilter('today')}
+                className={`p-4 glass-card rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
+                  analyticsDateFilter === 'today'
+                    ? 'border-[#00ABAB] shadow-[0_0_25px_rgba(0,171,171,0.3)] bg-[#00ABAB]/10'
+                    : 'border-[#00ABAB]/30 hover:border-[#00ABAB]/70 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)]'
+                }`}
+              >
+                <div className="flex items-center justify-between text-[#9CA3AF] mb-1.5">
+                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-[#40E0D0]">
+                    <Clock className="w-3.5 h-3.5" /> Today's Sales
+                  </span>
+                  <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30 group-hover:scale-110 transition-transform">
+                    <TrendingUp className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <div className="text-2xl font-extrabold text-[#40E0D0] font-mono">
+                  ₹{todaySales.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="pt-2 border-t border-[#1C1C1C] mt-2 space-y-1">
+                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
+                    <span>Activities:</span>
+                    <span className="text-white font-bold">₹{todaySales.activityRev.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
+                    <span>Food Street:</span>
+                    <span className="text-white font-bold">₹{todaySales.foodRev.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono text-teal-400 pt-0.5 font-bold">
+                    <span>Volume:</span>
+                    <span>{todaySales.visitorsCount} Guests • {todaySales.ordersCount} Orders</span>
+                  </div>
+                </div>
+                {analyticsDateFilter === 'today' && (
+                  <div className="absolute top-2 right-2 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#40E0D0] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ABAB]"></span>
+                  </div>
+                )}
               </div>
-              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">{totalVisitors}</div>
-              <p className="text-[10px] text-[#9CA3AF] font-mono">Across all activity tickets</p>
+
+              {/* Last 7 Days Sales */}
+              <div 
+                onClick={() => setAnalyticsDateFilter('7days')}
+                className={`p-4 glass-card rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
+                  analyticsDateFilter === '7days'
+                    ? 'border-[#00ABAB] shadow-[0_0_25px_rgba(0,171,171,0.3)] bg-[#00ABAB]/10'
+                    : 'border-[#00ABAB]/30 hover:border-[#00ABAB]/70 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)]'
+                }`}
+              >
+                <div className="flex items-center justify-between text-[#9CA3AF] mb-1.5">
+                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-white">
+                    <CalendarDays className="w-3.5 h-3.5 text-[#00ABAB]" /> Last 7 Days
+                  </span>
+                  <span className="p-1.5 bg-[#0A0A0A] text-[#00ABAB] rounded-lg border border-[#00ABAB]/30 group-hover:scale-110 transition-transform">
+                    <TrendingUp className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <div className="text-2xl font-extrabold text-white font-mono">
+                  ₹{last7DaysSales.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="pt-2 border-t border-[#1C1C1C] mt-2 space-y-1">
+                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
+                    <span>Activities:</span>
+                    <span className="text-white font-bold">₹{last7DaysSales.activityRev.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
+                    <span>Food Street:</span>
+                    <span className="text-white font-bold">₹{last7DaysSales.foodRev.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono text-teal-400 pt-0.5 font-bold">
+                    <span>Volume:</span>
+                    <span>{last7DaysSales.visitorsCount} Guests • {last7DaysSales.ordersCount} Orders</span>
+                  </div>
+                </div>
+                {analyticsDateFilter === '7days' && (
+                  <div className="absolute top-2 right-2 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#40E0D0] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ABAB]"></span>
+                  </div>
+                )}
+              </div>
+
+              {/* Last 30 Days Sales */}
+              <div 
+                onClick={() => setAnalyticsDateFilter('30days')}
+                className={`p-4 glass-card rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
+                  analyticsDateFilter === '30days'
+                    ? 'border-[#00ABAB] shadow-[0_0_25px_rgba(0,171,171,0.3)] bg-[#00ABAB]/10'
+                    : 'border-[#00ABAB]/30 hover:border-[#00ABAB]/70 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)]'
+                }`}
+              >
+                <div className="flex items-center justify-between text-[#9CA3AF] mb-1.5">
+                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-white">
+                    <CalendarRange className="w-3.5 h-3.5 text-[#00ABAB]" /> Last 30 Days
+                  </span>
+                  <span className="p-1.5 bg-[#0A0A0A] text-[#00ABAB] rounded-lg border border-[#00ABAB]/30 group-hover:scale-110 transition-transform">
+                    <TrendingUp className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <div className="text-2xl font-extrabold text-white font-mono">
+                  ₹{last30DaysSales.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="pt-2 border-t border-[#1C1C1C] mt-2 space-y-1">
+                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
+                    <span>Activities:</span>
+                    <span className="text-white font-bold">₹{last30DaysSales.activityRev.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
+                    <span>Food Street:</span>
+                    <span className="text-white font-bold">₹{last30DaysSales.foodRev.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono text-teal-400 pt-0.5 font-bold">
+                    <span>Volume:</span>
+                    <span>{last30DaysSales.visitorsCount} Guests • {last30DaysSales.ordersCount} Orders</span>
+                  </div>
+                </div>
+                {analyticsDateFilter === '30days' && (
+                  <div className="absolute top-2 right-2 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#40E0D0] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ABAB]"></span>
+                  </div>
+                )}
+              </div>
+
+              {/* All-Time Total Sales */}
+              <div 
+                onClick={() => setAnalyticsDateFilter('all')}
+                className={`p-4 glass-card rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
+                  analyticsDateFilter === 'all'
+                    ? 'border-[#00ABAB] shadow-[0_0_25px_rgba(0,171,171,0.3)] bg-[#00ABAB]/10'
+                    : 'border-[#00ABAB]/30 hover:border-[#00ABAB]/70 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)]'
+                }`}
+              >
+                <div className="flex items-center justify-between text-[#9CA3AF] mb-1.5">
+                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-white">
+                    <Sparkles className="w-3.5 h-3.5 text-[#40E0D0]" /> All-Time Sales
+                  </span>
+                  <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30 group-hover:scale-110 transition-transform">
+                    <IndianRupee className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <div className="text-2xl font-extrabold text-[#40E0D0] font-mono">
+                  ₹{allTimeSales.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="pt-2 border-t border-[#1C1C1C] mt-2 space-y-1">
+                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
+                    <span>Activities:</span>
+                    <span className="text-white font-bold">₹{allTimeSales.activityRev.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
+                    <span>Food Street:</span>
+                    <span className="text-white font-bold">₹{allTimeSales.foodRev.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono text-teal-400 pt-0.5 font-bold">
+                    <span>Volume:</span>
+                    <span>{allTimeSales.visitorsCount} Guests • {allTimeSales.ordersCount} Orders</span>
+                  </div>
+                </div>
+                {analyticsDateFilter === 'all' && (
+                  <div className="absolute top-2 right-2 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#40E0D0] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ABAB]"></span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── 2. CUSTOM SALES DROPDOWN & DATE RANGE FILTER CONTROL BAR ── */}
+          <div className="p-5 glass-panel border border-[#00ABAB]/40 rounded-2xl shadow-[0_0_30px_rgba(0,171,171,0.15)] space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="p-2 bg-[#0A0A0A] text-[#40E0D0] rounded-xl border border-[#00ABAB]/30">
+                  <Filter className="w-5 h-5" />
+                </span>
+                <div>
+                  <h4 className="font-bold text-sm text-white font-sans flex items-center gap-2">
+                    Sales Window & Custom Filter
+                    <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-[#00ABAB]/20 text-[#40E0D0] border border-[#00ABAB]/40 rounded-md">
+                      {getAnalyticsFilterTitle()}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-[#9CA3AF] font-sans">
+                    Select a preset period or custom date range to filter real-time revenue analytics and breakdown charts
+                  </p>
+                </div>
+              </div>
+
+              {/* Dropdown Menu & Quick Pills */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Custom Dropdown Selector */}
+                <div className="relative inline-block">
+                  <select
+                    id="select-sales-date-filter"
+                    value={analyticsDateFilter}
+                    onChange={e => setAnalyticsDateFilter(e.target.value as any)}
+                    className="bg-[#0A0A0A] text-[#40E0D0] border border-[#00ABAB]/50 rounded-xl px-4 py-2 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#00ABAB] cursor-pointer appearance-none pr-9 hover:border-[#00ABAB] transition-all shadow-inner"
+                  >
+                    <option value="all">🌐 All-Time History</option>
+                    <option value="today">📅 Today's Sales</option>
+                    <option value="yesterday">⏪ Yesterday's Sales</option>
+                    <option value="7days">📊 Last 7 Days Sales</option>
+                    <option value="30days">📈 Last 30 Days Sales</option>
+                    <option value="this_month">🗓️ This Month (Current)</option>
+                    <option value="last_month">⏮️ Last Month</option>
+                    <option value="custom">⚙️ Custom Date Range...</option>
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-[#40E0D0] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-80" />
+                </div>
+
+                {/* Quick Switch Buttons */}
+                <div className="flex items-center gap-1 bg-[#0A0A0A] p-1 rounded-xl border border-[#1C1C1C]">
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsDateFilter('all')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      analyticsDateFilter === 'all'
+                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
+                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsDateFilter('today')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      analyticsDateFilter === 'today'
+                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
+                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsDateFilter('7days')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      analyticsDateFilter === '7days'
+                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
+                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    7 Days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsDateFilter('30days')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      analyticsDateFilter === '30days'
+                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
+                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    30 Days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsDateFilter('this_month')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      analyticsDateFilter === 'this_month'
+                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
+                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    This Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsDateFilter('custom')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      analyticsDateFilter === 'custom'
+                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
+                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    Custom
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div className="p-4 glass-card border border-[#00ABAB]/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)] transition-all">
-              <div className="flex items-center justify-between text-[#9CA3AF]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Activities Revenue</span>
-                <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30"><Ticket className="h-4 w-4" /></span>
+            {/* Custom Date Range Picker Fields (Shown when Custom Range is active) */}
+            {analyticsDateFilter === 'custom' && (
+              <div className="pt-3 border-t border-[#1C1C1C] flex flex-wrap items-center gap-3 bg-[#0A0A0A]/60 p-3 rounded-xl border border-[#00ABAB]/20 animate-fadeIn">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-bold text-[#9CA3AF]">From Date:</span>
+                  <input
+                    type="date"
+                    id="input-analytics-custom-start"
+                    value={analyticsCustomStart}
+                    onChange={e => setAnalyticsCustomStart(e.target.value)}
+                    className="bg-[#141414] text-white border border-[#00ABAB]/40 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#00ABAB]"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-bold text-[#9CA3AF]">To Date:</span>
+                  <input
+                    type="date"
+                    id="input-analytics-custom-end"
+                    value={analyticsCustomEnd}
+                    onChange={e => setAnalyticsCustomEnd(e.target.value)}
+                    className="bg-[#141414] text-white border border-[#00ABAB]/40 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#00ABAB]"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = new Date();
+                    const end = d.toISOString().split('T')[0];
+                    d.setDate(d.getDate() - 7);
+                    const start = d.toISOString().split('T')[0];
+                    setAnalyticsCustomStart(start);
+                    setAnalyticsCustomEnd(end);
+                  }}
+                  className="text-[11px] font-mono text-[#40E0D0] hover:underline px-2 py-1 cursor-pointer"
+                >
+                  Reset to Last 7 Days
+                </button>
               </div>
-              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">₹{totalActivityRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <p className="text-[10px] text-[#9CA3AF] font-mono">
-                {((totalActivityRevenue / (totalRevenue || 1)) * 100).toFixed(0)}% contribution
+            )}
+
+            {/* Active Filter Scope Summary Badge */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#1C1C1C] text-[11px] font-mono text-[#9CA3AF]">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#00ABAB] animate-pulse"></span>
+                <span>Active Scope: <strong className="text-white">{getAnalyticsFilterTitle()}</strong></span>
+              </div>
+              <div className="flex items-center gap-4 text-xs font-bold text-white">
+                <span>Revenue: <strong className="text-[#40E0D0]">₹{filteredSalesData.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                <span>Transactions: <strong className="text-teal-400">{filteredSalesData.totalTransactions}</strong></span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── 3. FILTER-AWARE DETAILED KPI CARDS ── */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Filtered Gross Sales</div>
+              <div className="text-xl font-extrabold text-[#40E0D0] font-mono">
+                ₹{filteredSalesData.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[9px] text-[#9CA3AF] font-mono">
+                {allTimeSales.totalRev > 0 ? ((filteredSalesData.totalRev / allTimeSales.totalRev) * 100).toFixed(1) : 0}% of all-time
               </p>
             </div>
 
-            <div className="p-4 glass-card border border-[#00ABAB]/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)] transition-all">
-              <div className="flex items-center justify-between text-[#9CA3AF]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Food Street Revenue</span>
-                <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30"><Utensils className="h-4 w-4" /></span>
+            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Activities Sales</div>
+              <div className="text-xl font-extrabold text-white font-mono">
+                ₹{filteredSalesData.activityRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-2xl font-extrabold text-[#FFFFFF] font-mono">₹{totalFoodRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <p className="text-[10px] text-[#9CA3AF] font-mono">
-                {((totalFoodRevenue / (totalRevenue || 1)) * 100).toFixed(0)}% contribution
+              <p className="text-[9px] text-teal-400 font-mono">
+                {((filteredSalesData.activityRev / (filteredSalesData.totalRev || 1)) * 100).toFixed(0)}% contribution
+              </p>
+            </div>
+
+            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Food Street Sales</div>
+              <div className="text-xl font-extrabold text-white font-mono">
+                ₹{filteredSalesData.foodRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[9px] text-teal-400 font-mono">
+                {((filteredSalesData.foodRev / (filteredSalesData.totalRev || 1)) * 100).toFixed(0)}% contribution
+              </p>
+            </div>
+
+            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Tickets / Visitors</div>
+              <div className="text-xl font-extrabold text-white font-mono">
+                {filteredSalesData.visitorsCount}
+              </div>
+              <p className="text-[9px] text-[#9CA3AF] font-mono">
+                Across {filteredSalesData.bookingsCount} bookings
+              </p>
+            </div>
+
+            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Food Orders</div>
+              <div className="text-xl font-extrabold text-white font-mono">
+                {filteredSalesData.ordersCount}
+              </div>
+              <p className="text-[9px] text-[#9CA3AF] font-mono">
+                Cafe & stall orders
+              </p>
+            </div>
+
+            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Avg. Transaction</div>
+              <div className="text-xl font-extrabold text-[#40E0D0] font-mono">
+                ₹{filteredSalesData.avgTransactionValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[9px] text-[#9CA3AF] font-mono">
+                Per ticket/food sale
               </p>
             </div>
           </div>
 
-          {/* Charts Grid */}
+          {/* ── 4. REVENUE CHARTS GRID ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Sales Trend Chart */}
             <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl space-y-4">
-              <div>
-                <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Multi-Source Revenue History</h4>
-                <p className="text-[11px] text-[#9CA3AF] font-sans">Sales compared across adventure tickets and food items</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Multi-Source Revenue History</h4>
+                  <p className="text-[11px] text-[#9CA3AF] font-sans">
+                    Sales compared across adventure tickets and food items ({getAnalyticsFilterTitle()})
+                  </p>
+                </div>
+                <span className="text-[11px] font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-2.5 py-1 rounded-lg border border-[#00ABAB]/30">
+                  {salesTrendData.length} Intervals
+                </span>
               </div>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
@@ -804,9 +1368,16 @@ export const AdminDashboard: React.FC = () => {
 
             {/* Activities Performance Chart */}
             <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl space-y-4">
-              <div>
-                <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Activity Popularity Matrix</h4>
-                <p className="text-[11px] text-[#9CA3AF] font-sans">Gross monetary earnings generated by sport</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Activity Popularity Matrix</h4>
+                  <p className="text-[11px] text-[#9CA3AF] font-sans">
+                    Gross monetary earnings generated by sport ({getAnalyticsFilterTitle()})
+                  </p>
+                </div>
+                <span className="text-[11px] font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-2.5 py-1 rounded-lg border border-[#00ABAB]/30">
+                  {activityPerformanceData.length} Activities
+                </span>
               </div>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
@@ -834,11 +1405,18 @@ export const AdminDashboard: React.FC = () => {
                 <h3 className="font-bold text-lg text-white flex items-center gap-2">
                   <Award className="w-5 h-5 text-[#00ABAB]" /> Activity-Wise Visitors & Revenue Summary
                 </h3>
-                <p className="text-[#9CA3AF] text-xs mt-0.5">Total visitors and amount collected for each adventure activity</p>
+                <p className="text-[#9CA3AF] text-xs mt-0.5">
+                  Total visitors and amount collected for each adventure activity ({getAnalyticsFilterTitle()})
+                </p>
               </div>
-              <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
-                {activities.length} Active Sports
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
+                  {activities.length} Active Sports
+                </span>
+                <span className="text-xs font-mono font-bold text-teal-300 bg-[#00ABAB]/10 px-3 py-1 rounded-full border border-[#00ABAB]/30">
+                  ₹{filteredSalesData.activityRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total
+                </span>
+              </div>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
@@ -896,11 +1474,15 @@ export const AdminDashboard: React.FC = () => {
                 <h3 className="font-bold text-lg text-white flex items-center gap-2">
                   <Tag className="w-5 h-5 text-[#00ABAB]" /> Package-Wise Visitors & Revenue Summary
                 </h3>
-                <p className="text-[#9CA3AF] text-xs mt-0.5">Detailed breakdown of visitors and revenue per specific package tier</p>
+                <p className="text-[#9CA3AF] text-xs mt-0.5">
+                  Detailed breakdown of visitors and revenue per specific package tier ({getAnalyticsFilterTitle()})
+                </p>
               </div>
-              <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
-                {packageDetailedStats.length} Configured Packages
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
+                  {packageDetailedStats.length} Configured Packages
+                </span>
+              </div>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
@@ -1321,193 +1903,450 @@ export const AdminDashboard: React.FC = () => {
       {/* ----------------------------------------------------------------- */}
       {/* RETAIL & FOOD MENU MANAGEMENT VIEW */}
       {/* ----------------------------------------------------------------- */}
-      {activeTab === 'retail_menu' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap justify-between items-center text-[#FFFFFF] gap-3">
+      {/* ----------------------------------------------------------------- */}
+      {/* CAFE & RETAIL SALES SYNCHRONIZATION & PROFIT ANALYTICS VIEW */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === 'retail_menu' && (() => {
+        // Cafe & Food Sales Synchronization Analytics
+        const paidCafeOrders = orders.filter(o => {
+          if (o.paymentStatus !== 'paid') return false;
+          if (salesDateFilter === 'today') {
+            const orderDate = new Date(o.createdAt).toDateString();
+            return orderDate === new Date().toDateString();
+          }
+          if (salesDateFilter === 'week') {
+            const orderTime = new Date(o.createdAt).getTime();
+            const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            return orderTime >= weekAgo;
+          }
+          return true;
+        });
+
+        const totalCafeSalesRevenue = paidCafeOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+        
+        let totalCafeTradeCost = 0;
+        let totalUnitsDispensed = 0;
+
+        paidCafeOrders.forEach(o => {
+          o.items.forEach(item => {
+            const menuItem = menuItems.find(m => m.id === item.menuItemId || m.name === item.name);
+            const purchasePrice = menuItem?.purchasePrice ?? (item.price * 0.6);
+            totalCafeTradeCost += purchasePrice * (item.quantity || 1);
+            totalUnitsDispensed += (item.quantity || 1);
+          });
+        });
+
+        const netCafeProfit = totalCafeSalesRevenue - totalCafeTradeCost;
+        const cafeMarginPercent = totalCafeSalesRevenue > 0 ? ((netCafeProfit / totalCafeSalesRevenue) * 100) : 0;
+
+        const handleExportCafeSalesCSV = () => {
+          const headers = ['Order ID', 'Date', 'Customer Name', 'Customer Email', 'Item Name', 'Vendor/Stall', 'Quantity', 'Selling Price (INR)', 'Trade Purchase Cost (INR)', 'Total Revenue (INR)', 'Total Trade Cost (INR)', 'Gross Margin (INR)', 'Payment Status'];
+          const rows: string[][] = [];
+
+          paidCafeOrders.forEach(o => {
+            o.items.forEach(item => {
+              const menuItem = menuItems.find(m => m.id === item.menuItemId || m.name === item.name);
+              const purchaseCost = menuItem?.purchasePrice ?? (item.price * 0.6);
+              const totalRev = item.price * item.quantity;
+              const totalCost = purchaseCost * item.quantity;
+              const profit = totalRev - totalCost;
+
+              rows.push([
+                `"${o.id}"`,
+                `"${new Date(o.createdAt).toLocaleString()}"`,
+                `"${o.customerName || 'Walk-in Guest'}"`,
+                `"${o.customerEmail || 'N/A'}"`,
+                `"${item.name}"`,
+                `"${item.vendorName || 'Cafe Counter'}"`,
+                `${item.quantity}`,
+                `${item.price.toFixed(2)}`,
+                `${purchaseCost.toFixed(2)}`,
+                `${totalRev.toFixed(2)}`,
+                `${totalCost.toFixed(2)}`,
+                `${profit.toFixed(2)}`,
+                `"${o.paymentStatus}"`
+              ]);
+            });
+          });
+
+          const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+          const encodedUri = encodeURI(csvContent);
+          const link = document.createElement('a');
+          link.setAttribute('href', encodedUri);
+          link.setAttribute('download', `deuce_cafe_synchronized_sales_${new Date().toISOString().split('T')[0]}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
+
+        return (
+          <div className="space-y-6">
+            {/* Header with Live Sync Status */}
+            <div className="flex flex-wrap justify-between items-center text-[#FFFFFF] gap-4">
+              <div>
+                <div className="flex items-center gap-2.5 mb-1">
+                  <h3 className="font-bold text-lg text-[#FFFFFF] font-sans">Cafe & Retail Synchronized Sales</h3>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Live Synced
+                  </span>
+                </div>
+                <p className="text-xs text-[#9CA3AF] font-sans">
+                  Real-time sales stream and margin analytics synchronized from Cafe POS & Food Outlets.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-xl p-1 text-xs font-mono">
+                  <button
+                    onClick={() => setSalesDateFilter('all')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      salesDateFilter === 'all' ? 'bg-[#00ABAB] text-black font-black' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    All Time
+                  </button>
+                  <button
+                    onClick={() => setSalesDateFilter('week')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      salesDateFilter === 'week' ? 'bg-[#00ABAB] text-black font-black' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Past 7 Days
+                  </button>
+                  <button
+                    onClick={() => setSalesDateFilter('today')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      salesDateFilter === 'today' ? 'bg-[#00ABAB] text-black font-black' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Today
+                  </button>
+                </div>
+
+                <button
+                  onClick={handleExportCafeSalesCSV}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-bold btn-glow text-[#0B0F14] rounded-xl hover:bg-[#00A99D] transition-all cursor-pointer shadow-lg"
+                  title="Export synchronized sales to CSV"
+                >
+                  <Download className="h-4 w-4" /> Export CSV Ledger
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Synchronized KPI Metric Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 glass-card border border-[#00ABAB]/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)] transition-all rounded-2xl">
+                <div className="flex items-center justify-between text-[#9CA3AF]">
+                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Gross Cafe Revenue</span>
+                  <Utensils className="h-4 w-4 text-[#14F1D9]" />
+                </div>
+                <div className="text-2xl font-black font-mono text-[#14F1D9]">
+                  ₹{totalCafeSalesRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] text-gray-400 font-mono">
+                  From {paidCafeOrders.length} verified cafe orders
+                </div>
+              </div>
+
+              <div className="p-4 glass-card border border-amber-500/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition-all rounded-2xl">
+                <div className="flex items-center justify-between text-[#9CA3AF]">
+                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans text-amber-400">Trade / Purchase Outlay</span>
+                  <IndianRupee className="h-4 w-4 text-amber-400" />
+                </div>
+                <div className="text-2xl font-black font-mono text-amber-400">
+                  ₹{totalCafeTradeCost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] text-gray-400 font-mono">
+                  Vendor trade cost across all orders
+                </div>
+              </div>
+
+              <div className="p-4 glass-card border border-emerald-500/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(16,185,129,0.2)] transition-all rounded-2xl">
+                <div className="flex items-center justify-between text-[#9CA3AF]">
+                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans text-emerald-400">Net Gross Margin</span>
+                  <TrendingUp className="h-4 w-4 text-emerald-400" />
+                </div>
+                <div className="text-2xl font-black font-mono text-emerald-400">
+                  +₹{netCafeProfit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] text-emerald-400 font-mono font-bold">
+                  {cafeMarginPercent.toFixed(1)}% profit margin
+                </div>
+              </div>
+
+              <div className="p-4 glass-card border border-[#00ABAB]/30 space-y-1.5 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)] transition-all rounded-2xl">
+                <div className="flex items-center justify-between text-[#9CA3AF]">
+                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans">Units Sold</span>
+                  <Coffee className="h-4 w-4 text-[#00B4FF]" />
+                </div>
+                <div className="text-2xl font-black font-mono text-[#00B4FF]">
+                  {totalUnitsDispensed}
+                </div>
+                <div className="text-[10px] text-gray-400 font-mono">
+                  Beverages, snacks & retail items
+                </div>
+              </div>
+            </div>
+
+            {/* Vendor / Stall Breakdown Cards */}
             <div>
-              <h3 className="font-bold text-lg text-[#FFFFFF] font-sans">Retail & Food Menu Management</h3>
-              <p className="text-xs text-[#9CA3AF] font-sans">Manage all food, beverage, gear, and retail store inventory across stalls.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                id="btn-add-single-menu-admin"
-                onClick={() => {
-                  setEditingAdminMenuItem(null);
-                  setAdminMenuForm({
-                    name: '',
-                    description: '',
-                    price: 5.0,
-                    category: 'Beverages',
-                    vendorId: vendors[0]?.id || 'vendor-forest-cafe',
-                    image: '',
-                    isAvailable: true
+              <h4 className="text-xs uppercase font-mono font-bold text-gray-400 tracking-wider mb-3">
+                Outlet & Vendor Sales Distribution
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {vendors.map(vendor => {
+                  const vendorOrders = paidCafeOrders.filter(o => o.items.some(i => i.vendorId === vendor.id));
+                  let vendorRev = 0;
+                  let vendorCost = 0;
+                  let vendorUnits = 0;
+
+                  paidCafeOrders.forEach(o => {
+                    o.items.filter(i => i.vendorId === vendor.id).forEach(i => {
+                      const m = menuItems.find(item => item.id === i.menuItemId || item.name === i.name);
+                      const cost = m?.purchasePrice ?? (i.price * 0.6);
+                      vendorRev += i.price * i.quantity;
+                      vendorCost += cost * i.quantity;
+                      vendorUnits += i.quantity;
+                    });
                   });
-                  setIsAdminMenuModalOpen(true);
-                }}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold border border-[#00ABAB]/40 text-[#FFFFFF] rounded-xl hover:bg-[#0A0A0A] transition-all cursor-pointer"
-              >
-                <Plus className="h-4 w-4" /> Single Menu Item
-              </button>
-              <button
-                id="btn-bulk-add-menu-admin"
-                onClick={() => setIsBulkMenuModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold btn-glow text-[#0B0F14] rounded-xl hover:bg-[#00A99D] transition-all cursor-pointer shadow-lg"
-              >
-                <Plus className="h-4 w-4" /> ⚡ Bulk Add N Items
-              </button>
-            </div>
-          </div>
 
-          {/* Search and Filters */}
-          <div className="glass-panel border border-[#00ABAB]/30 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 flex-1 min-w-[240px]">
-              <Search className="h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search items by name, category, or description..."
-                value={adminMenuSearch}
-                onChange={(e) => setAdminMenuSearch(e.target.value)}
-                className="w-full bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-lg px-3 py-1.5 text-white font-sans focus:outline-none focus:border-[#40E0D0]"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 font-bold uppercase font-mono text-[10px]">Filter Stall:</span>
-              <select
-                value={adminVendorFilter}
-                onChange={(e) => setAdminVendorFilter(e.target.value)}
-                className="bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-lg px-2.5 py-1.5 text-white font-sans focus:outline-none focus:border-[#40E0D0]"
-              >
-                <option value="all">All Vendors & Retail Counters</option>
-                {vendors.map(v => (
-                  <option key={v.id} value={v.id}>{v.name} ({v.stallNumber})</option>
-                ))}
-              </select>
-            </div>
-          </div>
+                  const vendorProfit = vendorRev - vendorCost;
 
-          {/* Menu Items Table */}
-          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-[#FFFFFF]">
-                <thead>
-                  <tr className="bg-[#0A0A0A]/70 border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold">
-                    <th className="p-4">Item Name</th>
-                    <th className="p-4">Vendor / Stall</th>
-                    <th className="p-4">Category</th>
-                    <th className="p-4">Price (₹)</th>
-                    <th className="p-4">Stock Entries</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-teal-100/20">
-                  {menuItems
-                    .filter(item => {
-                      const matchesSearch = item.name.toLowerCase().includes(adminMenuSearch.toLowerCase()) ||
-                                            item.category.toLowerCase().includes(adminMenuSearch.toLowerCase());
-                      const matchesVendor = adminVendorFilter === 'all' || item.vendorId === adminVendorFilter;
-                      return matchesSearch && matchesVendor;
-                    })
-                    .map(item => {
-                      const vendor = vendors.find(v => v.id === item.vendorId);
-                      return (
-                        <tr key={item.id} className="hover:bg-[#0A0A0A]/40 transition-colors">
-                          <td className="p-4 font-bold text-[#FFFFFF] flex items-center gap-3">
-                            <img src={item.image} alt={item.name} className="h-9 w-9 rounded-lg object-cover border border-[#00ABAB]/30" />
-                            <div>
-                              <div>{item.name}</div>
-                              <div className="text-[10px] text-gray-400 font-sans font-normal line-clamp-1">{item.description}</div>
-                            </div>
-                          </td>
-                          <td className="p-4 font-mono text-[#9CA3AF]">
-                            {vendor ? `${vendor.name} (${vendor.stallNumber})` : 'Central Store'}
-                          </td>
-                          <td className="p-4">
-                            <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#121A24] text-[#40E0D0] border border-[#00ABAB]/30">
-                              {item.category}
-                            </span>
-                          </td>
-                          <td className="p-4 font-mono font-extrabold text-[#40E0D0]">
-                            ₹{item.price.toFixed(2)}
-                          </td>
-                          <td className="p-4 font-mono">
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                (item.stockQuantity ?? 50) > 10
-                                  ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
-                                  : (item.stockQuantity ?? 50) > 0
-                                  ? 'bg-amber-950/60 text-amber-300 border-amber-800/60'
-                                  : 'bg-red-950/60 text-red-400 border-red-800/60'
-                              }`}>
-                                {item.stockQuantity ?? 50} units
-                              </span>
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => updateMenuItemStock(item.id, Math.max(0, (item.stockQuantity ?? 50) - 5))}
-                                  className="w-5 h-5 rounded bg-[#1A1A1A] hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 text-xs font-bold flex items-center justify-center transition-colors cursor-pointer"
-                                  title="Reduce 5 units"
-                                >
-                                  -5
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => updateMenuItemStock(item.id, (item.stockQuantity ?? 50) + 10)}
-                                  className="px-1.5 h-5 rounded bg-[#00ABAB]/15 hover:bg-[#00ABAB] text-[#00ABAB] hover:text-black text-[10px] font-bold font-mono flex items-center justify-center transition-colors cursor-pointer"
-                                  title="Add +10 units"
-                                >
-                                  +10
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => updateMenuItemStock(item.id, (item.stockQuantity ?? 50) + 50)}
-                                  className="px-1.5 h-5 rounded bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-black text-[10px] font-bold font-mono flex items-center justify-center transition-colors cursor-pointer"
-                                  title="Add +50 units"
-                                >
-                                  +50
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <button
-                              onClick={() => updateMenuItem({ ...item, isAvailable: !item.isAvailable })}
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border cursor-pointer ${
-                                item.isAvailable
-                                  ? 'bg-teal-950 text-[#40E0D0] border-[#00ABAB]'
-                                  : 'bg-red-950 text-red-400 border-red-800'
-                              }`}
-                            >
-                              {item.isAvailable ? 'In Stock' : 'Out of Stock'}
-                            </button>
-                          </td>
-                          <td className="p-4 text-right">
-                            <button
-                              onClick={() => handleEditAdminMenuClick(item)}
-                              className="px-2.5 py-1 text-xs rounded-lg border border-[#00ABAB]/30 hover:bg-[#0A0A0A] text-[#FFFFFF] transition-colors cursor-pointer mr-1.5"
-                            >
-                              <Edit className="h-3.5 w-3.5 inline" /> Edit
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
-                                  deleteMenuItem(item.id);
-                                }
-                              }}
-                              className="px-2.5 py-1 text-xs rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/40 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 inline" /> Delete
-                            </button>
+                  return (
+                    <div key={vendor.id} className="p-3.5 bg-[#0A0A0A]/60 border border-[#00ABAB]/20 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="font-bold text-sm text-white truncate">{vendor.name}</div>
+                        <span className="text-[10px] font-mono text-gray-400">{vendor.stallNumber}</span>
+                      </div>
+                      <div className="flex justify-between items-end pt-1">
+                        <div>
+                          <div className="text-[10px] text-gray-400 font-mono">Revenue</div>
+                          <div className="text-base font-black font-mono text-[#14F1D9]">₹{vendorRev.toFixed(2)}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] text-emerald-400 font-mono font-bold">Margin: +₹{vendorProfit.toFixed(2)}</div>
+                          <div className="text-[10px] text-gray-400 font-mono">{vendorUnits} units sold</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Itemized Sales & Profitability Ledger */}
+            <div className="space-y-3">
+              <div className="flex flex-wrap justify-between items-center gap-3">
+                <h4 className="text-xs uppercase font-mono font-bold text-gray-400 tracking-wider">
+                  Itemized Synchronized Sales & Trade Profit Ledger
+                </h4>
+
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  <div className="flex items-center gap-2 min-w-[200px] bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-lg px-2.5 py-1">
+                    <Search className="h-3.5 w-3.5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search menu item..."
+                      value={adminMenuSearch}
+                      onChange={(e) => setAdminMenuSearch(e.target.value)}
+                      className="w-full bg-transparent text-white focus:outline-none text-xs font-mono"
+                    />
+                  </div>
+
+                  <select
+                    value={adminVendorFilter}
+                    onChange={(e) => setAdminVendorFilter(e.target.value)}
+                    className="bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-lg px-2.5 py-1 text-white text-xs font-mono focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">All Vendors</option>
+                    {vendors.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden">
+                <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
+                  <table className="w-full text-left text-xs text-[#FFFFFF]">
+                    <thead>
+                      <tr className="bg-[#0A0A0A]/80 border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold sticky top-0 bg-[#050816] z-10">
+                        <th className="p-3.5">Menu Item</th>
+                        <th className="p-3.5">Outlet / Stall</th>
+                        <th className="p-3.5 text-right">Selling Price</th>
+                        <th className="p-3.5 text-right">Trade Purchase Cost</th>
+                        <th className="p-3.5 text-right">Units Sold</th>
+                        <th className="p-3.5 text-right">Total Revenue</th>
+                        <th className="p-3.5 text-right">Total Trade Outlay</th>
+                        <th className="p-3.5 text-right">Net Profit (Margin)</th>
+                        <th className="p-3.5 text-center">Stock Left</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-teal-100/10">
+                      {menuItems
+                        .filter(item => {
+                          const matchesSearch = item.name.toLowerCase().includes(adminMenuSearch.toLowerCase()) ||
+                                                item.category.toLowerCase().includes(adminMenuSearch.toLowerCase());
+                          const matchesVendor = adminVendorFilter === 'all' || item.vendorId === adminVendorFilter;
+                          return matchesSearch && matchesVendor;
+                        })
+                        .map(item => {
+                          const vendor = vendors.find(v => v.id === item.vendorId);
+                          const purchaseCost = item.purchasePrice ?? (item.price * 0.6);
+                          
+                          // Calculate units sold for this item
+                          let unitsSold = 0;
+                          paidCafeOrders.forEach(o => {
+                            o.items.forEach(i => {
+                              if (i.menuItemId === item.id || i.name === item.name) {
+                                unitsSold += (i.quantity || 1);
+                              }
+                            });
+                          });
+
+                          const totalRev = unitsSold * item.price;
+                          const totalCost = unitsSold * purchaseCost;
+                          const profit = totalRev - totalCost;
+                          const marginPercent = item.price > 0 ? Math.round(((item.price - purchaseCost) / item.price) * 100) : 0;
+                          const stock = item.stockQuantity ?? 50;
+
+                          return (
+                            <tr key={item.id} className="hover:bg-[#0A0A0A]/40 transition-colors">
+                              <td className="p-3.5 font-bold text-[#FFFFFF] flex items-center gap-3">
+                                <img 
+                                  src={item.image} 
+                                  alt={item.name} 
+                                  className="h-8 w-8 rounded-lg object-cover border border-[#00ABAB]/30 shrink-0" 
+                                  referrerPolicy="no-referrer"
+                                />
+                                <div>
+                                  <div className="font-bold">{item.name}</div>
+                                  <div className="text-[10px] text-gray-400 font-normal">{item.category}</div>
+                                </div>
+                              </td>
+
+                              <td className="p-3.5 font-mono text-[#9CA3AF]">
+                                {vendor ? vendor.name : 'Central Retail'}
+                              </td>
+
+                              <td className="p-3.5 font-mono font-bold text-[#14F1D9] text-right">
+                                ₹{item.price.toFixed(2)}
+                              </td>
+
+                              <td className="p-3.5 font-mono font-bold text-amber-400 text-right">
+                                ₹{purchaseCost.toFixed(2)}
+                              </td>
+
+                              <td className="p-3.5 font-mono font-black text-white text-right">
+                                {unitsSold}
+                              </td>
+
+                              <td className="p-3.5 font-mono font-bold text-[#14F1D9] text-right">
+                                ₹{totalRev.toFixed(2)}
+                              </td>
+
+                              <td className="p-3.5 font-mono font-semibold text-amber-400 text-right">
+                                ₹{totalCost.toFixed(2)}
+                              </td>
+
+                              <td className="p-3.5 font-mono text-right">
+                                <span className="text-emerald-400 font-bold">
+                                  +₹{profit.toFixed(2)}
+                                </span>
+                                <span className="text-[10px] text-gray-400 block">
+                                  {marginPercent}% margin
+                                </span>
+                              </td>
+
+                              <td className="p-3.5 text-center">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                                  stock > 10
+                                    ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
+                                    : stock > 0
+                                    ? 'bg-amber-950/60 text-amber-300 border-amber-800/60'
+                                    : 'bg-red-950/60 text-red-400 border-red-800/60'
+                                }`}>
+                                  {stock} units
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Synchronized Orders Audit Stream */}
+            <div className="space-y-3">
+              <h4 className="text-xs uppercase font-mono font-bold text-gray-400 tracking-wider">
+                Recent Synchronized Orders Stream (Audit Log)
+              </h4>
+
+              <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden">
+                <div className="overflow-x-auto max-h-[350px] custom-scrollbar">
+                  <table className="w-full text-left text-xs text-[#FFFFFF]">
+                    <thead>
+                      <tr className="bg-[#0A0A0A]/80 border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold sticky top-0 bg-[#050816] z-10">
+                        <th className="p-3.5">Order ID / Time</th>
+                        <th className="p-3.5">Customer</th>
+                        <th className="p-3.5">Items Ordered</th>
+                        <th className="p-3.5">Total Amount</th>
+                        <th className="p-3.5">Payment</th>
+                        <th className="p-3.5 text-center">Sync Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-teal-100/10 font-mono">
+                      {paidCafeOrders.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-gray-400">
+                            No synchronized cafe transactions recorded for this filter.
                           </td>
                         </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
+                      ) : (
+                        paidCafeOrders.slice(0, 30).map(order => (
+                          <tr key={`sync-order-${order.id}`} className="hover:bg-[#0A0A0A]/40 transition-colors">
+                            <td className="p-3.5">
+                              <div className="font-bold text-white">{order.id}</div>
+                              <div className="text-[10px] text-gray-400">{new Date(order.createdAt).toLocaleString()}</div>
+                            </td>
+                            <td className="p-3.5 font-sans">
+                              <div className="font-bold text-white">{order.customerName || 'Walk-in Guest'}</div>
+                              <div className="text-[10px] text-gray-400">{order.customerEmail || 'counter@deuce.park'}</div>
+                            </td>
+                            <td className="p-3.5 font-sans text-[11px]">
+                              {order.items.map((i, idx) => (
+                                <div key={idx} className="truncate max-w-xs">
+                                  <span className="font-bold text-[#14F1D9]">{i.quantity}x</span> {i.name} (@ ₹{i.price.toFixed(2)})
+                                </div>
+                              ))}
+                            </td>
+                            <td className="p-3.5 font-black text-sm text-[#14F1D9]">
+                              ₹{order.totalAmount.toFixed(2)}
+                            </td>
+                            <td className="p-3.5">
+                              <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
+                                {order.paymentStatus}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-center">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-teal-950/60 text-[#40E0D0] border border-[#00ABAB]/40">
+                                <CheckCircle className="h-3 w-3" /> Synchronized
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ----------------------------------------------------------------- */}
       {/* 4. USER MANAGEMENT VIEW */}
@@ -2915,146 +3754,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
-      {/* ADMIN SINGLE MENU ITEM MODAL */}
-      {isAdminMenuModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <form onSubmit={handleSaveAdminMenu} className="glass-panel border border-[#00ABAB]/30 p-6 rounded-2xl shadow-2xl max-w-md w-full space-y-4">
-            <h3 className="font-bold text-lg text-[#FFFFFF] font-sans">
-              {editingAdminMenuItem ? 'Edit Menu Item' : 'Create New Menu Item'}
-            </h3>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Item Name</label>
-                <input
-                  type="text"
-                  required
-                  id="input-admin-menu-name"
-                  value={adminMenuForm.name}
-                  onChange={e => setAdminMenuForm({...adminMenuForm, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
-                  placeholder="e.g., Ice Cold Brew"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Description</label>
-                <textarea
-                  required
-                  id="input-admin-menu-desc"
-                  value={adminMenuForm.description}
-                  onChange={e => setAdminMenuForm({...adminMenuForm, description: e.target.value})}
-                  className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
-                  rows={2}
-                  placeholder="Briefly describe the item ingredients..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Vendor Stall / Outlet</label>
-                <select
-                  id="select-admin-menu-vendor"
-                  value={adminMenuForm.vendorId}
-                  onChange={e => setAdminMenuForm({...adminMenuForm, vendorId: e.target.value})}
-                  className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF] cursor-pointer"
-                >
-                  {vendors.map(v => (
-                    <option key={v.id} value={v.id}>{v.name} ({v.stallNumber})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Price (₹)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    id="input-admin-menu-price"
-                    value={adminMenuForm.price}
-                    onChange={e => setAdminMenuForm({...adminMenuForm, price: Number(e.target.value)})}
-                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
-                    min={0}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Stock Entries</label>
-                  <input
-                    type="number"
-                    required
-                    id="input-admin-menu-stock"
-                    value={adminMenuForm.stockQuantity}
-                    onChange={e => setAdminMenuForm({...adminMenuForm, stockQuantity: Number(e.target.value)})}
-                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#40E0D0] font-mono font-bold"
-                    min={0}
-                    placeholder="e.g. 50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Category</label>
-                  <input
-                    type="text"
-                    required
-                    id="input-admin-menu-category"
-                    value={adminMenuForm.category}
-                    onChange={e => setAdminMenuForm({...adminMenuForm, category: e.target.value})}
-                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
-                    placeholder="e.g. Burgers, Beverages"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Promo Image URL</label>
-                <input
-                  type="url"
-                  id="input-admin-menu-image"
-                  value={adminMenuForm.image}
-                  onChange={e => setAdminMenuForm({...adminMenuForm, image: e.target.value})}
-                  className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF]"
-                  placeholder="https://images.unsplash.com..."
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="input-admin-menu-available"
-                  checked={adminMenuForm.isAvailable}
-                  onChange={e => setAdminMenuForm({...adminMenuForm, isAvailable: e.target.checked})}
-                  className="h-4 w-4 rounded text-[#40E0D0] focus:ring-teal-900 cursor-pointer"
-                />
-                <label htmlFor="input-admin-menu-available" className="text-slate-100/75 font-bold cursor-pointer">Immediately list as Available (In Stock)</label>
-              </div>
-            </div>
-
-            <div className="flex gap-3 justify-end border-t border-[#007B8B]/10 pt-4">
-              <button
-                type="button"
-                id="btn-cancel-admin-menu"
-                onClick={() => setIsAdminMenuModalOpen(false)}
-                className="px-4 py-2 border border-[#007B8B]/25 text-slate-100 rounded-xl font-bold text-xs hover:bg-[#007B8B]/5 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                id="btn-save-admin-menu-form"
-                className="px-4 py-2 bg-gradient-to-r from-[#007B8B] to-[#134E4A] text-[#0B0F14] rounded-xl font-bold text-xs hover:bg-[#134E4A] cursor-pointer"
-              >
-                Save Item
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-      {/* BULK ADD MENU ITEMS MODAL */}
-      <BulkAddMenuModal
-        isOpen={isBulkMenuModalOpen}
-        onClose={() => setIsBulkMenuModalOpen(false)}
-      />
-
+      {/* END MODALS */}
     </div>
   );
 };

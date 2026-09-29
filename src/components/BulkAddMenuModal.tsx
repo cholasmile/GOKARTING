@@ -19,6 +19,8 @@ interface DraftRow {
   category: string;
   vendorId: string;
   price: string;
+  purchasePrice: string;
+  stockQuantity: string;
   description: string;
   isAvailable: boolean;
   image: string;
@@ -26,10 +28,13 @@ interface DraftRow {
 
 const CATEGORY_OPTIONS = [
   'Beverages',
+  'Wood-Fired Pizza',
+  'Smash Burgers',
+  'Starters & Sides',
+  'Desserts & Shakes',
   'Snacks & Fast Food',
   'Main Course',
-  'Desserts & Ice Cream',
-  'Retail & Gear',
+  'Retail & Merchandise',
   'Souvenirs & Apparel',
   'Combos & Offers'
 ];
@@ -50,6 +55,8 @@ export const BulkAddMenuModal: React.FC<BulkAddMenuModalProps> = ({
     category,
     vendorId,
     price: '',
+    purchasePrice: '',
+    stockQuantity: '50',
     description: '',
     isAvailable: true,
     image: DEFAULT_IMAGE_PLACEHOLDER
@@ -130,6 +137,8 @@ export const BulkAddMenuModal: React.FC<BulkAddMenuModalProps> = ({
       name: r.name.trim(),
       description: r.description.trim() || `${r.name.trim()} - Freshly prepared menu item.`,
       price: parseFloat(r.price) || 0,
+      purchasePrice: parseFloat(r.purchasePrice) || 0,
+      stockQuantity: parseInt(r.stockQuantity) || 50,
       category: r.category.trim() || 'General',
       isAvailable: r.isAvailable,
       image: r.image.trim() || DEFAULT_IMAGE_PLACEHOLDER
@@ -150,7 +159,7 @@ export const BulkAddMenuModal: React.FC<BulkAddMenuModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-[#0B0F14] border border-[#00ABAB]/40 rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-[#F8FAFC]">
+      <div className="bg-[#0B0F14] border border-[#00ABAB]/40 rounded-2xl w-full max-w-6xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-[#F8FAFC]">
         {/* Header */}
         <div className="p-5 border-b border-[#00ABAB]/30 bg-[#121A24] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -257,12 +266,14 @@ export const BulkAddMenuModal: React.FC<BulkAddMenuModalProps> = ({
               <thead>
                 <tr className="bg-[#121A24] border-b border-[#00ABAB]/30 text-gray-400 font-mono font-bold">
                   <th className="p-3 w-10 text-center">#</th>
-                  <th className="p-3 min-w-[180px]">Item Name *</th>
-                  <th className="p-3 min-w-[150px]">Stall / Vendor</th>
-                  <th className="p-3 min-w-[140px]">Category</th>
-                  <th className="p-3 min-w-[100px]">Price (₹) *</th>
-                  <th className="p-3 min-w-[180px]">Description</th>
-                  <th className="p-3 w-20 text-center">In Stock</th>
+                  <th className="p-3 min-w-[160px]">Item Name *</th>
+                  <th className="p-3 min-w-[140px]">Stall / Vendor</th>
+                  <th className="p-3 min-w-[130px]">Category</th>
+                  <th className="p-3 min-w-[90px]">Selling ₹ *</th>
+                  <th className="p-3 min-w-[90px]">Purchase ₹ (Trade)</th>
+                  <th className="p-3 min-w-[75px]">Initial Stk</th>
+                  <th className="p-3 min-w-[140px]">Description</th>
+                  <th className="p-3 w-16 text-center">In Stock</th>
                   <th className="p-3 w-12 text-center">Action</th>
                 </tr>
               </thead>
@@ -310,7 +321,7 @@ export const BulkAddMenuModal: React.FC<BulkAddMenuModalProps> = ({
                       </datalist>
                     </td>
 
-                    {/* Price */}
+                    {/* Selling Price */}
                     <td className="p-2">
                       <input
                         type="number"
@@ -319,7 +330,35 @@ export const BulkAddMenuModal: React.FC<BulkAddMenuModalProps> = ({
                         placeholder="0.00"
                         value={row.price}
                         onChange={(e) => handleRowChange(index, 'price', e.target.value)}
-                        className="w-full bg-[#121A24] border border-[#00ABAB]/30 rounded-lg px-2.5 py-1.5 text-[#40E0D0] font-mono font-bold text-xs focus:outline-none focus:border-[#40E0D0]"
+                        className="w-full bg-[#121A24] border border-[#00ABAB]/30 rounded-lg px-2 py-1.5 text-[#40E0D0] font-mono font-bold text-xs focus:outline-none focus:border-[#40E0D0]"
+                        title="Selling Price to Guest"
+                      />
+                    </td>
+
+                    {/* Purchase Price (Trade Cost) */}
+                    <td className="p-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={row.purchasePrice}
+                        onChange={(e) => handleRowChange(index, 'purchasePrice', e.target.value)}
+                        className="w-full bg-[#121A24] border border-amber-400/30 rounded-lg px-2 py-1.5 text-amber-300 font-mono font-bold text-xs focus:outline-none focus:border-amber-400"
+                        title="Vendor Trade / Purchase Cost"
+                      />
+                    </td>
+
+                    {/* Initial Stock */}
+                    <td className="p-2">
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="50"
+                        value={row.stockQuantity}
+                        onChange={(e) => handleRowChange(index, 'stockQuantity', e.target.value)}
+                        className="w-full bg-[#121A24] border border-[#00ABAB]/30 rounded-lg px-2 py-1.5 text-white font-mono font-bold text-xs focus:outline-none focus:border-[#40E0D0]"
+                        title="Initial Stock Quantity"
                       />
                     </td>
 

@@ -54,6 +54,7 @@ export const FoodVendorDashboard: React.FC = () => {
     name: '',
     description: '',
     price: 5.0,
+    purchasePrice: 3.0,
     category: 'Beverages',
     vendorId: vendors[0]?.id || 'vendor-forest-cafe',
     image: '',
@@ -180,6 +181,7 @@ export const FoodVendorDashboard: React.FC = () => {
         name: menuForm.name,
         description: menuForm.description,
         price: Number(menuForm.price),
+        purchasePrice: Number(menuForm.purchasePrice) || 0,
         category: menuForm.category,
         vendorId: targetVendorId,
         image: defaultImage,
@@ -192,6 +194,7 @@ export const FoodVendorDashboard: React.FC = () => {
         name: menuForm.name,
         description: menuForm.description,
         price: Number(menuForm.price),
+        purchasePrice: Number(menuForm.purchasePrice) || 0,
         category: menuForm.category,
         image: defaultImage,
         stockQuantity: qty,
@@ -205,6 +208,7 @@ export const FoodVendorDashboard: React.FC = () => {
       name: '',
       description: '',
       price: 5.0,
+      purchasePrice: 3.0,
       category: 'Beverages',
       vendorId: vendors[0]?.id || 'vendor-forest-cafe',
       image: '',
@@ -219,6 +223,7 @@ export const FoodVendorDashboard: React.FC = () => {
       name: item.name,
       description: item.description,
       price: item.price,
+      purchasePrice: item.purchasePrice ?? Math.round(item.price * 0.6 * 100) / 100,
       category: item.category,
       vendorId: item.vendorId,
       image: item.image,
@@ -793,7 +798,9 @@ export const FoodVendorDashboard: React.FC = () => {
                           <th className="p-3.5">Item Details</th>
                           <th className="p-3.5">Vendor / Stall</th>
                           <th className="p-3.5">Category</th>
-                          <th className="p-3.5">Price (₹)</th>
+                          <th className="p-3.5">Selling Price</th>
+                          <th className="p-3.5">Purchase / Trade Cost</th>
+                          <th className="p-3.5">Unit Margin</th>
                           <th className="p-3.5">Stock Position</th>
                           <th className="p-3.5">Availability</th>
                           <th className="p-3.5 text-right">Actions</th>
@@ -802,7 +809,7 @@ export const FoodVendorDashboard: React.FC = () => {
                       <tbody className="divide-y divide-teal-100/20">
                         {displayedItems.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="p-8 text-center text-[#9CA3AF] font-mono">
+                            <td colSpan={9} className="p-8 text-center text-[#9CA3AF] font-mono">
                               No retail or menu items match the filter criteria.
                             </td>
                           </tr>
@@ -810,6 +817,9 @@ export const FoodVendorDashboard: React.FC = () => {
                           displayedItems.map(item => {
                             const vendor = vendors.find(v => v.id === item.vendorId);
                             const stock = item.stockQuantity ?? 50;
+                            const purchaseCost = item.purchasePrice ?? 0;
+                            const unitMargin = item.price - purchaseCost;
+                            const marginPercent = item.price > 0 ? Math.round((unitMargin / item.price) * 100) : 0;
 
                             return (
                               <tr key={item.id} className="hover:bg-[#0A0A0A]/40 transition-colors">
@@ -838,6 +848,19 @@ export const FoodVendorDashboard: React.FC = () => {
 
                                 <td className="p-3.5 font-mono font-extrabold text-[#40E0D0]">
                                   ₹{item.price.toFixed(2)}
+                                </td>
+
+                                <td className="p-3.5 font-mono font-bold text-amber-400">
+                                  ₹{purchaseCost.toFixed(2)}
+                                </td>
+
+                                <td className="p-3.5 font-mono text-xs">
+                                  <div className="text-emerald-400 font-bold">
+                                    +₹{unitMargin.toFixed(2)}
+                                  </div>
+                                  <div className="text-[10px] text-[#9CA3AF]">
+                                    {marginPercent}% margin
+                                  </div>
                                 </td>
 
                                 <td className="p-3.5 font-mono">
@@ -988,7 +1011,16 @@ export const FoodVendorDashboard: React.FC = () => {
                         <div>
                           <div className="flex justify-between items-start gap-2">
                             <h4 className="font-bold text-sm text-[#FFFFFF]">{item.name}</h4>
-                            <span className="font-mono font-black text-sm text-[#40E0D0]">₹{item.price.toFixed(2)}</span>
+                            <div className="text-right">
+                              <div className="font-mono font-black text-sm text-[#40E0D0]">₹{item.price.toFixed(2)}</div>
+                              <div className="text-[9px] font-mono text-amber-400">Cost: ₹{(item.purchasePrice || 0).toFixed(2)}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] font-mono mt-1 pt-1 border-t border-white/5">
+                            <span className="text-[#9CA3AF]">Margin:</span>
+                            <span className="text-emerald-400 font-bold">
+                              +₹{(item.price - (item.purchasePrice || 0)).toFixed(2)} ({item.price > 0 ? Math.round(((item.price - (item.purchasePrice || 0)) / item.price) * 100) : 0}%)
+                            </span>
                           </div>
                           <p className="text-xs text-[#9CA3AF] mt-1 line-clamp-2 leading-relaxed">
                             {item.description}
@@ -1179,9 +1211,9 @@ export const FoodVendorDashboard: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Price (₹)</label>
+                  <label className="block text-[#9CA3AF] font-bold uppercase tracking-wider mb-1">Selling Price (₹)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -1189,8 +1221,22 @@ export const FoodVendorDashboard: React.FC = () => {
                     id="input-menu-price"
                     value={menuForm.price}
                     onChange={e => setMenuForm({...menuForm, price: Number(e.target.value)})}
-                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF] font-mono"
+                    className="w-full px-3 py-2 border border-[#00ABAB]/30 rounded-lg focus:outline-none focus:border-teal-600 glass-panel text-[#FFFFFF] font-mono font-bold"
                     min={0}
+                  />
+                </div>
+                <div>
+                  <label className="block text-amber-400 font-bold uppercase tracking-wider mb-1">Trade/Purchase Cost (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    required
+                    id="input-menu-purchase-price"
+                    value={menuForm.purchasePrice}
+                    onChange={e => setMenuForm({...menuForm, purchasePrice: Number(e.target.value) || 0})}
+                    className="w-full px-3 py-2 border border-amber-500/30 rounded-lg focus:outline-none focus:border-amber-400 glass-panel text-amber-300 font-mono font-bold"
+                    placeholder="e.g. 3.0"
                   />
                 </div>
                 <div>

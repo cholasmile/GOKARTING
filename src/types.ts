@@ -142,7 +142,8 @@ export interface MenuItem {
   vendorId: string;
   name: string;
   description: string;
-  price: number;
+  price: number; // Selling Price
+  purchasePrice?: number; // Vendor / Trade Purchase Price
   category: string;
   isAvailable: boolean;
   image: string;

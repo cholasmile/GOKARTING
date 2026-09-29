@@ -56,6 +56,7 @@ export const DeuceCafePage: React.FC = () => {
     name: '',
     description: '',
     price: 5.0,
+    purchasePrice: 3.0,
     category: 'Beverages',
     vendorId: vendors[0]?.id || 'vendor-forest-cafe',
     image: '',
@@ -75,6 +76,7 @@ export const DeuceCafePage: React.FC = () => {
         name: menuForm.name,
         description: menuForm.description,
         price: Number(menuForm.price),
+        purchasePrice: Number(menuForm.purchasePrice) || 0,
         category: menuForm.category,
         vendorId: targetVendorId,
         image: defaultImage,
@@ -87,6 +89,7 @@ export const DeuceCafePage: React.FC = () => {
         name: menuForm.name,
         description: menuForm.description,
         price: Number(menuForm.price),
+        purchasePrice: Number(menuForm.purchasePrice) || 0,
         category: menuForm.category,
         image: defaultImage,
         stockQuantity: qty,
@@ -100,6 +103,7 @@ export const DeuceCafePage: React.FC = () => {
       name: '',
       description: '',
       price: 5.0,
+      purchasePrice: 3.0,
       category: 'Beverages',
       vendorId: vendors[0]?.id || 'vendor-forest-cafe',
       image: '',
@@ -114,6 +118,7 @@ export const DeuceCafePage: React.FC = () => {
       name: item.name,
       description: item.description,
       price: item.price,
+      purchasePrice: item.purchasePrice ?? Math.round(item.price * 0.6 * 100) / 100,
       category: item.category,
       vendorId: item.vendorId,
       image: item.image,
@@ -334,7 +339,9 @@ export const DeuceCafePage: React.FC = () => {
                     <tr className="bg-[#0B1120] border-b border-white/10 text-[#9CA3AF] font-mono font-bold text-[10px] uppercase">
                       <th className="p-3">Item Name</th>
                       <th className="p-3">Outlet / Category</th>
-                      <th className="p-3">Price</th>
+                      <th className="p-3">Selling Price</th>
+                      <th className="p-3">Purchase / Trade Cost</th>
+                      <th className="p-3">Unit Margin</th>
                       <th className="p-3">Stock Position</th>
                       <th className="p-3">Availability</th>
                       <th className="p-3 text-right">Actions</th>
@@ -351,6 +358,9 @@ export const DeuceCafePage: React.FC = () => {
                       .map(item => {
                         const vendor = vendors.find(v => v.id === item.vendorId);
                         const stock = item.stockQuantity ?? 50;
+                        const purchaseCost = item.purchasePrice ?? 0;
+                        const unitMargin = item.price - purchaseCost;
+                        const marginPercent = item.price > 0 ? Math.round((unitMargin / item.price) * 100) : 0;
 
                         return (
                           <tr key={`stock-row-${item.id}`} className="hover:bg-white/[0.02] transition-colors">
@@ -374,6 +384,19 @@ export const DeuceCafePage: React.FC = () => {
 
                             <td className="p-3 font-mono font-black text-[#14F1D9]">
                               ₹{item.price.toFixed(2)}
+                            </td>
+
+                            <td className="p-3 font-mono font-semibold text-amber-400">
+                              ₹{purchaseCost.toFixed(2)}
+                            </td>
+
+                            <td className="p-3 font-mono text-[11px]">
+                              <div className="text-emerald-400 font-bold">
+                                +₹{unitMargin.toFixed(2)}
+                              </div>
+                              <div className="text-[9px] text-[#9CA3AF]">
+                                {marginPercent}% margin
+                              </div>
                             </td>
 
                             <td className="p-3 font-mono">
@@ -910,9 +933,9 @@ export const DeuceCafePage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-[10px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Price (₹)</label>
+                  <label className="block text-[10px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Selling Price (₹)</label>
                   <input 
                     type="number" 
                     step="0.01"
@@ -920,7 +943,21 @@ export const DeuceCafePage: React.FC = () => {
                     required 
                     value={menuForm.price}
                     onChange={e => setMenuForm({...menuForm, price: parseFloat(e.target.value) || 0})}
-                    className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
+                    className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono uppercase font-bold text-amber-400 mb-1">Trade/Purchase Cost (₹)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    min="0"
+                    required 
+                    value={menuForm.purchasePrice}
+                    onChange={e => setMenuForm({...menuForm, purchasePrice: parseFloat(e.target.value) || 0})}
+                    className="w-full bg-[#050816] border border-amber-500/30 rounded-xl px-3 py-2.5 text-xs text-amber-300 focus:border-amber-400 focus:outline-none font-mono font-bold"
+                    placeholder="e.g. 3.0"
                   />
                 </div>
 
