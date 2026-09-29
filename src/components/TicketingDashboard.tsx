@@ -174,14 +174,26 @@ const TicketingDashboard: React.FC = () => {
     return matchesSearch && matchesVendor && item.isAvailable;
   });
 
-  const isDateToday = (timestampStr?: string) => {
+  const isDateToday = (timestampStr?: string | number) => {
     if (!timestampStr) return false;
-    const d = new Date(timestampStr);
+    let d: Date;
+    if (typeof timestampStr === 'number' || /^\d+$/.test(String(timestampStr))) {
+      const num = Number(timestampStr);
+      d = new Date(num < 10000000000 ? num * 1000 : num);
+    } else {
+      d = new Date(timestampStr);
+    }
     if (isNaN(d.getTime())) return false;
+    
     const now = new Date();
-    return d.getFullYear() === now.getFullYear() &&
-           d.getMonth() === now.getMonth() &&
-           d.getDate() === now.getDate();
+    const isSameLocalDate = d.getFullYear() === now.getFullYear() &&
+                            d.getMonth() === now.getMonth() &&
+                            d.getDate() === now.getDate();
+    
+    const todayIso = now.toISOString().split('T')[0];
+    const itemIso = typeof timestampStr === 'string' && timestampStr.includes('-') ? timestampStr.split('T')[0] : '';
+    
+    return isSameLocalDate || itemIso === todayIso;
   };
 
   const filteredRawPayments = payments.filter(p => {
