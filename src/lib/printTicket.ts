@@ -317,6 +317,7 @@ export function printTicket(opts: PrintTicketOptions) {
         </div>
       </div>
 
+      ${!isFood ? `
       <div class="info-bar">
         <span>TOKEN: <strong>${token}</strong></span>
         <span class="status-tag ${statusBadgeClass}">${statusText}</span>
@@ -328,17 +329,15 @@ export function printTicket(opts: PrintTicketOptions) {
           <div>Customer Name: <strong>${customerName}</strong></div>
           <div>Phone Number: <strong>${customerPhone || 'N/A'}</strong></div>
           <div>Token Number: <strong>${token}</strong></div>
-          ${isFood 
-            ? `<div>Date: <strong>${visitDate}</strong> (${slot})</div>`
-            : `<div>Package: <strong>${displayPackage}</strong></div>
-               <div>Passes: <strong>${quantity} Pax</strong></div>
-               <div>Date/Slot: <strong>${visitDate}</strong> (${slot})</div>`
-          }
+          <div>Package: <strong>${displayPackage}</strong></div>
+          <div>Passes: <strong>${quantity} Pax</strong></div>
+          <div>Date/Slot: <strong>${visitDate}</strong> (${slot})</div>
         </div>
         <div class="qr-box">
           ${qrSvg}
         </div>
       </div>
+      ` : ''}
 
       <!-- Menu Items and Price Table -->
       <table class="items-table">
@@ -379,8 +378,7 @@ export function printTicket(opts: PrintTicketOptions) {
       </div>
 
       <div class="footer-note">
-        ${isFood ? 'Ready for pickup when token is called.' : 'Valid for date/slot printed above. Non-refundable.'}
-        <br/><strong>Thank you for visiting DEUCE SPORTS GROUP!</strong>
+        ${isFood ? '<strong>Thank you for visiting DEUCE SPORTS GROUP!</strong>' : 'Valid for date/slot printed above. Non-refundable.<br/><strong>Thank you for visiting DEUCE SPORTS GROUP!</strong>'}
       </div>
     </div>
   </div>

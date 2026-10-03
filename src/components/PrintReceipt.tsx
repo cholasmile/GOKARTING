@@ -42,25 +42,29 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
         </div>
       </div>
 
-      {/* Meta Bar */}
-      <div className="flex justify-between items-center mb-1.5 text-[11px] font-semibold border-b border-solid border-black pb-1">
-        <span>TOKEN: <strong className="font-bold">{token}</strong></span>
-        <span>{new Date(date).toLocaleDateString()}</span>
-      </div>
+      {/* Meta Bar - Only for Bookings */}
+      {type !== 'food' && (
+        <>
+          <div className="flex justify-between items-center mb-1.5 text-[11px] font-semibold border-b border-solid border-black pb-1">
+            <span>TOKEN: <strong className="font-bold">{token}</strong></span>
+            <span>{new Date(date).toLocaleDateString()}</span>
+          </div>
 
-      <div className="mb-1.5 text-[11px] font-semibold space-y-0.5">
-        <p>Customer Name: <strong className="font-bold">{customerName}</strong> ({totalQty} Pax)</p>
-        <p>Customer Phone: <strong className="font-bold">{customerPhone || 'N/A'}</strong></p>
-        <p>Token Number: <strong className="font-bold">{token}</strong></p>
-        {items[0] && <p>Package: <strong className="font-bold">{items[0].name}</strong></p>}
-        <p>Type: <strong className="uppercase font-bold">{type}</strong></p>
-      </div>
+          <div className="mb-1.5 text-[11px] font-semibold space-y-0.5">
+            <p>Customer Name: <strong className="font-bold">{customerName}</strong> ({totalQty} Pax)</p>
+            <p>Customer Phone: <strong className="font-bold">{customerPhone || 'N/A'}</strong></p>
+            <p>Token Number: <strong className="font-bold">{token}</strong></p>
+            {items[0] && <p>Package: <strong className="font-bold">{items[0].name}</strong></p>}
+            <p>Type: <strong className="uppercase font-bold">{type}</strong></p>
+          </div>
+        </>
+      )}
 
       {/* Table */}
       <table className="w-full text-[11px] mb-1.5 border-collapse">
         <thead>
           <tr className="border-b border-black text-left font-bold">
-            <th className="py-0.5">Ticket Split Up</th>
+            <th className="py-0.5">{type === 'food' ? 'Item Name' : 'Ticket Split Up'}</th>
             <th className="text-center py-0.5">Qty</th>
             <th className="text-right py-0.5">Price</th>
           </tr>
@@ -86,7 +90,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
       {/* Summary */}
       <div className="border-t border-solid border-black pt-1 space-y-0.5 text-[11px] font-semibold">
         <div className="flex justify-between font-bold text-[13.5px] border-t border-b border-black py-1 mt-0.5">
-          <span>GRAND TOTAL ({paymentMethod ? paymentMethod.toUpperCase() : 'PAID'}):</span>
+          <span>{type === 'food' ? 'TOTAL' : 'GRAND TOTAL'} ({paymentMethod ? paymentMethod.toUpperCase() : 'PAID'}):</span>
           <span>₹{totalAmount.toFixed(2)}</span>
         </div>
       </div>
@@ -111,7 +115,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
 
       {/* Footer */}
       <div className="text-center mt-1.5 pt-1.5 border-t border-solid border-black text-[9.5px] font-semibold space-y-0.5">
-        <p>Valid for date printed above. Non-refundable.</p>
+        {type !== 'food' && <p>Valid for date printed above. Non-refundable.</p>}
         <p className="font-bold">Thank you for visiting DEUCE SPORTS GROUP!</p>
       </div>
     </div>
