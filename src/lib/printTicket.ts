@@ -94,6 +94,16 @@ export function printTicket(opts: PrintTicketOptions) {
     ? items.map(it => `<tr><td class="td-name">${it.label}</td><td class="td-val">${it.value}</td></tr>`).join('')
     : `<tr><td class="td-name">${activityName} (${quantity} Pax)</td><td class="td-val">₹${netTaxable.toFixed(2)}</td></tr>`;
 
+  const isFood = activityName.toLowerCase().includes('food') || 
+                 activityName.toLowerCase().includes('cafe') || 
+                 activityName.toLowerCase().includes('dining') ||
+                 activityName.toLowerCase().includes('beverage') ||
+                 receiptId.startsWith('KOT-') || 
+                 receiptId.startsWith('ord') ||
+                 slot === 'FOOD COUNTER' ||
+                 slot === 'CAFE COUNTER' ||
+                 slot === 'Counter POS';
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -318,27 +328,30 @@ export function printTicket(opts: PrintTicketOptions) {
           <div>Customer Name: <strong>${customerName}</strong></div>
           <div>Phone Number: <strong>${customerPhone || 'N/A'}</strong></div>
           <div>Token Number: <strong>${token}</strong></div>
-          <div>Package: <strong>${displayPackage}</strong></div>
-          <div>Passes: <strong>${quantity} Pax</strong></div>
-          <div>Date/Slot: <strong>${visitDate}</strong> (${slot})</div>
+          ${isFood 
+            ? `<div>Date: <strong>${visitDate}</strong> (${slot})</div>`
+            : `<div>Package: <strong>${displayPackage}</strong></div>
+               <div>Passes: <strong>${quantity} Pax</strong></div>
+               <div>Date/Slot: <strong>${visitDate}</strong> (${slot})</div>`
+          }
         </div>
         <div class="qr-box">
           ${qrSvg}
         </div>
       </div>
 
-      <!-- Ticket Split Up -->
+      <!-- Menu Items and Price Table -->
       <table class="items-table">
         <thead>
           <tr>
-            <th>Ticket Split Up</th>
-            <th style="text-align: right;">Amount</th>
+            <th>${isFood ? 'Item Name' : 'Ticket Split Up'}</th>
+            <th style="text-align: right;">Price</th>
           </tr>
         </thead>
         <tbody>
           ${items.length > 0 
             ? items.map(it => `<tr><td class="td-name">${it.label}</td><td class="td-val">${it.value}</td></tr>`).join('')
-            : `<tr><td class="td-name">${activityName} (${quantity} Pax)</td><td class="td-val">₹${totalAmount.toFixed(2)}</td></tr>`
+            : `<tr><td class="td-name">${activityName}</td><td class="td-val">₹${totalAmount.toFixed(2)}</td></tr>`
           }
         </tbody>
       </table>
@@ -360,13 +373,13 @@ export function printTicket(opts: PrintTicketOptions) {
         ` : ''}
 
         <div class="total-row">
-          <span>GRAND TOTAL (${paymentMethod.toUpperCase()})</span>
+          <span>TOTAL (${paymentMethod.toUpperCase()})</span>
           <span>₹${grandTotal.toFixed(2)}</span>
         </div>
       </div>
 
       <div class="footer-note">
-        Valid for date/slot printed above. Non-refundable.
+        ${isFood ? 'Ready for pickup when token is called.' : 'Valid for date/slot printed above. Non-refundable.'}
         <br/><strong>Thank you for visiting DEUCE SPORTS GROUP!</strong>
       </div>
     </div>

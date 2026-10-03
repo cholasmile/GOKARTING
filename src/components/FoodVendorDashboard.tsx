@@ -1411,8 +1411,10 @@ export const FoodVendorDashboard: React.FC = () => {
                   if (generatedBillOrder) {
                     printTicket({
                       receiptId: `KOT-${generatedBillOrder.id}`,
+                      tokenNumber: generatedBillOrder.id,
                       activityName: 'DEUCE FOOD & BEVERAGES',
                       customerName: generatedBillOrder.customerName,
+                      customerPhone: generatedBillOrder.customerPhone,
                       date: new Date(generatedBillOrder.createdAt).toISOString(),
                       slot: 'FOOD COUNTER',
                       items: generatedBillOrder.items.map(i => ({ label: `${i.quantity}x ${i.name}`, value: `₹${(i.price * i.quantity).toFixed(2)}` })),

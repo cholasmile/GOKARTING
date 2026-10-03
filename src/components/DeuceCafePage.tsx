@@ -9,10 +9,11 @@ import { MenuItem, FoodOrder } from '../types';
 import { 
   Coffee, Utensils, ShoppingBag, Search, Plus, Minus, Edit,
   Trash2, ArrowRight, CheckCircle2, Clock, Sparkles, X, 
-  CreditCard, Flame, ChevronRight, Ticket, Package, AlertCircle, Layers
+  CreditCard, Flame, ChevronRight, Ticket, Package, AlertCircle, Layers, Printer
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
+import { printTicket } from '../lib/printTicket';
 
 export const DeuceCafePage: React.FC = () => {
   const { 
@@ -875,6 +876,32 @@ export const DeuceCafePage: React.FC = () => {
               <div className="flex justify-between"><span>Items:</span> <span className="text-white font-bold">{confirmedOrder.items.length} items</span></div>
               <div className="flex justify-between"><span>Total:</span> <span className="text-[#14F1D9] font-bold">₹{confirmedOrder.totalAmount.toFixed(2)}</span></div>
             </div>
+
+            <button
+              onClick={() => {
+                printTicket({
+                  receiptId: `KOT-${confirmedOrder.id}`,
+                  tokenNumber: confirmedOrder.id,
+                  activityName: 'DEUCE FOOD & BEVERAGES',
+                  customerName: confirmedOrder.customerName,
+                  customerPhone: confirmedOrder.customerPhone,
+                  date: new Date(confirmedOrder.createdAt).toISOString(),
+                  slot: 'CAFE COUNTER',
+                  items: confirmedOrder.items.map(i => ({
+                    label: `${i.quantity}x ${i.name}`,
+                    value: `₹${(i.price * i.quantity).toFixed(2)}`
+                  })),
+                  totalAmount: confirmedOrder.totalAmount,
+                  paymentStatus: 'paid',
+                  quantity: confirmedOrder.items.reduce((sum, item) => sum + item.quantity, 0),
+                  paymentMethod: 'CASH',
+                  counterStaff: 'Deuce Cafe'
+                });
+              }}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] font-black text-xs uppercase tracking-widest hover:scale-[1.02] transition-all cursor-pointer mb-2.5 flex items-center justify-center gap-2"
+            >
+              <Printer className="w-4 h-4" /> Print Food Bill
+            </button>
 
             <button
               onClick={() => setConfirmedOrder(null)}

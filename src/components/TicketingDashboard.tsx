@@ -152,10 +152,12 @@ const TicketingDashboard: React.FC = () => {
       // Print Receipt
       printTicket({
         receiptId: order.id,
-        activityName: 'Food Street Dining',
+        tokenNumber: order.id,
+        activityName: 'DEUCE FOOD & BEVERAGES',
         customerName: foodCustomerName,
+        customerPhone: order.customerPhone,
         date: new Date().toISOString().split('T')[0],
-        slot: 'Counter POS',
+        slot: 'FOOD COUNTER',
         items: order.items.map(i => ({ label: `${i.quantity}x ${i.name}`, value: `₹${(i.price * i.quantity).toFixed(2)}` })),
         totalAmount: order.totalAmount,
         paymentStatus: 'paid',
