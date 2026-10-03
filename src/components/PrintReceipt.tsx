@@ -2,9 +2,11 @@ import React from 'react';
 
 interface PrintReceiptProps {
   receiptId: string;
+  tokenNumber?: string | number;
   type: 'booking' | 'food';
   date: string;
   customerName: string;
+  customerPhone?: string;
   totalAmount: number;
   items: { name: string; qty: number; price: number }[];
   paymentMethod?: string;
@@ -13,15 +15,18 @@ interface PrintReceiptProps {
 
 export const PrintReceipt: React.FC<PrintReceiptProps> = ({ 
   receiptId, 
+  tokenNumber,
   type, 
   date, 
   customerName, 
+  customerPhone,
   totalAmount, 
   items,
   paymentMethod,
   transactionId
 }) => {
   const totalQty = items.reduce((acc, item) => acc + item.qty, 0);
+  const token = tokenNumber ? String(tokenNumber) : receiptId;
 
   return (
     <div 
@@ -32,19 +37,21 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
       <div className="flex items-center justify-center gap-2.5 border-b border-solid border-black pb-1.5 mb-1.5 text-left">
         <img src="/deuce-logo.jpg" alt="Deuce Logo" className="w-10 h-10 rounded object-cover border border-black flex-shrink-0" />
         <div>
-          <h2 className="text-[17px] font-bold uppercase tracking-wider leading-none">DEUCE</h2>
+          <h2 className="text-[16px] font-bold uppercase tracking-wider leading-tight">DEUCE SPORTS GROUP</h2>
           <p className="text-[9.5px] font-semibold uppercase mt-0.5">Yelagiri • GST: 33INYPK7449Q1ZL</p>
         </div>
       </div>
 
       {/* Meta Bar */}
       <div className="flex justify-between items-center mb-1.5 text-[11px] font-semibold border-b border-solid border-black pb-1">
-        <span>REC: <strong className="font-bold">{receiptId}</strong></span>
+        <span>TOKEN: <strong className="font-bold">{token}</strong></span>
         <span>{new Date(date).toLocaleDateString()}</span>
       </div>
 
       <div className="mb-1.5 text-[11px] font-semibold space-y-0.5">
-        <p>Guest: <strong className="font-bold">{customerName}</strong> ({totalQty} Pax)</p>
+        <p>Customer Name: <strong className="font-bold">{customerName}</strong> ({totalQty} Pax)</p>
+        <p>Customer Phone: <strong className="font-bold">{customerPhone || 'N/A'}</strong></p>
+        <p>Token Number: <strong className="font-bold">{token}</strong></p>
         {items[0] && <p>Package: <strong className="font-bold">{items[0].name}</strong></p>}
         <p>Type: <strong className="uppercase font-bold">{type}</strong></p>
       </div>
@@ -90,7 +97,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
           <div className="text-[10px] font-semibold">
             <p className="font-bold text-[11px] uppercase">ENTRY PASS</p>
             <p>Passes: <strong>{totalQty} Pax</strong></p>
-            <p>ID: {receiptId}</p>
+            <p>Token: <strong>{token}</strong></p>
           </div>
           <div className="w-10 h-10 text-center flex-shrink-0">
             <svg className="w-full h-full text-black" viewBox="0 0 100 100">
@@ -105,7 +112,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
       {/* Footer */}
       <div className="text-center mt-1.5 pt-1.5 border-t border-solid border-black text-[9.5px] font-semibold space-y-0.5">
         <p>Valid for date printed above. Non-refundable.</p>
-        <p className="font-bold">Thank you for visiting DEUCE!</p>
+        <p className="font-bold">Thank you for visiting DEUCE SPORTS GROUP!</p>
       </div>
     </div>
   );

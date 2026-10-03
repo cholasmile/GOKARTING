@@ -1,5 +1,6 @@
 export interface PrintTicketOptions {
   receiptId: string;
+  tokenNumber?: string | number;
   activityName: string;
   packageName?: string;
   customerName: string;
@@ -21,6 +22,7 @@ export interface PrintTicketOptions {
 export function printTicket(opts: PrintTicketOptions) {
   const {
     receiptId,
+    tokenNumber,
     activityName,
     packageName,
     customerName,
@@ -38,6 +40,10 @@ export function printTicket(opts: PrintTicketOptions) {
     transactionId,
     counterStaff = 'Staff'
   } = opts;
+
+  const token = tokenNumber 
+    ? String(tokenNumber)
+    : (receiptId.startsWith('TKT-') ? receiptId.replace(/^TKT-/, '') : receiptId);
 
   const displayPackage = packageName || (items.length > 0 && items[0].label !== activityName ? items[0].label : 'Standard Package');
 
@@ -153,11 +159,11 @@ export function printTicket(opts: PrintTicketOptions) {
       flex-direction: column;
     }
     .brand-title {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 800;
       letter-spacing: 0.5px;
       text-transform: uppercase;
-      line-height: 1;
+      line-height: 1.1;
       color: #000000;
     }
     .brand-sub {
@@ -296,21 +302,23 @@ export function printTicket(opts: PrintTicketOptions) {
       <div class="header">
         <img src="/deuce-logo.jpg" alt="Deuce Logo" class="header-logo" />
         <div class="header-text">
-          <div class="brand-title">DEUCE</div>
+          <div class="brand-title">DEUCE SPORTS GROUP</div>
           <div class="brand-sub">YELAGIRI &bull; GST: 33INYPK7449Q1ZL</div>
         </div>
       </div>
 
       <div class="info-bar">
-        <span>TKT: <strong>${receiptId}</strong></span>
+        <span>TOKEN: <strong>${token}</strong></span>
         <span class="status-tag ${statusBadgeClass}">${statusText}</span>
       </div>
 
       <div class="pass-box">
         <div class="pass-details">
           <div class="act-title">${activityName}</div>
+          <div>Customer Name: <strong>${customerName}</strong></div>
+          <div>Phone Number: <strong>${customerPhone || 'N/A'}</strong></div>
+          <div>Token Number: <strong>${token}</strong></div>
           <div>Package: <strong>${displayPackage}</strong></div>
-          <div>Guest: <strong>${customerName}</strong></div>
           <div>Passes: <strong>${quantity} Pax</strong></div>
           <div>Date/Slot: <strong>${visitDate}</strong> (${slot})</div>
         </div>
@@ -359,7 +367,7 @@ export function printTicket(opts: PrintTicketOptions) {
 
       <div class="footer-note">
         Valid for date/slot printed above. Non-refundable.
-        <br/><strong>Thank you for visiting DEUCE!</strong>
+        <br/><strong>Thank you for visiting DEUCE SPORTS GROUP!</strong>
       </div>
     </div>
   </div>

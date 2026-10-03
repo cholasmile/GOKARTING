@@ -52,7 +52,7 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
             className="w-10 h-10 rounded-md object-cover shadow-sm border border-black flex-shrink-0 print:w-10 print:h-10" 
           />
           <div className="text-left">
-            <h1 className="text-xl font-bold uppercase tracking-tight text-black print:text-[17px] leading-none">DEUCE</h1>
+            <h1 className="text-lg font-bold uppercase tracking-tight text-black print:text-[16px] leading-tight">DEUCE SPORTS GROUP</h1>
             <p className="text-black text-[10.5px] font-sans font-semibold uppercase print:text-[9.5px] mt-0.5">Yelagiri • GST: 33INYPK7449Q1ZL</p>
           </div>
         </div>
@@ -69,19 +69,23 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
             />
           </div>
           <p className="text-xs font-sans font-bold text-black tracking-wider uppercase print:text-[10px]">
-            PASS ID: {ticket.id}
+            TOKEN NUMBER: {ticket.id}
           </p>
         </div>
 
         {/* ── GUEST & SESSION DETAILS ── */}
         <div className="grid grid-cols-2 gap-1.5 mb-2 pb-2 border-b border-solid border-black font-sans text-xs print:text-[11px] print:gap-1 print:mb-1.5 print:pb-1.5">
           <div>
-            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Guest Name</span>
-            <span className="font-bold text-black truncate block">{ticket.customerName}</span>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Customer Name</span>
+            <span className="font-bold text-black truncate block">{ticket.customerName || booking.customerName}</span>
           </div>
           <div>
-            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Contact</span>
-            <span className="font-mono font-bold text-black truncate block">{ticket.customerPhone || 'Registered Guest'}</span>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Customer Phone Number</span>
+            <span className="font-mono font-bold text-black truncate block">{ticket.customerPhone || booking.customerPhone || 'N/A'}</span>
+          </div>
+          <div>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Token Number</span>
+            <span className="font-mono font-bold text-black truncate block">{ticket.id}</span>
           </div>
           <div>
             <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Activity</span>

@@ -50,10 +50,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
 
     printTicket({
       receiptId: `TKT-${receiptId}`,
+      tokenNumber: booking?.id || order?.id || receiptId,
       activityName,
       packageName: booking ? (booking.details || 'Standard Package') : undefined,
       customerName,
-      customerPhone: booking?.customerPhone,
+      customerPhone: booking?.customerPhone || order?.customerPhone,
       date: printDate,
       slot,
       items: itemList,
@@ -106,7 +107,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
             <div className="flex items-center gap-3">
               <img src="/deuce-logo.jpg" alt="Deuce Logo" className="w-10 h-10 rounded-lg object-cover border border-[#14F1D9]/30" />
               <div>
-                <h4 className="font-extrabold text-base text-white font-sans tracking-tight">DEUCE</h4>
+                <h4 className="font-extrabold text-base text-white font-sans tracking-tight">DEUCE SPORTS GROUP</h4>
                 <p className="text-[10px] text-[#9CA3AF] font-mono mt-0.5">Yelagiri • GSTIN: 33INYPK7449Q1ZL</p>
               </div>
             </div>

@@ -1476,10 +1476,11 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
                     printTicket({
                       receiptId: `TKT-${confirmedBooking.id}`,
+                      tokenNumber: confirmedTicket?.id || confirmedBooking.id,
                       activityName: combinedActivityNames || confirmedBooking.activityName,
                       packageName: confirmedBooking.details || 'Standard Package',
                       customerName: confirmedBooking.customerName,
-                      customerPhone: confirmedBooking.customerPhone,
+                      customerPhone: confirmedBooking.customerPhone || guestPhone,
                       date: confirmedBooking.date,
                       slot: confirmedBooking.timeSlot,
                       items: receiptItems,
@@ -1542,10 +1543,11 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
                 printTicket({
                   receiptId: `TKT-${confirmedBooking.id}`,
+                  tokenNumber: confirmedTicket?.id || confirmedBooking.id,
                   activityName: combinedActivityNames || confirmedBooking.activityName,
                   packageName: confirmedBooking.details || 'Standard Package',
                   customerName: confirmedBooking.customerName,
-                  customerPhone: confirmedBooking.customerPhone,
+                  customerPhone: confirmedBooking.customerPhone || guestPhone,
                   date: confirmedBooking.date,
                   slot: confirmedBooking.timeSlot,
                   items: receiptItems,

@@ -70,9 +70,11 @@ const TicketingDashboard: React.FC = () => {
   const handlePrintReceipt = (p: any) => {
     printTicket({
       receiptId: p.ticketId || `TKT-${p.bookingId}`,
+      tokenNumber: p.ticketId || p.bookingId,
       activityName: p.activityName || 'Adventure Activity',
       packageName: p.details || p.activityName || 'Standard Package',
       customerName: p.customerName || 'Walk-in Guest',
+      customerPhone: p.customerPhone,
       date: p.timestamp ? p.timestamp.split('T')[0] : new Date().toISOString().split('T')[0],
       slot: 'Standard Session',
       items: [{ label: p.details || p.activityName || 'Activity Package', value: `₹${p.amount}` }],
