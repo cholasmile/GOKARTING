@@ -545,7 +545,32 @@ const notificationsStore = createJsonStore('notifications_store.json', []);
 const kartsStore = createJsonStore('karts_store.json', []);
 const sessionsStore = createJsonStore('sessions_store.json', []);
 const waiversStore = createJsonStore('waivers_store.json', []);
+const lapRecordsStore = createJsonStore('lap_records_store.json', []);
 const activitiesStore = createJsonStore('activities_store.json', []);
+
+app.get('/api/karts', (req, res) => res.json(kartsStore.get()));
+app.post('/api/karts', (req, res) => {
+  if (kartsStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
+app.get('/api/sessions', (req, res) => res.json(sessionsStore.get()));
+app.post('/api/sessions', (req, res) => {
+  if (sessionsStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
+app.get('/api/waivers', (req, res) => res.json(waiversStore.get()));
+app.post('/api/waivers', (req, res) => {
+  if (waiversStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
+
+app.get('/api/lap-records', (req, res) => res.json(lapRecordsStore.get()));
+app.post('/api/lap-records', (req, res) => {
+  if (lapRecordsStore.set(req.body)) return res.json({ success: true });
+  res.status(400).json({ success: false });
+});
 
 app.get('/api/menu-items', (req, res) => res.json(menuItemsStore.get()));
 app.post('/api/menu-items', (req, res) => {
@@ -648,6 +673,7 @@ app.get('/api/sync/all', (req, res) => {
     karts: kartsStore.get(),
     sessions: sessionsStore.get(),
     waivers: waiversStore.get(),
+    lapRecords: lapRecordsStore.get(),
     serverTime: new Date().toISOString()
   });
 });
@@ -670,6 +696,8 @@ app.post('/api/sync/batch', (req, res) => {
       'karts': kartsStore,
       'sessions': sessionsStore,
       'waivers': waiversStore,
+      'lap_records': lapRecordsStore,
+      'lapRecords': lapRecordsStore,
       'menu_items': menuItemsStore,
       'menuItems': menuItemsStore,
       'food_vendors': vendorsStore,

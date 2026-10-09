@@ -48,6 +48,8 @@ interface AppContextProps {
   syncStatus: SyncStatus;
   pendingSyncCount: number;
   isRealtimeActive: boolean;
+  lastSyncTime?: string;
+  retrySync: () => Promise<{ success: boolean; syncedCount: number }>;
 
   // Mutators - Activities
   addActivity: (activity: Omit<Activity, 'id'>) => void;
@@ -224,9 +226,8 @@ const writeToLocalAndSync = (table: string, action: 'insert' | 'update' | 'delet
 };
 
 /**
- * Robust Entity Merger with Admin Protection
- * Protects locally updated records against stale / unversioned server or dummy static data.
- * If local item has been updated by admin (or is newer), local version is strictly preserved.
+ * Robust Entity Merger with Offline Edit Protection
+ * Allows online authoritative updates from server while protecting local offline modifications that haven't synced yet.
  */
 export const mergeEntitiesWithProtection = <T extends { id: string; updatedAt?: string }>(
   localList: T[],
@@ -237,30 +238,31 @@ export const mergeEntitiesWithProtection = <T extends { id: string; updatedAt?: 
 
   const map = new Map<string, T>();
 
-  // 1. Load all incoming items
-  incomingList.forEach(incoming => {
-    if (incoming && incoming.id) {
-      map.set(incoming.id, incoming);
+  // 1. First add all local items
+  localList.forEach(localItem => {
+    if (localItem && localItem.id) {
+      map.set(localItem.id, localItem);
     }
   });
 
-  // 2. Protect local items from being overwritten by stale incoming data
-  localList.forEach(localItem => {
-    if (localItem && localItem.id) {
-      if (!map.has(localItem.id)) {
-        // Admin created or preserved local entity
-        map.set(localItem.id, localItem);
-      } else {
-        const incomingItem = map.get(localItem.id)!;
-        const localTime = localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
-        const incomingTime = incomingItem.updatedAt ? new Date(incomingItem.updatedAt).getTime() : 0;
+  // 2. Merge incoming authoritative items from online server
+  incomingList.forEach(incomingItem => {
+    if (!incomingItem || !incomingItem.id) return;
 
-        // If local item has a newer timestamp or was explicitly updated by admin (localTime > 0 and incomingTime === 0), LOCAL WINS!
-        if (localTime >= incomingTime) {
-          map.set(localItem.id, { ...incomingItem, ...localItem });
-        } else {
-          map.set(localItem.id, { ...localItem, ...incomingItem });
-        }
+    if (!map.has(incomingItem.id)) {
+      // New record from server
+      map.set(incomingItem.id, incomingItem);
+    } else {
+      const localItem = map.get(incomingItem.id)!;
+      const localTime = localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
+      const incomingTime = incomingItem.updatedAt ? new Date(incomingItem.updatedAt).getTime() : 0;
+
+      // If local item has a strictly newer timestamp (unpushed offline edit), preserve local.
+      // Otherwise, the incoming authoritative server data updates the local record!
+      if (localTime > incomingTime && localTime > 0) {
+        map.set(incomingItem.id, { ...incomingItem, ...localItem });
+      } else {
+        map.set(incomingItem.id, { ...localItem, ...incomingItem });
       }
     }
   });
@@ -362,17 +364,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [isRealtimeActive, setIsRealtimeActive] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() => syncEngine.getLastSyncTime());
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const handleOnline = () => {
+      setIsOnline(true);
+      console.log('[AppContext] Online event: flushing queue and pulling unified sync');
+      syncEngine.triggerSync();
+      pullUnifiedSync();
+    };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     
-    const unsubscribe = syncEngine.subscribe((status, count, realtimeActive) => {
+    const unsubscribe = syncEngine.subscribe((status, count, realtimeActive, lastTime) => {
       setSyncStatus(status);
       setPendingSyncCount(count);
       setIsRealtimeActive(realtimeActive);
+      if (lastTime) setLastSyncTime(lastTime);
+    });
+
+    const unsubscribeSyncCompleted = syncEngine.onSyncCompleted((syncedCount) => {
+      console.log(`[AppContext] Sync completed notification received (${syncedCount} records). Refreshing UI state...`);
+      pullUnifiedSync();
     });
 
     const unsubscribeChanges = syncEngine.subscribeToChanges((event) => {
@@ -397,7 +411,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const exists = prev.some(t => t.id === record.id);
           return exists ? prev.map(t => t.id === record.id ? record : t) : [record, ...prev];
         });
-      } else if (table === 'food_orders') {
+      } else if (table === 'food_orders' || table === 'orders') {
         setOrders(prev => {
           if (eventType === 'DELETE') return prev.filter(o => o.id !== record.id);
           const exists = prev.some(o => o.id === record.id);
@@ -427,7 +441,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const exists = prev.some(s => s.id === record.id);
           return exists ? prev.map(s => s.id === record.id ? record : s) : [record, ...prev];
         });
-      } else if (table === 'lap_records') {
+      } else if (table === 'lap_records' || table === 'lapRecords') {
         setLapRecords(prev => {
           if (eventType === 'DELETE') return prev.filter(l => l.id !== record.id);
           const exists = prev.some(l => l.id === record.id);
@@ -439,7 +453,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const exists = prev.some(w => w.id === record.id);
           return exists ? prev.map(w => w.id === record.id ? record : w) : [record, ...prev];
         });
-      } else if (table === 'menu_items') {
+      } else if (table === 'menu_items' || table === 'menuItems') {
         setMenuItems(prev => {
           if (eventType === 'DELETE') return prev.filter(m => m.id !== record.id);
           const exists = prev.some(m => m.id === record.id);
@@ -451,7 +465,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const exists = prev.some(i => i.id === record.id);
           return exists ? prev.map(i => i.id === record.id ? record : i) : [record, ...prev];
         });
-      } else if (table === 'food_vendors') {
+      } else if (table === 'food_vendors' || table === 'vendors') {
         setVendors(prev => {
           if (eventType === 'DELETE') return prev.filter(v => v.id !== record.id);
           const exists = prev.some(v => v.id === record.id);
@@ -465,6 +479,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       window.removeEventListener('offline', handleOffline);
       unsubscribe();
       unsubscribeChanges();
+      unsubscribeSyncCompleted();
     };
   }, []);
 
@@ -537,9 +552,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!item || typeof item !== 'object') return false;
     const email = (item.customerEmail || item.customer_id || '').toLowerCase();
     const id = (item.id || '').toString();
-    return id.startsWith('bk-100') || id.startsWith('ord-500') || id.startsWith('pay-bk-100') || id.startsWith('pay-ord-500') ||
-           email.endsWith('@example.com') || email.includes('gotham.com') || email.includes('themyscira.gov') ||
-           email.includes('dailybugle.com') || email.includes('ccpd.gov');
+    return /^bk-100[1-9]$/.test(id) || 
+           /^ord-500[1-9]$/.test(id) || 
+           /^pay-bk-100[1-9]$/.test(id) || 
+           /^pay-ord-500[1-9]$/.test(id) ||
+           /^tkt-bk-100[1-9]$/.test(id) ||
+           email === 'bruce@gotham.com' ||
+           email === 'diana@themyscira.gov' ||
+           email === 'peter@dailybugle.com' ||
+           email === 'barry@ccpd.gov' ||
+           email === 'shelby@example.com' ||
+           email === 'watson@baker.street';
   };
 
   const [bookings, setBookings] = useState<Booking[]>(() => {
@@ -997,54 +1020,247 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => { localStorage.setItem('ap_lapRecords', JSON.stringify(lapRecords)); }, [lapRecords]);
   useEffect(() => { localStorage.setItem('ap_waivers', JSON.stringify(waivers)); }, [waivers]);
 
+  // -----------------------------------------------------------------
+  // UNIFIED MULTI-TERMINAL & OFFLINE-TO-ONLINE DATA SYNCHRONIZATION
+  // -----------------------------------------------------------------
+  const pullUnifiedSync = async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+
+    // 1. If Supabase is configured, pull latest authoritative records from Supabase
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const [
+          { data: sbBookings },
+          { data: sbTickets },
+          { data: sbPayments },
+          { data: sbOrders },
+          { data: sbUsers },
+          { data: sbActivities },
+          { data: sbMenuItems },
+          { data: sbVendors },
+          { data: sbInventory }
+        ] = await Promise.all([
+          supabase.from('bookings').select('*'),
+          supabase.from('tickets').select('*'),
+          supabase.from('payments').select('*'),
+          supabase.from('food_orders').select('*'),
+          supabase.from('users').select('*'),
+          supabase.from('activities').select('*'),
+          supabase.from('menu_items').select('*'),
+          supabase.from('food_vendors').select('*'),
+          supabase.from('inventory').select('*')
+        ]);
+
+        if (Array.isArray(sbBookings) && sbBookings.length > 0) {
+          setBookings(prev => {
+            const merged = mergeEntitiesWithProtection(prev, sbBookings);
+            try { localStorage.setItem('ap_bookings', JSON.stringify(merged)); } catch {}
+            db.bookings.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(sbTickets) && sbTickets.length > 0) {
+          setTickets(prev => {
+            const merged = mergeEntitiesWithProtection(prev, sbTickets);
+            try { localStorage.setItem('ap_tickets', JSON.stringify(merged)); } catch {}
+            db.tickets.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(sbPayments) && sbPayments.length > 0) {
+          setPayments(prev => {
+            const merged = mergeEntitiesWithProtection(prev, sbPayments);
+            try { localStorage.setItem('ap_payments', JSON.stringify(merged)); } catch {}
+            db.payments.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(sbOrders) && sbOrders.length > 0) {
+          setOrders(prev => {
+            const merged = mergeEntitiesWithProtection(prev, sbOrders);
+            try { localStorage.setItem('ap_orders', JSON.stringify(merged)); } catch {}
+            db.orders.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(sbUsers) && sbUsers.length > 0) {
+          const cleanUsers = sbUsers.filter((u: any) => u.id !== 'usr-gam' && u.role !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
+          setUsers(prev => {
+            const merged = mergeEntitiesWithProtection(prev, cleanUsers);
+            try { localStorage.setItem('ap_users', JSON.stringify(merged)); } catch {}
+            db.users.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(sbActivities) && sbActivities.length > 0) {
+          const cleanActs = sbActivities.filter((a: any) => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
+          setActivities(prev => {
+            const merged = mergeEntitiesWithProtection(prev, cleanActs);
+            try { localStorage.setItem('ap_activities', JSON.stringify(merged)); } catch {}
+            db.activities.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(sbMenuItems) && sbMenuItems.length > 0) {
+          setMenuItems(prev => {
+            const merged = mergeEntitiesWithProtection(prev, sbMenuItems);
+            try { localStorage.setItem('ap_menu_items', JSON.stringify(merged)); } catch {}
+            db.menuItems.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(sbVendors) && sbVendors.length > 0) {
+          setVendors(prev => {
+            const merged = mergeEntitiesWithProtection(prev, sbVendors);
+            try { localStorage.setItem('ap_vendors', JSON.stringify(merged)); } catch {}
+            db.vendors.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(sbInventory) && sbInventory.length > 0) {
+          setInventory(prev => {
+            const merged = mergeEntitiesWithProtection(prev, sbInventory);
+            try { localStorage.setItem('ap_inventory', JSON.stringify(merged)); } catch {}
+            db.inventory.bulkPut(merged);
+            return merged;
+          });
+        }
+      } catch (sbErr) {
+        // Supabase sync exception - continue to backend API sync
+      }
+    }
+
+    // 2. Also pull from /api/sync/all (multi-terminal local network or Express server)
+    try {
+      const res = await fetch('/api/sync/all');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data) {
+        if (Array.isArray(data.bookings) && data.bookings.length > 0) {
+          setBookings(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.bookings);
+            try { localStorage.setItem('ap_bookings', JSON.stringify(merged)); } catch {}
+            db.bookings.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.tickets) && data.tickets.length > 0) {
+          setTickets(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.tickets);
+            try { localStorage.setItem('ap_tickets', JSON.stringify(merged)); } catch {}
+            db.tickets.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.payments) && data.payments.length > 0) {
+          setPayments(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.payments);
+            try { localStorage.setItem('ap_payments', JSON.stringify(merged)); } catch {}
+            db.payments.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.orders) && data.orders.length > 0) {
+          setOrders(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.orders);
+            try { localStorage.setItem('ap_orders', JSON.stringify(merged)); } catch {}
+            db.orders.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.users) && data.users.length > 0) {
+          const cleanUsers = data.users.filter((u: any) => u.id !== 'usr-gam' && u.role !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
+          setUsers(prev => {
+            const merged = mergeEntitiesWithProtection(prev, cleanUsers);
+            try { localStorage.setItem('ap_users', JSON.stringify(merged)); } catch {}
+            db.users.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.activities) && data.activities.length > 0) {
+          const cleanActs = data.activities.filter((a: any) => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
+          setActivities(prev => {
+            const merged = mergeEntitiesWithProtection(prev, cleanActs);
+            try { localStorage.setItem('ap_activities', JSON.stringify(merged)); } catch {}
+            db.activities.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.menuItems) && data.menuItems.length > 0) {
+          setMenuItems(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.menuItems);
+            try { localStorage.setItem('ap_menu_items', JSON.stringify(merged)); } catch {}
+            db.menuItems.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.vendors) && data.vendors.length > 0) {
+          setVendors(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.vendors);
+            try { localStorage.setItem('ap_vendors', JSON.stringify(merged)); } catch {}
+            db.vendors.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.inventory) && data.inventory.length > 0) {
+          setInventory(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.inventory);
+            try { localStorage.setItem('ap_inventory', JSON.stringify(merged)); } catch {}
+            db.inventory.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.karts) && data.karts.length > 0) {
+          setKarts(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.karts);
+            try { localStorage.setItem('ap_karts', JSON.stringify(merged)); } catch {}
+            db.karts.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.sessions) && data.sessions.length > 0) {
+          setSessions(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.sessions);
+            try { localStorage.setItem('ap_sessions', JSON.stringify(merged)); } catch {}
+            db.sessions.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.waivers) && data.waivers.length > 0) {
+          setWaivers(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.waivers);
+            try { localStorage.setItem('ap_waivers', JSON.stringify(merged)); } catch {}
+            db.waivers.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.lapRecords) && data.lapRecords.length > 0) {
+          setLapRecords(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.lapRecords);
+            try { localStorage.setItem('ap_lapRecords', JSON.stringify(merged)); } catch {}
+            db.lapRecords.bulkPut(merged);
+            return merged;
+          });
+        }
+      }
+    } catch (err) {
+      // Network or local endpoint unavailable
+    }
+  };
+
+  const retrySync = async () => {
+    console.log('[AppContext] Manual sync requested by administrator');
+    const res = await syncEngine.triggerSync();
+    await pullUnifiedSync();
+    return res;
+  };
+
   // Periodic multi-terminal synchronization: pulls latest cloud/offline synced data with protection
   useEffect(() => {
-    const pullUnifiedSync = async () => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-      try {
-        const res = await fetch('/api/sync/all');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data) {
-          if (Array.isArray(data.bookings) && data.bookings.length > 0) {
-            setBookings(prev => mergeEntitiesWithProtection(prev, data.bookings));
-          }
-          if (Array.isArray(data.tickets) && data.tickets.length > 0) {
-            setTickets(prev => mergeEntitiesWithProtection(prev, data.tickets));
-          }
-          if (Array.isArray(data.payments) && data.payments.length > 0) {
-            setPayments(prev => mergeEntitiesWithProtection(prev, data.payments));
-          }
-          if (Array.isArray(data.orders) && data.orders.length > 0) {
-            setOrders(prev => mergeEntitiesWithProtection(prev, data.orders));
-          }
-          if (Array.isArray(data.users) && data.users.length > 0) {
-            const cleanUsers = data.users.filter((u: any) => u.id !== 'usr-gam' && u.role !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
-            setUsers(prev => mergeEntitiesWithProtection(prev, cleanUsers));
-          }
-          if (Array.isArray(data.activities) && data.activities.length > 0) {
-            const cleanActs = data.activities.filter((a: any) => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
-            setActivities(prev => mergeEntitiesWithProtection(prev, cleanActs));
-          }
-          if (Array.isArray(data.menuItems) && data.menuItems.length > 0) {
-            setMenuItems(prev => mergeEntitiesWithProtection(prev, data.menuItems));
-          }
-          if (Array.isArray(data.vendors) && data.vendors.length > 0) {
-            setVendors(prev => mergeEntitiesWithProtection(prev, data.vendors));
-          }
-          if (Array.isArray(data.inventory) && data.inventory.length > 0) {
-            setInventory(prev => mergeEntitiesWithProtection(prev, data.inventory));
-          }
-        }
-      } catch (err) {
-        // Network or local endpoint unavailable
-      }
-    };
-
     // Initial pull
     pullUnifiedSync();
 
-    // Auto-sync polling every 3.5s for real-time admin updates
+    // Auto-sync polling every 3.5s for real-time multi-terminal sync
     const timerId = setInterval(pullUnifiedSync, 3500);
 
     const handleFocusSync = () => {
@@ -1070,41 +1286,93 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // GO KARTING ACTIONS
   // -----------------------------------------------------------------
   const updateKartStatus = (kartId: string, status: KartStatus, driverId?: string, sessionId?: string) => {
-    setKarts(prev => prev.map(k => k.id === kartId ? { ...k, status, currentDriverId: driverId, assignedSessionId: sessionId } : k));
+    const now = new Date().toISOString();
+    setKarts(prev => {
+      const updated = prev.map(k => k.id === kartId ? { ...k, status, currentDriverId: driverId, assignedSessionId: sessionId, updatedAt: now } : k);
+      try {
+        localStorage.setItem('ap_karts', JSON.stringify(updated));
+        db.karts.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+    const target = karts.find(k => k.id === kartId);
+    if (target) {
+      writeToLocalAndSync('karts', 'update', { ...target, status, currentDriverId: driverId, assignedSessionId: sessionId, updatedAt: now });
+    }
   };
 
   const createGoKartingSession = (sessionData: Omit<GoKartingSession, 'id'>) => {
+    const now = new Date().toISOString();
     const newSession: GoKartingSession = {
       ...sessionData,
-      id: `sess-${Date.now()}`
+      id: `sess-${Date.now()}`,
+      updatedAt: now
     };
-    setSessions(prev => [...prev, newSession]);
+    setSessions(prev => {
+      const updated = [...prev, newSession];
+      try {
+        localStorage.setItem('ap_sessions', JSON.stringify(updated));
+        db.sessions.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+    writeToLocalAndSync('sessions', 'insert', newSession);
   };
 
   const updateSessionStatus = (sessionId: string, status: SessionStatus) => {
-    setSessions(prev => prev.map(s => {
-      if (s.id !== sessionId) return s;
-      const updates: Partial<GoKartingSession> = { status };
-      if (status === 'Active') updates.startTime = new Date().toISOString();
-      if (status === 'Completed' || status === 'Paused') updates.endTime = new Date().toISOString();
-      return { ...s, ...updates };
-    }));
+    const now = new Date().toISOString();
+    setSessions(prev => {
+      const updated = prev.map(s => {
+        if (s.id !== sessionId) return s;
+        const updates: Partial<GoKartingSession> = { status, updatedAt: now };
+        if (status === 'Active') updates.startTime = now;
+        if (status === 'Completed' || status === 'Paused') updates.endTime = now;
+        const merged = { ...s, ...updates };
+        writeToLocalAndSync('sessions', 'update', merged);
+        return merged;
+      });
+      try {
+        localStorage.setItem('ap_sessions', JSON.stringify(updated));
+        db.sessions.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
   };
 
   const recordLapTime = (lapData: Omit<LapRecord, 'id'>) => {
+    const now = new Date().toISOString();
     const newLap: LapRecord = {
       ...lapData,
-      id: `lap-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+      id: `lap-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      updatedAt: now
     };
-    setLapRecords(prev => [...prev, newLap]);
+    setLapRecords(prev => {
+      const updated = [...prev, newLap];
+      try {
+        localStorage.setItem('ap_lapRecords', JSON.stringify(updated));
+        db.lapRecords.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+    writeToLocalAndSync('lapRecords', 'insert', newLap);
   };
 
   const submitWaiver = (waiverData: Omit<GoKartingWaiver, 'id'>) => {
+    const now = new Date().toISOString();
     const newWaiver: GoKartingWaiver = {
       ...waiverData,
-      id: `waiver-${Date.now()}`
+      id: `waiver-${Date.now()}`,
+      updatedAt: now
     };
-    setWaivers(prev => [...prev, newWaiver]);
+    setWaivers(prev => {
+      const updated = [...prev, newWaiver];
+      try {
+        localStorage.setItem('ap_waivers', JSON.stringify(updated));
+        db.waivers.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+    writeToLocalAndSync('waivers', 'insert', newWaiver);
   };
 
   // Utility to push notifications
@@ -1639,7 +1907,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       bookingDate: timestamp,
       packageId: selectedPackageId,
       packageName: selectedPackageName,
-      unitPrice: selectedUnitPrice
+      unitPrice: selectedUnitPrice,
+      updatedAt: timestamp
     };
 
     // 3. Create Ticket (Only if NOT pending!)
@@ -1661,7 +1930,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         status: 'valid',
         packageId: selectedPackageId,
         packageName: selectedPackageName,
-        unitPrice: selectedUnitPrice
+        unitPrice: selectedUnitPrice,
+        updatedAt: timestamp
       };
     }
 
@@ -1684,6 +1954,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       gateway_order_id: data.razorpayOrderId,
       gateway_payment_id: data.razorpayPaymentId,
       created_at: timestamp,
+      updated_at: timestamp,
       paid_at: isPending ? undefined : timestamp,
       ticketId: `tkt-${bookingId}`,
       customerName: data.customerName,
@@ -1738,12 +2009,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const booking = bookings.find(b => b.id === bookingId);
     if (!booking) return { success: false, message: 'Booking not found.' };
 
+    const now = new Date().toISOString();
     const payment = payments.find(p => p.bookingId === bookingId && p.status === 'pending');
 
     const updatedBooking: Booking = {
       ...booking,
       paymentStatus: 'paid',
-      status: 'confirmed'
+      status: 'confirmed',
+      updatedAt: now
     };
 
     setBookings(prev => prev.map(b => b.id === bookingId ? updatedBooking : b));
@@ -1763,19 +2036,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ticketType: booking.details,
         quantity: booking.quantity,
         qrCodeValue: `adventure-park-ticket-${bookingId}`,
-        status: 'valid'
+        status: 'valid',
+        updatedAt: now
       };
       setTickets(prev => [newTicket!, ...prev]);
       writeToLocalAndSync('tickets', 'insert', newTicket);
+    } else {
+      const updatedTicket: Ticket = { ...newTicket, status: 'valid', updatedAt: now };
+      setTickets(prev => prev.map(t => t.id === newTicket!.id ? updatedTicket : t));
+      writeToLocalAndSync('tickets', 'update', updatedTicket);
     }
 
     if (payment) {
       const updatedPayment: Payment = {
         ...payment,
         status: 'paid',
-        timestamp: new Date().toISOString(),
+        timestamp: now,
         payment_status: 'PAID',
-        paid_at: new Date().toISOString()
+        paid_at: now,
+        updated_at: now
       };
       setPayments(prev => prev.map(p => p.id === payment.id ? updatedPayment : p));
       writeToLocalAndSync('payments', 'update', updatedPayment);
@@ -1820,7 +2099,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const updatedBooking: Booking = {
       ...booking,
       paymentStatus: finalStatus,
-      status: finalStatus === 'paid' ? 'confirmed' : 'reserved'
+      status: finalStatus === 'paid' ? 'confirmed' : 'reserved',
+      updatedAt: now
     };
     setBookings(prev => prev.map(b => b.id === params.bookingId ? updatedBooking : b));
 
@@ -1840,10 +2120,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ticketType: booking.details,
         quantity: booking.quantity,
         qrCodeValue: `adventure-park-ticket-${params.bookingId}`,
-        status: 'valid'
+        status: 'valid',
+        updatedAt: now
       };
       setTickets(prev => [newTicket!, ...prev]);
       writeToLocalAndSync('tickets', 'insert', newTicket);
+    } else if (finalStatus === 'paid' && newTicket) {
+      const updatedTicket: Ticket = { ...newTicket, status: 'valid', updatedAt: now };
+      setTickets(prev => prev.map(t => t.id === newTicket!.id ? updatedTicket : t));
+      writeToLocalAndSync('tickets', 'update', updatedTicket);
     }
 
     // Update existing payment record or insert a new one (using functional state updater to avoid closure staleness)
@@ -2061,12 +2346,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
     }
 
+    const now = new Date().toISOString();
     // Update ticket to 'used'
     const updatedTicket: Ticket = {
       ...foundTicket,
       status: 'used',
-      scannedAt: new Date().toISOString(),
-      scannedBy: staffName
+      scannedAt: now,
+      scannedBy: staffName,
+      updatedAt: now
     };
 
     setTickets(prev => prev.map(t => t.id === foundTicket.id ? updatedTicket : t));
@@ -2390,7 +2677,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       totalAmount,
       status: 'pending',
       paymentStatus: 'paid',
-      createdAt: timestamp
+      createdAt: timestamp,
+      updatedAt: timestamp
     };
 
     const newPayment: Payment = {
@@ -2400,7 +2688,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       method: finalMethod,
       status: 'success',
       transactionId: txId,
-      timestamp
+      timestamp,
+      created_at: timestamp,
+      updated_at: timestamp
     };
 
     setOrders(prev => [newOrder, ...prev]);
@@ -2419,7 +2709,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const updated = {
             ...m,
             stockQuantity: newQty,
-            isAvailable: newQty > 0 ? m.isAvailable : false
+            isAvailable: newQty > 0 ? m.isAvailable : false,
+            updatedAt: timestamp
           };
           writeToLocalAndSync('menuItems', 'update', updated);
           return updated;
@@ -2479,22 +2770,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateOrderStatus = (orderId: string, status: OrderStatus) => {
+    const now = new Date().toISOString();
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
-        const updated = { ...o, status };
-        writeToLocalAndSync('orders', 'update', { id: orderId, status });
+        const updated = { ...o, status, updatedAt: now };
+        writeToLocalAndSync('orders', 'update', updated);
 
         let title = '';
         let body = '';
 
         if (status === 'preparing') {
-          title = 'Chef is Preparing Your Food! ðŸ‘¨â€ðŸ³';
+          title = 'Chef is Preparing Your Food! 👨‍🍳';
           body = `Hi ${o.customerName}, your food order ${orderId} is now actively being prepared by our chefs.`;
         } else if (status === 'ready') {
-          title = 'Food Order is Ready to Collect! ðŸ›Žï¸';
+          title = 'Food Order is Ready to Collect! 🛎️';
           body = `Hi ${o.customerName}, great news! Your food order ${orderId} is fresh, hot, and ready for pickup at the food street. Bring your order ID!`;
         } else if (status === 'delivered') {
-          title = 'Food Delivered! Bon AppÃ©tit! ðŸ˜‹';
+          title = 'Food Delivered! Bon Appétit! 😋';
           body = `Hi ${o.customerName}, order ${orderId} was marked as successfully delivered. Thank you for dining with us at Adventure Park Food Street!`;
         }
 
@@ -2569,6 +2861,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       syncStatus,
       pendingSyncCount,
       isRealtimeActive,
+      lastSyncTime,
+      retrySync,
       currentUser,
       setCurrentUser,
       selectedVendorId,

@@ -10,10 +10,11 @@ export interface SyncQueueItem {
   table: string;
   action: 'insert' | 'update' | 'delete';
   payload: any;
-  status: 'pending' | 'failed' | 'synced';
+  status: 'pending' | 'syncing' | 'failed' | 'synced';
   retryCount: number;
   error?: string;
   createdAt: string;
+  updatedAt?: string;
   lockedAt?: string | null;
 }
 

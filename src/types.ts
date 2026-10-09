@@ -281,6 +281,7 @@ export interface Kart {
   transponderCode?: string;
   transponderBattery?: number;
   transponderStatus?: 'connected' | 'weak' | 'charging' | 'offline';
+  updatedAt?: string;
 }
 
 export type SessionStatus = 'Scheduled' | 'Active' | 'Paused' | 'Completed';
@@ -294,6 +295,7 @@ export interface GoKartingSession {
   durationMinutes: number;
   riders: string[]; // Driver IDs
   kartAssignments: Record<string, string>; // RiderID -> KartID
+  updatedAt?: string;
 }
 
 export interface LapRecord {
@@ -306,6 +308,7 @@ export interface LapRecord {
   lapNumber: number;
   isFastestLap: boolean;
   timestamp: string;
+  updatedAt?: string;
 }
 
 export interface GoKartingWaiver {
@@ -316,6 +319,7 @@ export interface GoKartingWaiver {
   acceptedTerms: boolean;
   timestamp: string;
   verifiedByStaffId?: string;
+  updatedAt?: string;
 }
 
 // ==========================================

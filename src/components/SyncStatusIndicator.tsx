@@ -1,14 +1,23 @@
 import React from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Wifi, WifiOff, RefreshCw, Zap } from 'lucide-react';
-import { syncEngine } from '../lib/syncEngine';
+import { Wifi, WifiOff, RefreshCw, Zap, AlertCircle } from 'lucide-react';
 
 export const SyncStatusIndicator: React.FC = () => {
-  const { isOnline, syncStatus, pendingSyncCount, isRealtimeActive } = useAppContext();
+  const { isOnline, syncStatus, pendingSyncCount, isRealtimeActive, lastSyncTime, retrySync } = useAppContext();
 
   const handleManualSync = () => {
-    if (isOnline) {
-      syncEngine.triggerSync();
+    if (isOnline && retrySync) {
+      retrySync();
+    }
+  };
+
+  const formatLastSync = (isoString?: string) => {
+    if (!isoString) return '';
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return '';
     }
   };
 
@@ -42,10 +51,14 @@ export const SyncStatusIndicator: React.FC = () => {
         </div>
         
         <span className="text-[9px] text-[#9CA3AF] font-mono leading-none mt-1">
-          {pendingSyncCount > 0 ? (
+          {syncStatus === 'syncing' ? (
+            <span className="text-cyan-300 font-bold">Synchronising records...</span>
+          ) : syncStatus === 'error' && pendingSyncCount > 0 ? (
+            <span className="text-red-300 font-bold">{pendingSyncCount} pending (Click to retry)</span>
+          ) : pendingSyncCount > 0 ? (
             <span className="text-amber-300 font-bold">{pendingSyncCount} offline queued items</span>
           ) : (
-            isOnline ? 'All data synchronized' : 'Saved to system DB'
+            isOnline ? (lastSyncTime ? `Synced at ${formatLastSync(lastSyncTime)}` : 'All data synchronized') : 'Saved to system DB'
           )}
         </span>
       </div>
@@ -54,7 +67,7 @@ export const SyncStatusIndicator: React.FC = () => {
         <RefreshCw className="w-3.5 h-3.5 text-[#00B4FF] animate-spin ml-1" />
       )}
       {syncStatus === 'error' && (
-        <span className="w-2 h-2 rounded-full bg-red-500 ml-1 animate-ping" title="Sync Error - Retrying..." />
+        <AlertCircle className="w-3.5 h-3.5 text-red-400 ml-1 animate-pulse" title="Sync Error - Click to retry" />
       )}
     </div>
   );
