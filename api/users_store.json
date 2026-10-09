@@ -1,5 +1,23 @@
 [
   {
+    "id": "usr-g-1791514924823",
+    "name": "Admin Boss Brenda",
+    "email": "admin.leader@deucepark.com",
+    "role": "customer",
+    "organizationId": "org_deuce_default",
+    "createdAt": "2026-10-09T03:02:04.823Z",
+    "updatedAt": "2026-10-09T03:02:51.566Z"
+  },
+  {
+    "id": "usr-g-1791514924808",
+    "name": "Counter Staff Alex",
+    "email": "counter.staff@deucepark.com",
+    "role": "customer",
+    "organizationId": "org_deuce_default",
+    "createdAt": "2026-10-09T03:02:04.808Z",
+    "updatedAt": "2026-10-09T03:02:51.555Z"
+  },
+  {
     "id": "user-1",
     "name": "System Super Admin",
     "email": "admin@adventurepark.com",

@@ -13,6 +13,7 @@ export interface User {
   role: UserRole;
   password?: string;
   vendorId?: string; // If role is 'food_vendor'
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -74,6 +75,7 @@ export interface Activity {
   isActive?: boolean;
   displayOrder?: number;
   offers?: ActivityOffer[];
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -104,6 +106,7 @@ export interface Booking {
   packageId?: string;
   packageName?: string;
   unitPrice?: number;
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -129,6 +132,7 @@ export interface Ticket {
   packageId?: string;
   packageName?: string;
   unitPrice?: number;
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -139,6 +143,7 @@ export interface FoodVendor {
   image: string;
   ownerName: string;
   stallNumber: string;
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -153,6 +158,7 @@ export interface MenuItem {
   isAvailable: boolean;
   image: string;
   stockQuantity?: number;
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -177,6 +183,7 @@ export interface FoodOrder {
   status: OrderStatus;
   paymentStatus: 'pending' | 'paid';
   createdAt: string;
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -187,6 +194,7 @@ export interface InventoryItem {
   currentStock: number;
   minStockLevel: number;
   unit: string;
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -195,7 +203,7 @@ export interface Payment {
   orderId?: string;
   bookingId?: string;
   amount: number;
-  method: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay' | 'complimentary';
+  method: 'upi' | 'card' | 'net_banking' | 'cash' | 'razorpay' | 'complimentary' | 'qrcode' | string;
   status: 'success' | 'failed' | 'pending' | 'processing' | 'paid' | 'cancelled' | 'refunded';
   transactionId: string;
   timestamp: string;
@@ -230,7 +238,10 @@ export interface Payment {
   customerName?: string;
   customerPhone?: string;
   activityName?: string;
+  packageName?: string;
   counterId?: string;
+  organizationId?: string;
+  updatedAt?: string;
 }
 
 export interface NotificationLog {
@@ -281,6 +292,7 @@ export interface Kart {
   transponderCode?: string;
   transponderBattery?: number;
   transponderStatus?: 'connected' | 'weak' | 'charging' | 'offline';
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -295,6 +307,7 @@ export interface GoKartingSession {
   durationMinutes: number;
   riders: string[]; // Driver IDs
   kartAssignments: Record<string, string>; // RiderID -> KartID
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -308,6 +321,7 @@ export interface LapRecord {
   lapNumber: number;
   isFastestLap: boolean;
   timestamp: string;
+  organizationId?: string;
   updatedAt?: string;
 }
 
@@ -319,6 +333,7 @@ export interface GoKartingWaiver {
   acceptedTerms: boolean;
   timestamp: string;
   verifiedByStaffId?: string;
+  organizationId?: string;
   updatedAt?: string;
 }
 

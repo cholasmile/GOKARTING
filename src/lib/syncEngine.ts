@@ -76,6 +76,7 @@ const TABLE_DEPENDENCY_ORDER: string[] = [
 class SyncEngine {
   private isSyncing = false;
   private isRealtimeActive = false;
+  private eventSource: EventSource | null = null;
   private realTimeChannel: any = null;
   private broadcastChannel: BroadcastChannel | null = null;
   private syncListeners: ((status: SyncStatus, pendingCount: number, isRealtime: boolean, lastSyncTime?: string) => void)[] = [];
@@ -101,6 +102,11 @@ class SyncEngine {
       // 2. Offline event
       window.addEventListener('offline', () => {
         console.log('[SyncEngine] Network went offline – operating in offline-first mode');
+        this.isRealtimeActive = false;
+        if (this.eventSource) {
+          try { this.eventSource.close(); } catch (e) {}
+          this.eventSource = null;
+        }
         this.broadcastStatus('idle');
       });
 
@@ -108,6 +114,9 @@ class SyncEngine {
       window.addEventListener('focus', () => {
         if (typeof navigator !== 'undefined' && navigator.onLine) {
           this.triggerSync();
+          if (!this.eventSource) {
+            this.setupRealtimeSubscription(true);
+          }
         }
       });
 
@@ -115,6 +124,9 @@ class SyncEngine {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible' && typeof navigator !== 'undefined' && navigator.onLine) {
           this.triggerSync();
+          if (!this.eventSource) {
+            this.setupRealtimeSubscription(true);
+          }
         }
       });
 
@@ -140,13 +152,13 @@ class SyncEngine {
       }, 15000);
     }
 
-    // Initialize realtime connection if configured and online
-    if (isSupabaseConfigured && typeof window !== 'undefined' && navigator.onLine) {
+    // Initialize realtime connections on startup
+    if (typeof window !== 'undefined' && navigator.onLine) {
       this.setupRealtimeSubscription();
       // Initial startup sync
       setTimeout(() => {
         this.triggerSync();
-      }, 1000);
+      }, 500);
     }
   }
 
@@ -200,6 +212,63 @@ class SyncEngine {
   }
 
   public setupRealtimeSubscription(forceReconnect = false) {
+    this.setupBackendSSESubscription(forceReconnect);
+    if (isSupabaseConfigured && supabase) {
+      this.setupSupabaseRealtimeSubscription(forceReconnect);
+    }
+  }
+
+  private setupBackendSSESubscription(forceReconnect = false) {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
+
+    if (this.eventSource) {
+      if (!forceReconnect) return;
+      try { this.eventSource.close(); } catch (e) {}
+      this.eventSource = null;
+    }
+
+    try {
+      console.log('[SyncEngine] Connecting to Central Backend SSE Stream (/api/sync/events)...');
+      this.eventSource = new EventSource('/api/sync/events');
+
+      this.eventSource.onopen = () => {
+        console.log('[SyncEngine SSE]: CONNECTED & ACTIVE');
+        this.isRealtimeActive = true;
+        this.broadcastStatus('idle');
+      };
+
+      this.eventSource.onmessage = (e) => {
+        if (!e.data) return;
+        try {
+          const parsed = JSON.parse(e.data);
+          if (parsed && parsed.table && parsed.record) {
+            console.log('[SyncEngine SSE Event Received]:', parsed.eventType, parsed.table);
+            this.handleIncomingRealtimePayload(parsed);
+          }
+        } catch (err) {
+          // ignore non-json messages like heartbeats
+        }
+      };
+
+      this.eventSource.onerror = () => {
+        this.isRealtimeActive = false;
+        this.broadcastStatus('idle');
+        try {
+          if (this.eventSource) this.eventSource.close();
+        } catch (e) {}
+        this.eventSource = null;
+        setTimeout(() => {
+          if (typeof navigator !== 'undefined' && navigator.onLine) {
+            this.setupBackendSSESubscription(true);
+          }
+        }, 5000);
+      };
+    } catch (err) {
+      console.warn('[SyncEngine] Backend SSE stream setup error:', err);
+    }
+  }
+
+  private setupSupabaseRealtimeSubscription(forceReconnect = false) {
     if (!isSupabaseConfigured || !supabase) return;
 
     if (this.realTimeChannel) {
@@ -226,14 +295,11 @@ class SyncEngine {
           if (status === 'SUBSCRIBED') {
             console.log('[SyncEngine Realtime Stream]: CONNECTED & ACTIVE');
             this.isRealtimeActive = true;
-          } else {
-            this.isRealtimeActive = false;
           }
           this.broadcastStatus('idle');
         });
     } catch (err) {
-      console.error('[SyncEngine] Realtime connection failed:', err);
-      this.isRealtimeActive = false;
+      console.error('[SyncEngine] Supabase Realtime connection failed:', err);
     }
   }
 

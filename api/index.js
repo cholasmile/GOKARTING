@@ -497,37 +497,133 @@ app.get('/api/razorpay/payments', async (req, res) => {
   }
 });
 
-// ─── DOMAIN STORES PERSISTENCE ─────────────────────────────────────────
+// ─── REALTIME SERVER-SENT EVENTS (SSE) BROADCASTER ───────────────────────────
+const sseClients = new Set();
+
+app.get('/api/sync/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+
+  // Send initial connected event handshake
+  res.write(`data: ${JSON.stringify({ type: 'connected', serverTime: new Date().toISOString() })}\n\n`);
+
+  sseClients.add(res);
+  console.log(`[realtime] Client connected. Total active streams: ${sseClients.size}`);
+
+  req.on('close', () => {
+    sseClients.delete(res);
+    console.log(`[realtime] Client disconnected. Remaining streams: ${sseClients.size}`);
+  });
+});
+
+const broadcastRealtimeEvent = (event) => {
+  const dataString = `data: ${JSON.stringify(event)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(dataString);
+    } catch (e) {
+      sseClients.delete(client);
+    }
+  }
+};
+
+// Periodic heartbeat keepalive (every 25 seconds)
+setInterval(() => {
+  for (const client of sseClients) {
+    try {
+      client.write(`: heartbeat ${Date.now()}\n\n`);
+    } catch (e) {
+      sseClients.delete(client);
+    }
+  }
+}, 25000);
+
+// ─── DOMAIN STORES PERSISTENCE (ROBUST UPSERT & MERGE) ─────────────────────────
 const createJsonStore = (filename, defaultVal = []) => {
   const filePath = path.join(__dirname, filename);
   const tmpPath = path.join('/tmp', filename);
   let memoryCache = null;
-  return {
-    get: () => {
-      if (memoryCache && memoryCache.length > 0) return memoryCache;
-      try {
-        if (fs.existsSync(filePath)) {
-          memoryCache = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-          return memoryCache;
-        }
-        if (fs.existsSync(tmpPath)) {
-          memoryCache = JSON.parse(fs.readFileSync(tmpPath, 'utf8'));
-          return memoryCache;
-        }
-      } catch (e) {
-        console.error(`[backend] Failed reading ${filename}:`, e);
+
+  const readData = () => {
+    try {
+      if (fs.existsSync(filePath)) {
+        memoryCache = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        return Array.isArray(memoryCache) ? memoryCache : defaultVal;
       }
-      return defaultVal;
+      if (fs.existsSync(tmpPath)) {
+        memoryCache = JSON.parse(fs.readFileSync(tmpPath, 'utf8'));
+        return Array.isArray(memoryCache) ? memoryCache : defaultVal;
+      }
+    } catch (e) {
+      console.error(`[backend] Failed reading ${filename}:`, e);
+    }
+    if (memoryCache && Array.isArray(memoryCache)) return memoryCache;
+    return defaultVal;
+  };
+
+  const writeData = (data) => {
+    if (!Array.isArray(data)) return false;
+    memoryCache = data;
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {}
+    try {
+      fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {}
+    return true;
+  };
+
+  return {
+    get: () => readData(),
+    set: (data) => writeData(data),
+    upsert: (items, tableName = '') => {
+      const list = readData();
+      const itemsToUpsert = Array.isArray(items) ? items : [items];
+      let updatedCount = 0;
+
+      for (const item of itemsToUpsert) {
+        if (!item || !item.id) continue;
+        const now = new Date().toISOString();
+        if (!item.updatedAt) item.updatedAt = now;
+        if (!item.organizationId) item.organizationId = 'org_deuce_default';
+
+        const idx = list.findIndex(x => x.id === item.id);
+        if (idx >= 0) {
+          list[idx] = { ...list[idx], ...item };
+        } else {
+          list.unshift(item);
+        }
+        updatedCount++;
+
+        if (tableName) {
+          broadcastRealtimeEvent({
+            table: tableName,
+            eventType: idx >= 0 ? 'UPDATE' : 'INSERT',
+            record: item
+          });
+        }
+      }
+
+      writeData(list);
+      return updatedCount;
     },
-    set: (data) => {
-      if (!Array.isArray(data)) return false;
-      memoryCache = data;
-      try {
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-      } catch (e) {}
-      try {
-        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
-      } catch (e) {}
+    delete: (id, tableName = '') => {
+      const list = readData();
+      const existing = list.find(x => x.id === id);
+      const filtered = list.filter(x => x.id !== id);
+      writeData(filtered);
+      if (tableName && existing) {
+        broadcastRealtimeEvent({
+          table: tableName,
+          eventType: 'DELETE',
+          record: { id }
+        });
+      }
       return true;
     }
   };
@@ -550,80 +646,132 @@ const activitiesStore = createJsonStore('activities_store.json', []);
 
 app.get('/api/karts', (req, res) => res.json(kartsStore.get()));
 app.post('/api/karts', (req, res) => {
-  if (kartsStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = kartsStore.upsert(req.body, 'karts');
+  res.json({ success: true, count });
+});
+app.delete('/api/karts/:id', (req, res) => {
+  kartsStore.delete(req.params.id, 'karts');
+  res.json({ success: true });
 });
 
 app.get('/api/sessions', (req, res) => res.json(sessionsStore.get()));
 app.post('/api/sessions', (req, res) => {
-  if (sessionsStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = sessionsStore.upsert(req.body, 'sessions');
+  res.json({ success: true, count });
+});
+app.delete('/api/sessions/:id', (req, res) => {
+  sessionsStore.delete(req.params.id, 'sessions');
+  res.json({ success: true });
 });
 
 app.get('/api/waivers', (req, res) => res.json(waiversStore.get()));
 app.post('/api/waivers', (req, res) => {
-  if (waiversStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = waiversStore.upsert(req.body, 'waivers');
+  res.json({ success: true, count });
+});
+app.delete('/api/waivers/:id', (req, res) => {
+  waiversStore.delete(req.params.id, 'waivers');
+  res.json({ success: true });
 });
 
 app.get('/api/lap-records', (req, res) => res.json(lapRecordsStore.get()));
 app.post('/api/lap-records', (req, res) => {
-  if (lapRecordsStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = lapRecordsStore.upsert(req.body, 'lap_records');
+  res.json({ success: true, count });
+});
+app.delete('/api/lap-records/:id', (req, res) => {
+  lapRecordsStore.delete(req.params.id, 'lap_records');
+  res.json({ success: true });
 });
 
 app.get('/api/menu-items', (req, res) => res.json(menuItemsStore.get()));
 app.post('/api/menu-items', (req, res) => {
-  if (menuItemsStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = menuItemsStore.upsert(req.body, 'menu_items');
+  res.json({ success: true, count });
+});
+app.delete('/api/menu-items/:id', (req, res) => {
+  menuItemsStore.delete(req.params.id, 'menu_items');
+  res.json({ success: true });
 });
 
 app.get('/api/vendors', (req, res) => res.json(vendorsStore.get()));
 app.post('/api/vendors', (req, res) => {
-  if (vendorsStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = vendorsStore.upsert(req.body, 'food_vendors');
+  res.json({ success: true, count });
+});
+app.delete('/api/vendors/:id', (req, res) => {
+  vendorsStore.delete(req.params.id, 'food_vendors');
+  res.json({ success: true });
 });
 
 app.get('/api/inventory', (req, res) => res.json(inventoryStore.get()));
 app.post('/api/inventory', (req, res) => {
-  if (inventoryStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = inventoryStore.upsert(req.body, 'inventory');
+  res.json({ success: true, count });
+});
+app.delete('/api/inventory/:id', (req, res) => {
+  inventoryStore.delete(req.params.id, 'inventory');
+  res.json({ success: true });
 });
 
 app.get('/api/users', (req, res) => res.json(usersStore.get()));
 app.post('/api/users', (req, res) => {
-  if (usersStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = usersStore.upsert(req.body, 'users');
+  res.json({ success: true, count });
+});
+app.delete('/api/users/:id', (req, res) => {
+  usersStore.delete(req.params.id, 'users');
+  res.json({ success: true });
 });
 
 app.get('/api/bookings', (req, res) => res.json(bookingsStore.get()));
 app.post('/api/bookings', (req, res) => {
-  if (bookingsStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = bookingsStore.upsert(req.body, 'bookings');
+  res.json({ success: true, count });
+});
+app.delete('/api/bookings/:id', (req, res) => {
+  bookingsStore.delete(req.params.id, 'bookings');
+  res.json({ success: true });
 });
 
 app.get('/api/tickets', (req, res) => res.json(ticketsStore.get()));
 app.post('/api/tickets', (req, res) => {
-  if (ticketsStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = ticketsStore.upsert(req.body, 'tickets');
+  res.json({ success: true, count });
+});
+app.delete('/api/tickets/:id', (req, res) => {
+  ticketsStore.delete(req.params.id, 'tickets');
+  res.json({ success: true });
 });
 
 app.get('/api/park-payments', (req, res) => res.json(paymentsStore.get()));
 app.post('/api/park-payments', (req, res) => {
-  if (paymentsStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = paymentsStore.upsert(req.body, 'payments');
+  res.json({ success: true, count });
+});
+app.delete('/api/park-payments/:id', (req, res) => {
+  paymentsStore.delete(req.params.id, 'payments');
+  res.json({ success: true });
 });
 
 app.get('/api/orders', (req, res) => res.json(ordersStore.get()));
 app.post('/api/orders', (req, res) => {
-  if (ordersStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = ordersStore.upsert(req.body, 'food_orders');
+  res.json({ success: true, count });
+});
+app.delete('/api/orders/:id', (req, res) => {
+  ordersStore.delete(req.params.id, 'food_orders');
+  res.json({ success: true });
 });
 
 app.get('/api/notifications', (req, res) => res.json(notificationsStore.get()));
 app.post('/api/notifications', (req, res) => {
-  if (notificationsStore.set(req.body)) return res.json({ success: true });
-  res.status(400).json({ success: false });
+  const count = notificationsStore.upsert(req.body, 'notifications');
+  res.json({ success: true, count });
+});
+app.delete('/api/notifications/:id', (req, res) => {
+  notificationsStore.delete(req.params.id, 'notifications');
+  res.json({ success: true });
 });
 
 // ─── ACTIVITIES BACKEND PERSISTENCE ─────────────────────────────────────────
@@ -634,26 +782,67 @@ app.get('/api/activities', (req, res) => {
 app.post('/api/activities', (req, res) => {
   try {
     const activities = req.body;
-    if (Array.isArray(activities) && activities.length > 0) {
-      for (const act of activities) {
-        if (Array.isArray(act.packages)) {
-          for (const pkg of act.packages) {
-            if (!pkg.name || typeof pkg.name !== 'string' || !pkg.name.trim()) {
-              return res.status(400).json({ success: false, message: `Package name is required for activity ${act.name || act.id}` });
-            }
-            if (typeof pkg.price !== 'number' || !Number.isFinite(pkg.price) || pkg.price < 0) {
-              return res.status(400).json({ success: false, message: `Invalid package price (${pkg.price}) for ${pkg.name}` });
-            }
-          }
-        }
-      }
-      activitiesStore.set(activities);
-      return res.json({ success: true, count: activities.length });
+    if (Array.isArray(activities) || (activities && typeof activities === 'object')) {
+      const count = activitiesStore.upsert(activities, 'activities');
+      return res.json({ success: true, count });
     }
-    res.status(400).json({ success: false, message: 'Expected array of activities' });
+    res.status(400).json({ success: false, message: 'Expected activity object or array of activities' });
   } catch (e) {
     console.error('[backend] Failed to save activities:', e);
     res.status(500).json({ success: false, error: String(e) });
+  }
+});
+app.delete('/api/activities/:id', (req, res) => {
+  activitiesStore.delete(req.params.id, 'activities');
+  res.json({ success: true });
+});
+
+// ─── GOOGLE LOGIN & SHARED AUTH BACKEND API ─────────────────────────────────
+app.post('/api/auth/google', (req, res) => {
+  try {
+    const { email, name, picture, googleId } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const usersList = usersStore.get();
+    let existingUser = usersList.find(u => u.email && u.email.toLowerCase() === cleanEmail);
+
+    if (existingUser) {
+      const updated = {
+        ...existingUser,
+        name: existingUser.name || name || cleanEmail.split('@')[0],
+        organizationId: 'org_deuce_default',
+        updatedAt: new Date().toISOString()
+      };
+      usersStore.upsert(updated, 'users');
+      return res.json({ success: true, user: updated });
+    } else {
+      // Determine default role based on email or default to customer
+      let role = 'customer';
+      if (cleanEmail.includes('admin@')) role = 'super_admin';
+      else if (cleanEmail.includes('kartingmanager@')) role = 'go_karting_manager';
+      else if (cleanEmail.includes('kartingstaff@') || cleanEmail.includes('karting@')) role = 'go_karting_staff';
+      else if (cleanEmail.includes('ticketing@')) role = 'ticket_counter_staff';
+      else if (cleanEmail.includes('horseriding@')) role = 'horse_riding_staff';
+      else if (cleanEmail.includes('shooting@')) role = 'shooting_staff';
+      else if (cleanEmail.includes('cafe@') || cleanEmail.includes('vendor@')) role = 'food_vendor';
+
+      const newUser = {
+        id: `usr-g-${Date.now()}`,
+        name: name || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        role: role,
+        organizationId: 'org_deuce_default',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      usersStore.upsert(newUser, 'users');
+      return res.json({ success: true, user: newUser });
+    }
+  } catch (err) {
+    console.error('[auth-google error]', err);
+    res.status(500).json({ success: false, error: String(err) });
   }
 });
 
@@ -680,10 +869,11 @@ app.get('/api/sync/all', (req, res) => {
 
 app.post('/api/sync/batch', (req, res) => {
   try {
-    const { items } = req.body;
-    if (!Array.isArray(items)) {
-      return res.status(400).json({ success: false, message: 'Expected items array' });
+    const rawItems = req.body?.items || req.body?.operations || (Array.isArray(req.body) ? req.body : []);
+    if (!Array.isArray(rawItems)) {
+      return res.status(400).json({ success: false, message: 'Expected items or operations array' });
     }
+    const items = rawItems;
 
     const storesMap = {
       'bookings': bookingsStore,
@@ -712,27 +902,11 @@ app.post('/api/sync/batch', (req, res) => {
       const targetStore = storesMap[table];
       if (!targetStore || !payload || !payload.id) continue;
 
-      let currentList = targetStore.get();
-      if (!Array.isArray(currentList)) currentList = [];
-
-      if (action === 'insert') {
-        const existingIdx = currentList.findIndex(x => x.id === payload.id);
-        if (existingIdx >= 0) {
-          currentList[existingIdx] = { ...currentList[existingIdx], ...payload };
-        } else {
-          currentList.unshift(payload);
-        }
-      } else if (action === 'update') {
-        const existingIdx = currentList.findIndex(x => x.id === payload.id);
-        if (existingIdx >= 0) {
-          currentList[existingIdx] = { ...currentList[existingIdx], ...payload };
-        } else {
-          currentList.unshift(payload);
-        }
-      } else if (action === 'delete') {
-        currentList = currentList.filter(x => x.id !== payload.id);
+      if (action === 'delete') {
+        targetStore.delete(payload.id, table);
+      } else {
+        targetStore.upsert(payload, table);
       }
-      targetStore.set(currentList);
       processedCount++;
     }
 
