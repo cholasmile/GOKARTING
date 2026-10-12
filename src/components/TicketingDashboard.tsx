@@ -3,13 +3,12 @@ import {
   Ticket, Users, CreditCard, CheckCircle, Smartphone, Printer, Search, FileText, Banknote, 
   Utensils, Plus, Minus, ShoppingBag, Trash2, ArrowRight, XCircle, RotateCcw, AlertTriangle, 
   Check, X, QrCode, Calendar, TrendingUp, Clock, Coins, Receipt, Wallet, ArrowUpRight,
-  Flame, Store, Coffee, ChevronRight, Layers, Tag, UserCheck
+  Flame, Store, Coffee, ChevronRight, Layers, Tag
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Activity, Payment, FoodOrder } from '../types';
 import { UnifiedTicketingFlow } from './UnifiedTicketingFlow';
 import { printTicket } from '../lib/printTicket';
-import { StaffManagementPanel } from './admin/StaffManagementPanel';
 
 const TicketingDashboard: React.FC = () => {
   const { 
@@ -19,12 +18,13 @@ const TicketingDashboard: React.FC = () => {
   } = useAppContext();
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'food_street' | 'history' | 'staff_operations'>('new_booking');
+  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'food_street' | 'history'>('new_booking');
   const [searchTerm, setSearchTerm] = useState('');
   
   // Transaction Ledger Filters
   const [transactionCategory, setTransactionCategory] = useState<'all' | 'ticketing' | 'food'>('all');
   const [methodFilter, setMethodFilter] = useState<'all' | 'cash' | 'upi' | 'card'>('all');
+  const [periodFilter, setPeriodFilter] = useState<'today' | 'all'>('today');
 
   // Cancel & Refund Modal States
   const [selectedRefundPayment, setSelectedRefundPayment] = useState<Payment | null>(null);
@@ -238,16 +238,57 @@ const TicketingDashboard: React.FC = () => {
     return matchesSearch && matchesVendor && item.isAvailable;
   });
 
-  // ── Unified Today's Counter & Food Ledger ─────────────────────────────
-  const filteredRawPayments = payments.filter(p => {
-    const isCounter = p.counterId === 'counter_1' || p.staffId || p.method === 'cash' || p.method === 'qrcode' || p.method === 'upi' || (p.method && p.method.startsWith('card')) || p.orderId || p.bookingId;
-    if (!isCounter) return false;
-
-    // Show strictly CURRENT DAY history only on the ticketing page
-    if (!isDateToday(p.timestamp)) {
-      return false;
+  // ── 1. Unified Deduplicated Payments Base ─────────────────────────────
+  // Ensure all payments (tickets and food) link cleanly without loss
+  const allDeduplicatedPaymentsMap = new Map<string, Payment>();
+  payments.forEach(p => {
+    const key = p.bookingId || p.orderId || p.id;
+    const existing = allDeduplicatedPaymentsMap.get(key);
+    if (!existing) {
+      allDeduplicatedPaymentsMap.set(key, p);
+    } else {
+      const isCurrPaid = p.status === 'paid' || p.status === 'success';
+      const isExistPaid = existing.status === 'paid' || existing.status === 'success';
+      if (isCurrPaid && !isExistPaid) {
+        allDeduplicatedPaymentsMap.set(key, p);
+      } else if ((isCurrPaid === isExistPaid) && new Date(p.timestamp || p.created_at || 0).getTime() > new Date(existing.timestamp || existing.created_at || 0).getTime()) {
+        allDeduplicatedPaymentsMap.set(key, p);
+      }
     }
+  });
 
+  const allConsolidatedPayments = Array.from(allDeduplicatedPaymentsMap.values());
+
+  // ── 2. Today's Transactions & KPI Strip Calculations ───────────────────
+  const todayPaidCounterList = allConsolidatedPayments.filter(p => {
+    const isPaid = p.status === 'paid' || p.status === 'success' || p.payment_status === 'PAID';
+    return isPaid && isDateToday(p.timestamp || p.created_at);
+  });
+
+  // Display list for current selected period (Today or All)
+  const displayPeriodPayments = allConsolidatedPayments.filter(p => {
+    if (periodFilter === 'today') {
+      return isDateToday(p.timestamp || p.created_at);
+    }
+    return true;
+  });
+
+  // Today specific revenues for the KPI cards
+  const todayTotalRevenue = todayPaidCounterList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  
+  // Breakdown: Activity Ticketing vs Food Street
+  const todayActivityPaidList = todayPaidCounterList.filter(p => !p.orderId && p.activityName !== 'Food Street Dining' && !p.activityName?.toLowerCase().includes('food') && !p.activityName?.toLowerCase().includes('cafe'));
+  const todayFoodPaidList = todayPaidCounterList.filter(p => Boolean(p.orderId || p.activityName === 'Food Street Dining' || p.activityName?.toLowerCase().includes('food') || p.activityName?.toLowerCase().includes('cafe')));
+
+  const todayActivityRevenue = todayActivityPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayFoodRevenue = todayFoodPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  const todayCashRevenue = todayPaidCounterList.filter(p => p.method === 'cash').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayUpiRevenue = todayPaidCounterList.filter(p => p.method === 'upi' || p.method === 'qrcode').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayCardRevenue = todayPaidCounterList.filter(p => p.method?.startsWith('card') || p.method === 'razorpay').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  // Filtered transactions for the Ledger Table based on search, category, and method filters
+  const counterPayments = displayPeriodPayments.filter(p => {
     const isFood = Boolean(p.orderId || p.activityName === 'Food Street Dining' || p.activityName?.toLowerCase().includes('food') || p.activityName?.toLowerCase().includes('cafe') || p.activityName?.toLowerCase().includes('dining'));
 
     if (transactionCategory === 'ticketing' && isFood) return false;
@@ -256,7 +297,7 @@ const TicketingDashboard: React.FC = () => {
     if (methodFilter !== 'all') {
       if (methodFilter === 'cash' && p.method !== 'cash') return false;
       if (methodFilter === 'upi' && p.method !== 'upi' && p.method !== 'qrcode') return false;
-      if (methodFilter === 'card' && !p.method.startsWith('card') && p.method !== 'razorpay') return false;
+      if (methodFilter === 'card' && !p.method?.startsWith('card') && p.method !== 'razorpay') return false;
     }
 
     if (!searchTerm) return true;
@@ -269,55 +310,12 @@ const TicketingDashboard: React.FC = () => {
            p.activityName?.toLowerCase().includes(searchLower) ||
            p.transactionId?.toLowerCase().includes(searchLower) ||
            p.referenceNumber?.toLowerCase().includes(searchLower);
-  });
+  }).sort((a, b) => new Date(b.timestamp || b.created_at || 0).getTime() - new Date(a.timestamp || a.created_at || 0).getTime());
 
-  // Deduplicate payments by bookingId or orderId
-  const deduplicatedPaymentsMap = new Map<string, Payment>();
-  filteredRawPayments.forEach(p => {
-    const key = p.bookingId || p.orderId || p.id;
-    const existing = deduplicatedPaymentsMap.get(key);
-    if (!existing) {
-      deduplicatedPaymentsMap.set(key, p);
-    } else if (p.status === 'paid' && existing.status !== 'paid') {
-      deduplicatedPaymentsMap.set(key, p);
-    } else if (new Date(p.timestamp).getTime() > new Date(existing.timestamp).getTime()) {
-      if (existing.status !== 'paid' || p.status === 'paid') {
-        deduplicatedPaymentsMap.set(key, p);
-      }
-    }
-  });
-
-  const counterPayments = Array.from(deduplicatedPaymentsMap.values())
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-  // Today-specific all counter payments for analytics KPI strip
-  const todayAllCounterPayments = payments.filter(p => {
-    const isCounter = p.counterId === 'counter_1' || p.staffId || p.method === 'cash' || p.method === 'qrcode' || p.method === 'upi' || (p.method && p.method.startsWith('card')) || p.orderId || p.bookingId;
-    return isCounter && (p.status === 'paid' || p.status === 'success') && isDateToday(p.timestamp);
-  });
-
-  const todayDeduplicatedMap = new Map<string, Payment>();
-  todayAllCounterPayments.forEach(p => {
-    const key = p.bookingId || p.orderId || p.id;
-    if (!todayDeduplicatedMap.has(key)) {
-      todayDeduplicatedMap.set(key, p);
-    }
-  });
-
-  const todayCounterList = Array.from(todayDeduplicatedMap.values());
-  const todayTotalRevenue = todayCounterList.reduce((sum, p) => sum + (p.amount || 0), 0);
-  
-  // Breakdown: Activity Ticketing vs Food Street
-  const todayActivityList = todayCounterList.filter(p => !p.orderId && p.activityName !== 'Food Street Dining' && !p.activityName?.toLowerCase().includes('food'));
-  const todayFoodList = todayCounterList.filter(p => p.orderId || p.activityName === 'Food Street Dining' || p.activityName?.toLowerCase().includes('food'));
-
-  const todayActivityRevenue = todayActivityList.reduce((sum, p) => sum + (p.amount || 0), 0);
-  const todayFoodRevenue = todayFoodList.reduce((sum, p) => sum + (p.amount || 0), 0);
-
-  const todayCashRevenue = todayCounterList.filter(p => p.method === 'cash').reduce((sum, p) => sum + (p.amount || 0), 0);
-  const todayUpiRevenue = todayCounterList.filter(p => p.method === 'upi' || p.method === 'qrcode').reduce((sum, p) => sum + (p.amount || 0), 0);
-  const todayCardRevenue = todayCounterList.filter(p => p.method.startsWith('card') || p.method === 'razorpay').reduce((sum, p) => sum + (p.amount || 0), 0);
-  const todayTotalCashChange = todayCounterList.filter(p => p.method === 'cash').reduce((sum, p) => sum + (p.changeGiven || 0), 0);
+  // Category counts for the active period
+  const displayCategoryActivityCount = displayPeriodPayments.filter(p => !p.orderId && p.activityName !== 'Food Street Dining' && !p.activityName?.toLowerCase().includes('food') && !p.activityName?.toLowerCase().includes('cafe')).length;
+  const displayCategoryFoodCount = displayPeriodPayments.filter(p => Boolean(p.orderId || p.activityName === 'Food Street Dining' || p.activityName?.toLowerCase().includes('food') || p.activityName?.toLowerCase().includes('cafe'))).length;
+  const displayTxnList = displayPeriodPayments;
 
   // Today Food Orders specific metrics
   const todayOrders = orders.filter(o => isDateToday(o.createdAt));
@@ -396,13 +394,7 @@ const TicketingDashboard: React.FC = () => {
           onClick={() => setActiveSubTab('history')}
           className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeSubTab === 'history' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
         >
-          <Clock className="w-4 h-4" /> Today's Sales & Transactions ({todayCounterList.length})
-        </button>
-        <button 
-          onClick={() => setActiveSubTab('staff_operations')}
-          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeSubTab === 'staff_operations' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
-        >
-          <UserCheck className="w-4 h-4" /> Staff Profile & Attendance
+          <Clock className="w-4 h-4" /> Sales & Transactions ({displayTxnList.length})
         </button>
       </div>
 
@@ -747,12 +739,38 @@ const TicketingDashboard: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+              {/* Period Selector Toggle */}
+              <div className="flex items-center gap-1 bg-[#0A0A0A] p-1 rounded-xl border border-[#00ABAB]/30 text-xs font-mono">
+                <button
+                  onClick={() => setPeriodFilter('today')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    periodFilter === 'today'
+                      ? 'bg-[#00ABAB] text-black shadow-sm'
+                      : 'text-[#94A3B8] hover:text-white'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Today's Sales ({todayPaidCounterList.length})
+                </button>
+                <button
+                  onClick={() => setPeriodFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    periodFilter === 'all'
+                      ? 'bg-[#00ABAB] text-black shadow-sm'
+                      : 'text-[#94A3B8] hover:text-white'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  All Transactions ({allConsolidatedPayments.length})
+                </button>
+              </div>
+
               {/* Date Indicator Badge */}
               <div className="flex items-center gap-2 bg-[#0A0A0A] px-3.5 py-2 rounded-xl border border-[#00ABAB]/30 text-[#40E0D0] text-xs font-bold font-mono">
                 <Calendar className="w-3.5 h-3.5" />
-                <span>{new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                <span>{periodFilter === 'today' ? new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : 'All-Time'}</span>
                 <span className="bg-[#00ABAB]/20 px-2 py-0.5 rounded-md text-[10px] text-white">
-                  {todayCounterList.length} Total
+                  {counterPayments.length} Shown
                 </span>
               </div>
 
@@ -783,14 +801,14 @@ const TicketingDashboard: React.FC = () => {
                   <TrendingUp className="w-3.5 h-3.5" /> Total Park Sales
                 </span>
                 <span className="p-1 bg-[#1C1C1C] text-[#40E0D0] rounded-md text-[10px] font-mono font-bold px-1.5">
-                  {todayCounterList.length} Total
+                  {todayPaidCounterList.length} Paid
                 </span>
               </div>
               <div className="text-2xl font-extrabold text-[#40E0D0] font-mono">
                 ₹{todayTotalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <p className="text-[10px] text-[#94A3B8] font-mono">
-                Activities + Food Combined Collection
+                Activities + Food Combined Collection (Today)
               </p>
             </div>
 
@@ -801,7 +819,7 @@ const TicketingDashboard: React.FC = () => {
                   <Ticket className="w-3.5 h-3.5" /> Activity Tickets
                 </span>
                 <span className="p-1 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-md text-[10px] font-mono font-bold px-1.5">
-                  {todayActivityList.length} Bookings
+                  {todayActivityPaidList.length} Bookings
                 </span>
               </div>
               <div className="text-2xl font-extrabold text-white font-mono">
@@ -819,7 +837,7 @@ const TicketingDashboard: React.FC = () => {
                   <Utensils className="w-3.5 h-3.5" /> Food Street Sales
                 </span>
                 <span className="p-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md text-[10px] font-mono font-bold px-1.5">
-                  {todayFoodList.length} Orders
+                  {todayFoodPaidList.length} Orders
                 </span>
               </div>
               <div className="text-2xl font-extrabold text-white font-mono">
@@ -901,7 +919,7 @@ const TicketingDashboard: React.FC = () => {
                     : 'text-[#94A3B8] hover:text-white'
                 }`}
               >
-                All Sales ({todayCounterList.length})
+                All Sales ({displayTxnList.length})
               </button>
               <button
                 onClick={() => setTransactionCategory('ticketing')}
@@ -912,7 +930,7 @@ const TicketingDashboard: React.FC = () => {
                 }`}
               >
                 <Ticket className="w-3.5 h-3.5" />
-                Tickets ({todayActivityList.length})
+                Tickets ({displayCategoryActivityCount})
               </button>
               <button
                 onClick={() => setTransactionCategory('food')}
@@ -923,7 +941,7 @@ const TicketingDashboard: React.FC = () => {
                 }`}
               >
                 <Utensils className="w-3.5 h-3.5" />
-                Food Street ({todayFoodList.length})
+                Food Street ({displayCategoryFoodCount})
               </button>
             </div>
 
@@ -1181,12 +1199,6 @@ const TicketingDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* ── Sub-tab 4: Staff Profile, Banking & Daily Attendance ── */}
-      {activeSubTab === 'staff_operations' && (
-        <div className="space-y-4">
-          <StaffManagementPanel isSuperAdmin={currentUser?.role === 'super_admin'} />
-        </div>
-      )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           CANCEL & REFUND MODAL

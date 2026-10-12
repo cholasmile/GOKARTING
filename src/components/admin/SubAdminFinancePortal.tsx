@@ -523,19 +523,19 @@ export const SubAdminFinancePortal: React.FC = () => {
         </div>
       </div>
 
-      {/* ── 10-Tab Navigation Bar ── */}
+      {/* ── Navigation Bar ── */}
       <div className="flex border-b border-[#1C1C1C] gap-1 overflow-x-auto pb-2 scrollbar-none">
         {[
-          { id: 'activity_purchases', label: '6. Activity Purchases', icon: <ShoppingCart className="w-3.5 h-3.5" /> },
-          { id: 'category_expenses', label: '7. Category Expenses', icon: <Receipt className="w-3.5 h-3.5" /> },
-          { id: 'supplier_master', label: '4. Supplier Master', icon: <Truck className="w-3.5 h-3.5" /> },
-          { id: 'item_master', label: '5. Item Master', icon: <Package className="w-3.5 h-3.5" /> },
-          { id: 'activity_master', label: '2. Activity Master', icon: <Building2 className="w-3.5 h-3.5" /> },
-          { id: 'category_master', label: '3. Expense Categories', icon: <Tag className="w-3.5 h-3.5" /> },
-          { id: 'staff_master', label: '1. Staff Master', icon: <Users className="w-3.5 h-3.5" /> },
-          { id: 'salary_entry', label: '8. Salary Data Entry', icon: <Wallet className="w-3.5 h-3.5" /> },
-          { id: 'invoice_uploads', label: '9. Invoice & Receipts', icon: <Upload className="w-3.5 h-3.5" /> },
-          { id: 'submitted_status', label: '10. Submitted Entries', icon: <Clock className="w-3.5 h-3.5" /> }
+          { id: 'activity_purchases', label: 'Activity Purchases', icon: <ShoppingCart className="w-3.5 h-3.5" /> },
+          { id: 'category_expenses', label: 'Category Expenses', icon: <Receipt className="w-3.5 h-3.5" /> },
+          { id: 'supplier_master', label: 'Supplier Master', icon: <Truck className="w-3.5 h-3.5" /> },
+          { id: 'item_master', label: 'Item Master', icon: <Package className="w-3.5 h-3.5" /> },
+          { id: 'activity_master', label: 'Activity Master', icon: <Building2 className="w-3.5 h-3.5" /> },
+          { id: 'category_master', label: 'Expense Categories', icon: <Tag className="w-3.5 h-3.5" /> },
+          { id: 'staff_master', label: 'Staff Master', icon: <Users className="w-3.5 h-3.5" /> },
+          { id: 'salary_entry', label: 'Salary Data Entry', icon: <Wallet className="w-3.5 h-3.5" /> },
+          { id: 'invoice_uploads', label: 'Invoice & Receipts', icon: <Upload className="w-3.5 h-3.5" /> },
+          { id: 'submitted_status', label: 'Submitted Entries', icon: <Clock className="w-3.5 h-3.5" /> }
         ].map(tab => (
           <button
             key={tab.id}
