@@ -40,6 +40,8 @@ export class AppDB extends Dexie {
   foodStreetPurchases!: Table<any, string>;
   stockMovements!: Table<any, string>;
   menuItemRecipes!: Table<any, string>;
+  shifts!: Table<any, string>;
+  leaveRequests!: Table<any, string>;
 
   syncQueue!: Table<SyncQueueItem, number>;
 
@@ -124,6 +126,32 @@ export class AppDB extends Dexie {
       foodStreetPurchases: 'id, vendorId, purchaseDate, status, supplierName',
       stockMovements: 'id, itemId, vendorId, type, timestamp',
       menuItemRecipes: 'menuItemId',
+      syncQueue: '++id, table, action, status, createdAt'
+    });
+    // Version 6: add shifts, leaveRequests
+    this.version(6).stores({
+      users: 'id, role, email, employeeId, department',
+      activities: 'id, type',
+      vendors: 'id, type',
+      menuItems: 'id, vendorId, category',
+      inventory: 'id, vendorId, name',
+      bookings: 'id, activityId, customerEmail, date',
+      tickets: 'id, bookingId, qrCodeValue, status',
+      orders: 'id, customerEmail, status',
+      notifications: 'id, recipient, channel',
+      payments: 'id, bookingId, orderId, status',
+      karts: 'id, status',
+      sessions: 'id, status',
+      lapRecords: 'id, sessionId, driverId',
+      waivers: 'id, ticketId',
+      purchases: 'id, department, category, supplier, date, paymentStatus',
+      staffAttendance: 'id, staffId, date, status',
+      staffSalaryPayments: 'id, staffId, month, paymentStatus',
+      foodStreetPurchases: 'id, vendorId, purchaseDate, status, supplierName',
+      stockMovements: 'id, itemId, vendorId, type, timestamp',
+      menuItemRecipes: 'menuItemId',
+      shifts: 'id, name, isActive',
+      leaveRequests: 'id, staffId, startDate, status',
       syncQueue: '++id, table, action, status, createdAt'
     });
   }

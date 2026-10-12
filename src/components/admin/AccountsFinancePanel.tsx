@@ -14,9 +14,10 @@ import {
   CheckCircle, XCircle, AlertCircle, Building2, Tag, Truck,
   Calendar, ChevronDown, ChevronUp, RefreshCw, Printer,
   PieChart, ArrowUpRight, ArrowDownRight, Layers, Settings,
-  Save, X, AlertTriangle
+  Save, X, AlertTriangle, Users
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { StaffManagementPanel } from './StaffManagementPanel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -266,7 +267,7 @@ const AccountsFinancePanel: React.FC = () => {
   useEffect(() => { saveToLS(LS_KEY_CUSTOM_CATS, customCats); }, [customCats]);
 
   // ── UI State ──────────────────────────────────────────────────────────────
-  type FinanceSubTab = 'overview' | 'entry' | 'register' | 'reports' | 'settings';
+  type FinanceSubTab = 'overview' | 'entry' | 'register' | 'reports' | 'staff_payroll' | 'settings';
   const [subTab, setSubTab] = useState<FinanceSubTab>('overview');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -523,6 +524,7 @@ const AccountsFinancePanel: React.FC = () => {
     { key: 'entry', label: 'New Entry', icon: <Plus className="w-3.5 h-3.5" /> },
     { key: 'register', label: 'Purchase Register', icon: <FileText className="w-3.5 h-3.5" /> },
     { key: 'reports', label: 'Reports', icon: <TrendingUp className="w-3.5 h-3.5" /> },
+    { key: 'staff_payroll', label: 'Staff Attendance & Payroll', icon: <Users className="w-3.5 h-3.5" /> },
     { key: 'settings', label: 'Categories', icon: <Settings className="w-3.5 h-3.5" /> },
   ];
 
@@ -1392,6 +1394,15 @@ const AccountsFinancePanel: React.FC = () => {
               <li>GST amounts shown are input tax totals (purchases), not GST collected on sales.</li>
             </ul>
           </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* STAFF ATTENDANCE & PAYROLL INTEGRATION                                */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {subTab === 'staff_payroll' && (
+        <div className="space-y-4">
+          <StaffManagementPanel isSuperAdmin={currentUser?.role === 'super_admin'} />
         </div>
       )}
     </div>

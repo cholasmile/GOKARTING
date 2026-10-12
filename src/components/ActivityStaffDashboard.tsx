@@ -5,10 +5,11 @@
 
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Scan, ClipboardList, CheckCircle2, AlertTriangle, Search, Activity as ActivityIcon } from 'lucide-react';
+import { Scan, ClipboardList, CheckCircle2, AlertTriangle, Search, Activity as ActivityIcon, UserCheck } from 'lucide-react';
 
 import GoKartingOpsDashboard from './karting/GoKartingOpsDashboard';
 import StaffScanner from './StaffScanner';
+import { StaffManagementPanel } from './admin/StaffManagementPanel';
 
 export interface ActivityStaffDashboardProps {
   activityIdFilter?: string;
@@ -130,26 +131,57 @@ export const ActivityStaffDashboard: React.FC<ActivityStaffDashboardProps> = ({
   };
 
   const occupancyStats = getOccupancyStats();
+  const [activeTab, setActiveTab] = useState<'gate_ops' | 'staff_ops'>('gate_ops');
 
   return (
     <div className="space-y-6">
       
-      {/* Global Staff Header */}
-      <div className="flex justify-end px-6 pt-6">
-        <select
-          id="global-staff-activity-filter"
-          value={selectedActivityFilter}
-          onChange={e => setSelectedActivityFilter(e.target.value)}
-          className="px-4 py-2 border border-[#00ABAB]/30 rounded-xl bg-[#1C1C1C] text-[#FFFFFF] focus:outline-none focus:border-[#3E8EDE] focus:ring-1 focus:ring-[#7DF9FF] cursor-pointer text-sm font-bold shadow-[0_0_15px_rgba(0,171,171,0.15)]"
-        >
-          <option value="all">All Activities Dashboard</option>
-          {activities.map(a => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
+      {/* Sub-Admin Navigation & Activity Filter Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-6 pt-6 gap-3">
+        {/* Tab switchers */}
+        <div className="flex bg-[#121A24] p-1 rounded-xl border border-[#00ABAB]/30">
+          <button
+            onClick={() => setActiveTab('gate_ops')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'gate_ops'
+                ? 'bg-[#00ABAB] text-black shadow-[0_0_15px_rgba(0,171,171,0.4)]'
+                : 'text-[#9CA3AF] hover:text-white'
+            }`}
+          >
+            <Scan className="w-4 h-4" /> Gate Check-In & Ops
+          </button>
+          <button
+            onClick={() => setActiveTab('staff_ops')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'staff_ops'
+                ? 'bg-[#00ABAB] text-black shadow-[0_0_15px_rgba(0,171,171,0.4)]'
+                : 'text-[#9CA3AF] hover:text-white'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" /> Staff Master & Attendance
+          </button>
+        </div>
+
+        {activeTab === 'gate_ops' && (
+          <select
+            id="global-staff-activity-filter"
+            value={selectedActivityFilter}
+            onChange={e => setSelectedActivityFilter(e.target.value)}
+            className="px-4 py-2 border border-[#00ABAB]/30 rounded-xl bg-[#1C1C1C] text-[#FFFFFF] focus:outline-none focus:border-[#3E8EDE] focus:ring-1 focus:ring-[#7DF9FF] cursor-pointer text-sm font-bold shadow-[0_0_15px_rgba(0,171,171,0.15)]"
+          >
+            <option value="all">All Activities Dashboard</option>
+            {activities.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {selectedActivityFilter === 'act-go-karting' ? (
+      {activeTab === 'staff_ops' ? (
+        <div className="px-6 space-y-6">
+          <StaffManagementPanel isSuperAdmin={false} />
+        </div>
+      ) : selectedActivityFilter === 'act-go-karting' ? (
         <GoKartingOpsDashboard />
       ) : (
         <div className="px-6 space-y-6">

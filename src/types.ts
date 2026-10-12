@@ -16,6 +16,18 @@ export interface User {
   organizationId?: string;
   updatedAt?: string;
   // Staff Master & Banking details for Payroll
+  employeeId?: string; // unique (e.g. EMP-101)
+  profilePhoto?: string;
+  address?: string;
+  emergencyContact?: string;
+  assignedActivity?: string;
+  dateOfJoining?: string; // YYYY-MM-DD
+  employmentType?: 'Full-time' | 'Part-time' | 'Temporary' | 'Contract';
+  salaryType?: 'Monthly' | 'Daily' | 'Hourly' | 'Contract-based';
+  weeklyOff?: string; // e.g. Sunday, Monday
+  shiftId?: string; // linked to ShiftDefinition
+  shiftName?: string;
+  employmentStatus?: 'Active' | 'On Leave' | 'Inactive';
   accountNumber?: string;
   bankName?: string;
   ifscCode?: string;
@@ -26,19 +38,76 @@ export interface User {
   designation?: string;
   monthlySalary?: number;
   dailyRate?: number;
+  hourlyRate?: number;
+  notes?: string;
 }
+
+export type AttendanceStatusType =
+  | 'Present'
+  | 'Absent'
+  | 'Half Day'
+  | 'Paid Leave'
+  | 'Unpaid Leave'
+  | 'Weekly Off'
+  | 'Holiday'
+  | 'Work From Home';
 
 export interface StaffAttendanceRecord {
   id: string;
+  employeeId?: string;
   staffId: string;
   staffName: string;
+  department?: string;
+  assignedActivity?: string;
   date: string; // YYYY-MM-DD
-  status: 'present' | 'absent' | 'half_day' | 'leave';
+  shiftName?: string;
+  status: AttendanceStatusType | 'present' | 'absent' | 'half_day' | 'leave';
   checkInTime?: string; // HH:mm
   checkOutTime?: string; // HH:mm
-  notes?: string;
+  breakDurationMinutes?: number;
+  totalWorkingHours?: number;
+  lateArrivalMinutes?: number;
+  earlyDepartureMinutes?: number;
+  overtimeHours?: number;
+  isOvertimeApproved?: boolean;
+  remarks?: string;
   markedBy?: string;
+  correctedBy?: string;
+  correctionReason?: string;
+  isCorrected?: boolean;
   timestamp: string;
+}
+
+export interface ShiftDefinition {
+  id: string;
+  name: string; // e.g. Morning Shift, Afternoon Shift, Evening Shift
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  breakDurationMinutes: number;
+  applicableDepartment?: string;
+  applicableActivity?: string;
+  weeklyOff?: string;
+  isActive: boolean;
+}
+
+export interface LeaveRequestRecord {
+  id: string;
+  staffId: string;
+  staffName: string;
+  leaveType: 'Casual Leave' | 'Sick Leave' | 'Annual Leave' | 'Unpaid Leave' | string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  numberOfDays: number;
+  isPaid: boolean;
+  reason: string;
+  supportingDocUrl?: string;
+  submittedBy: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  approvedBy?: string;
+  approvalDate?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface StaffSalaryPayment {
@@ -52,13 +121,22 @@ export interface StaffSalaryPayment {
   presentDays: number;
   halfDays: number;
   absentDays: number;
+  paidLeaveDays?: number;
+  unpaidLeaveDays?: number;
   payableDays: number;
+  approvedOvertimeHours?: number;
+  overtimePay?: number;
+  allowances?: number;
+  deductions?: number;
   calculatedSalary: number;
   bonusAmount: number;
   deductionAmount: number;
   netPayable: number;
   paymentMethod: 'Bank Transfer' | 'Cash' | 'UPI' | 'Cheque';
   paymentStatus: 'Paid' | 'Pending';
+  isApprovedBySuperAdmin?: boolean;
+  approvedBy?: string;
+  approvedAt?: string;
   paidAt?: string;
   transactionRef?: string;
   bankName?: string;

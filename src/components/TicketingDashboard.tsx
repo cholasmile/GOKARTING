@@ -3,12 +3,13 @@ import {
   Ticket, Users, CreditCard, CheckCircle, Smartphone, Printer, Search, FileText, Banknote, 
   Utensils, Plus, Minus, ShoppingBag, Trash2, ArrowRight, XCircle, RotateCcw, AlertTriangle, 
   Check, X, QrCode, Calendar, TrendingUp, Clock, Coins, Receipt, Wallet, ArrowUpRight,
-  Flame, Store, Coffee, ChevronRight, Layers, Tag
+  Flame, Store, Coffee, ChevronRight, Layers, Tag, UserCheck
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Activity, Payment, FoodOrder } from '../types';
 import { UnifiedTicketingFlow } from './UnifiedTicketingFlow';
 import { printTicket } from '../lib/printTicket';
+import { StaffManagementPanel } from './admin/StaffManagementPanel';
 
 const TicketingDashboard: React.FC = () => {
   const { 
@@ -18,7 +19,7 @@ const TicketingDashboard: React.FC = () => {
   } = useAppContext();
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'food_street' | 'history'>('new_booking');
+  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'food_street' | 'history' | 'staff_operations'>('new_booking');
   const [searchTerm, setSearchTerm] = useState('');
   
   // Transaction Ledger Filters
@@ -396,6 +397,12 @@ const TicketingDashboard: React.FC = () => {
           className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeSubTab === 'history' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
         >
           <Clock className="w-4 h-4" /> Today's Sales & Transactions ({todayCounterList.length})
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('staff_operations')}
+          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeSubTab === 'staff_operations' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
+        >
+          <UserCheck className="w-4 h-4" /> Staff Profile & Attendance
         </button>
       </div>
 
@@ -1171,6 +1178,13 @@ const TicketingDashboard: React.FC = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* ── Sub-tab 4: Staff Profile, Banking & Daily Attendance ── */}
+      {activeSubTab === 'staff_operations' && (
+        <div className="space-y-4">
+          <StaffManagementPanel isSuperAdmin={currentUser?.role === 'super_admin'} />
         </div>
       )}
 

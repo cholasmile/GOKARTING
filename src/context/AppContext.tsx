@@ -9,7 +9,8 @@ import {
   InventoryItem, Booking, Ticket, FoodOrder, Payment, 
   NotificationLog, OrderStatus, FoodOrderItem, ActivityPackage,
   Kart, GoKartingSession, LapRecord, GoKartingWaiver, KartStatus, SessionStatus,
-  ActivityPhoto, ActivityOffer, FoodStreetPurchaseRecord, StockMovement, MenuItemRecipe, StockMovementType
+  ActivityPhoto, ActivityOffer, FoodStreetPurchaseRecord, StockMovement, MenuItemRecipe, StockMovementType,
+  ShiftDefinition, LeaveRequestRecord, StaffAttendanceRecord, StaffSalaryPayment, AttendanceStatusType
 } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { db } from '../db/db';
@@ -36,6 +37,12 @@ interface AppContextProps {
   notifications: NotificationLog[];
   payments: Payment[];
   timeSlots: string[];
+
+  // Staff Master, Attendance, Leave & Shifts State
+  staffAttendance: StaffAttendanceRecord[];
+  staffSalaryPayments: StaffSalaryPayment[];
+  shifts: ShiftDefinition[];
+  leaveRequests: LeaveRequestRecord[];
 
   // Food Street Purchases & Stock Tracking State
   foodStreetPurchases: FoodStreetPurchaseRecord[];
@@ -73,10 +80,23 @@ interface AppContextProps {
   deleteActivityOffer: (activityId: string, offerId: string) => void;
   setOfferActive: (activityId: string, offerId: string, active: boolean) => void;
 
-  // Mutators - Users
+  // Mutators - Users & Staff Management
   updateUserRole: (userId: string, role: UserRole) => void;
   addUser: (user: Omit<User, 'id'> | User) => void;
   updateUser: (user: User) => void;
+  deactivateUser: (userId: string) => void;
+
+  // Mutators - Attendance, Shifts & Leaves
+  markAttendance: (record: Omit<StaffAttendanceRecord, 'id' | 'timestamp'>) => StaffAttendanceRecord;
+  bulkMarkAttendance: (records: Array<Omit<StaffAttendanceRecord, 'id' | 'timestamp'>>) => void;
+  correctAttendance: (recordId: string, updates: Partial<StaffAttendanceRecord>, reason: string) => void;
+  addShift: (shift: Omit<ShiftDefinition, 'id'>) => ShiftDefinition;
+  updateShift: (shift: ShiftDefinition) => void;
+  deleteShift: (id: string) => void;
+  submitLeaveRequest: (leave: Omit<LeaveRequestRecord, 'id' | 'createdAt' | 'updatedAt' | 'status'>) => LeaveRequestRecord;
+  updateLeaveRequestStatus: (leaveId: string, status: 'Approved' | 'Rejected', reason?: string) => void;
+  saveSalaryPayment: (salary: Omit<StaffSalaryPayment, 'id' | 'createdAt'>) => StaffSalaryPayment;
+  approveSalaryPayment: (salaryId: string) => void;
 
   // Mutators - Bookings & Tickets
   createBooking: (bookingData: {
@@ -672,6 +692,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return prev;
     });
   }, [bookings, orders]);
+
+  // ── Staff Master, Attendance, Leave & Shifts State ──
+  const [staffAttendance, setStaffAttendance] = useState<StaffAttendanceRecord[]>(() => {
+    const cached = localStorage.getItem('ap_staff_attendance');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+
+  const [staffSalaryPayments, setStaffSalaryPayments] = useState<StaffSalaryPayment[]>(() => {
+    const cached = localStorage.getItem('ap_salary_payments');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+
+  const [shifts, setShifts] = useState<ShiftDefinition[]>(() => {
+    const cached = localStorage.getItem('ap_shifts');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    // Default park shifts
+    return [
+      { id: 'shift-morning', name: 'Morning Shift', startTime: '09:00', endTime: '17:00', breakDurationMinutes: 60, isActive: true },
+      { id: 'shift-evening', name: 'Evening / Night Shift', startTime: '14:00', endTime: '22:00', breakDurationMinutes: 60, isActive: true },
+      { id: 'shift-general', name: 'General Track Shift', startTime: '10:00', endTime: '19:00', breakDurationMinutes: 60, isActive: true },
+    ];
+  });
+
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestRecord[]>(() => {
+    const cached = localStorage.getItem('ap_leave_requests');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
 
   // ── Food Street Purchases & Stock Tracking State ──
   const [foodStreetPurchases, setFoodStreetPurchases] = useState<FoodStreetPurchaseRecord[]>(() => {
@@ -1708,6 +1778,300 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
 
     writeToLocalAndSync('users', 'update', updatedUser);
+  };
+
+  const deactivateUser = (userId: string) => {
+    const now = new Date().toISOString();
+    setUsers(prev => {
+      const updated = prev.map(u => u.id === userId ? { ...u, employmentStatus: 'Inactive' as const, updatedAt: now } : u);
+      try {
+        localStorage.setItem('ap_users', JSON.stringify(updated));
+        db.users.bulkPut(updated);
+      } catch (err) {}
+      return updated;
+    });
+    writeToLocalAndSync('users', 'update', { id: userId, employmentStatus: 'Inactive', updatedAt: now });
+  };
+
+  // ── Attendance Operations ──
+  const markAttendance = (record: Omit<StaffAttendanceRecord, 'id' | 'timestamp'>): StaffAttendanceRecord => {
+    const now = new Date().toISOString();
+    const id = `att-${record.staffId}-${record.date}`;
+
+    const newRecord: StaffAttendanceRecord = {
+      ...record,
+      id,
+      timestamp: now
+    };
+
+    setStaffAttendance(prev => {
+      // Overwrite if entry for same staff on same date exists (prevents duplicate attendance)
+      const existingIdx = prev.findIndex(a => a.staffId === record.staffId && a.date === record.date);
+      let updated: StaffAttendanceRecord[];
+      if (existingIdx >= 0) {
+        updated = [...prev];
+        updated[existingIdx] = newRecord;
+      } else {
+        updated = [newRecord, ...prev];
+      }
+      try {
+        localStorage.setItem('ap_staff_attendance', JSON.stringify(updated));
+        db.staffAttendance.put(newRecord);
+      } catch (e) {}
+      return updated;
+    });
+
+    writeToLocalAndSync('staffAttendance', 'insert', newRecord);
+    return newRecord;
+  };
+
+  const bulkMarkAttendance = (records: Array<Omit<StaffAttendanceRecord, 'id' | 'timestamp'>>) => {
+    const now = new Date().toISOString();
+    const stampedRecords: StaffAttendanceRecord[] = records.map(r => ({
+      ...r,
+      id: `att-${r.staffId}-${r.date}`,
+      timestamp: now
+    }));
+
+    setStaffAttendance(prev => {
+      const map = new Map<string, StaffAttendanceRecord>();
+      prev.forEach(p => map.set(`${p.staffId}-${p.date}`, p));
+      stampedRecords.forEach(r => map.set(`${r.staffId}-${r.date}`, r));
+      const updated = Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+      try {
+        localStorage.setItem('ap_staff_attendance', JSON.stringify(updated));
+        db.staffAttendance.bulkPut(stampedRecords);
+      } catch (e) {}
+      return updated;
+    });
+
+    stampedRecords.forEach(r => writeToLocalAndSync('staffAttendance', 'insert', r));
+  };
+
+  const correctAttendance = (recordId: string, updates: Partial<StaffAttendanceRecord>, reason: string) => {
+    const now = new Date().toISOString();
+    setStaffAttendance(prev => {
+      const updated = prev.map(a => {
+        if (a.id === recordId) {
+          return {
+            ...a,
+            ...updates,
+            isCorrected: true,
+            correctedBy: currentUser?.name || 'Sub-Admin',
+            correctionReason: reason,
+            timestamp: now
+          };
+        }
+        return a;
+      });
+      try {
+        localStorage.setItem('ap_staff_attendance', JSON.stringify(updated));
+        const correctedItem = updated.find(a => a.id === recordId);
+        if (correctedItem) db.staffAttendance.put(correctedItem);
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  // ── Shift Operations ──
+  const addShift = (shiftData: Omit<ShiftDefinition, 'id'>): ShiftDefinition => {
+    const newShift: ShiftDefinition = {
+      ...shiftData,
+      id: `shift-${Date.now()}`
+    };
+    setShifts(prev => {
+      const updated = [...prev, newShift];
+      try {
+        localStorage.setItem('ap_shifts', JSON.stringify(updated));
+        db.shifts.put(newShift);
+      } catch (e) {}
+      return updated;
+    });
+    return newShift;
+  };
+
+  const updateShift = (shift: ShiftDefinition) => {
+    setShifts(prev => {
+      const updated = prev.map(s => s.id === shift.id ? shift : s);
+      try {
+        localStorage.setItem('ap_shifts', JSON.stringify(updated));
+        db.shifts.put(shift);
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const deleteShift = (id: string) => {
+    setShifts(prev => {
+      const updated = prev.filter(s => s.id !== id);
+      try {
+        localStorage.setItem('ap_shifts', JSON.stringify(updated));
+        db.shifts.delete(id);
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  // ── Leave Request Operations ──
+  const submitLeaveRequest = (leaveData: Omit<LeaveRequestRecord, 'id' | 'createdAt' | 'updatedAt' | 'status'>): LeaveRequestRecord => {
+    const now = new Date().toISOString();
+    const newLeave: LeaveRequestRecord = {
+      ...leaveData,
+      id: `lv-${Date.now()}`,
+      status: 'Pending',
+      createdAt: now,
+      updatedAt: now
+    };
+    setLeaveRequests(prev => {
+      const updated = [newLeave, ...prev];
+      try {
+        localStorage.setItem('ap_leave_requests', JSON.stringify(updated));
+        db.leaveRequests.put(newLeave);
+      } catch (e) {}
+      return updated;
+    });
+    return newLeave;
+  };
+
+  const updateLeaveRequestStatus = (leaveId: string, status: 'Approved' | 'Rejected', reason?: string) => {
+    const now = new Date().toISOString();
+    const leave = leaveRequests.find(l => l.id === leaveId);
+    if (!leave) return;
+
+    const updatedLeave: LeaveRequestRecord = {
+      ...leave,
+      status,
+      approvedBy: currentUser?.name || 'Admin',
+      approvalDate: now,
+      rejectionReason: status === 'Rejected' ? reason : undefined,
+      updatedAt: now
+    };
+
+    setLeaveRequests(prev => {
+      const updated = prev.map(l => l.id === leaveId ? updatedLeave : l);
+      try {
+        localStorage.setItem('ap_leave_requests', JSON.stringify(updated));
+        db.leaveRequests.put(updatedLeave);
+      } catch (e) {}
+      return updated;
+    });
+
+    // If leave is approved, automatically create attendance records for the leave dates
+    if (status === 'Approved') {
+      try {
+        const start = new Date(leave.startDate);
+        const end = new Date(leave.endDate);
+        const autoAttendanceList: Array<Omit<StaffAttendanceRecord, 'id' | 'timestamp'>> = [];
+        
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const dateStr = d.toISOString().split('T')[0];
+          autoAttendanceList.push({
+            staffId: leave.staffId,
+            staffName: leave.staffName,
+            date: dateStr,
+            status: leave.isPaid ? 'Paid Leave' : 'Unpaid Leave',
+            remarks: `Approved ${leave.leaveType}: ${leave.reason}`,
+            markedBy: currentUser?.name || 'Leave Approver System'
+          });
+        }
+        bulkMarkAttendance(autoAttendanceList);
+      } catch (e) {
+        console.warn('Failed to auto-mark leave attendance:', e);
+      }
+    }
+  };
+
+  // ── Salary / Payroll Integration Operations ──
+  const saveSalaryPayment = (salaryData: Omit<StaffSalaryPayment, 'id' | 'createdAt'>): StaffSalaryPayment => {
+    const now = new Date().toISOString();
+    const id = `sal-${salaryData.staffId}-${salaryData.month}`;
+    const newSalary: StaffSalaryPayment = {
+      ...salaryData,
+      id,
+      createdAt: now
+    };
+
+    setStaffSalaryPayments(prev => {
+      const existingIdx = prev.findIndex(s => s.staffId === salaryData.staffId && s.month === salaryData.month);
+      let updated: StaffSalaryPayment[];
+      if (existingIdx >= 0) {
+        updated = [...prev];
+        updated[existingIdx] = newSalary;
+      } else {
+        updated = [newSalary, ...prev];
+      }
+      try {
+        localStorage.setItem('ap_salary_payments', JSON.stringify(updated));
+        db.staffSalaryPayments.put(newSalary);
+      } catch (e) {}
+      return updated;
+    });
+
+    return newSalary;
+  };
+
+  const approveSalaryPayment = (salaryId: string) => {
+    const now = new Date().toISOString();
+    const sal = staffSalaryPayments.find(s => s.id === salaryId);
+    if (!sal) return;
+
+    const approvedSal: StaffSalaryPayment = {
+      ...sal,
+      isApprovedBySuperAdmin: true,
+      approvedBy: currentUser?.name || 'Super Admin',
+      approvedAt: now,
+      paymentStatus: 'Paid',
+      paidAt: now
+    };
+
+    setStaffSalaryPayments(prev => {
+      const updated = prev.map(s => s.id === salaryId ? approvedSal : s);
+      try {
+        localStorage.setItem('ap_salary_payments', JSON.stringify(updated));
+        db.staffSalaryPayments.put(approvedSal);
+      } catch (e) {}
+      return updated;
+    });
+
+    // Post to Super Admin Accounts & Finance expenses
+    try {
+      const existingRaw = localStorage.getItem('dp_purchases_v1');
+      let purchases: any[] = existingRaw ? JSON.parse(existingRaw) : [];
+      const alreadyInFinance = purchases.some(p => p.id === `sal-entry-${sal.id}`);
+      if (!alreadyInFinance) {
+        const financeEntry = {
+          id: `sal-entry-${sal.id}`,
+          date: now.split('T')[0],
+          department: sal.staffName || 'Administration / Office',
+          category: 'Salaries & Wages',
+          itemName: `Staff Salary: ${sal.staffName} (${sal.month})`,
+          description: `Disbursed Net Pay: ₹${sal.netPayable} for ${sal.payableDays} payable days (Acc: ${sal.accountNumber || 'N/A'}, IFSC: ${sal.ifscCode || 'N/A'})`,
+          supplier: sal.staffName,
+          invoiceNumber: `PAYROLL-${sal.month}-${sal.staffId.slice(-6)}`,
+          quantity: 1,
+          unit: 'month',
+          unitPrice: sal.netPayable,
+          gstPercent: 0,
+          gstAmount: 0,
+          totalCost: sal.netPayable,
+          paymentMethod: sal.paymentMethod,
+          amountPaid: sal.netPayable,
+          outstandingBalance: 0,
+          paymentStatus: 'Paid',
+          notes: `Bank: ${sal.bankName || 'Direct'} • Ref: ${sal.transactionRef || 'NEFT'}`,
+          isInventory: false,
+          isFixedAsset: false,
+          createdAt: now,
+          updatedAt: now,
+          createdBy: currentUser?.name || 'Super Admin'
+        };
+        purchases.unshift(financeEntry);
+        localStorage.setItem('dp_purchases_v1', JSON.stringify(purchases));
+        db.purchases.put(financeEntry);
+      }
+    } catch (e) {
+      console.warn('Failed to post salary to dp_purchases_v1:', e);
+    }
   };
 
   const createBooking = (data: {
@@ -3230,6 +3594,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       updateUserRole,
       addUser,
       updateUser,
+      deactivateUser,
+
+      // Staff, Attendance, Shifts & Leaves
+      staffAttendance,
+      staffSalaryPayments,
+      shifts,
+      leaveRequests,
+      markAttendance,
+      bulkMarkAttendance,
+      correctAttendance,
+      addShift,
+      updateShift,
+      deleteShift,
+      submitLeaveRequest,
+      updateLeaveRequestStatus,
+      saveSalaryPayment,
+      approveSalaryPayment,
       
       createBooking,
       markBookingAsPaid,
