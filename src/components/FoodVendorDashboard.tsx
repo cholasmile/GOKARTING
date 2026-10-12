@@ -149,11 +149,12 @@ export const FoodVendorDashboard: React.FC = () => {
     });
   };
 
-  const posSubtotal = Math.round(posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
-  const posGst = Math.round(posSubtotal * 0.05 * 100) / 100;
-  const posCgst = Math.round(posSubtotal * 0.025 * 100) / 100;
-  const posSgst = Math.round(posSubtotal * 0.025 * 100) / 100;
-  const posGrandTotal = Math.round((posSubtotal + posGst) * 100) / 100;
+  // 5% GST Inclusive of MRP
+  const posGrandTotal = Math.round(posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
+  const posSubtotal = Math.round((posGrandTotal / 1.05) * 100) / 100;
+  const posGst = Math.round((posGrandTotal - posSubtotal) * 100) / 100;
+  const posCgst = Math.round((posGst / 2) * 100) / 100;
+  const posSgst = Math.round((posGst - posCgst) * 100) / 100;
 
   const handleStaffGenerateBill = (e: React.FormEvent) => {
     e.preventDefault();
@@ -546,22 +547,22 @@ export const FoodVendorDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* 5% GST Retail Tax Calculation Box */}
+              {/* 5% GST Retail Tax Calculation Box (GST Inclusive of MRP) */}
               <div className="pt-2 border-t border-white/10 space-y-1 font-mono text-xs">
                 <div className="flex justify-between text-[#9CA3AF]">
-                  <span>Items Subtotal:</span>
+                  <span>Taxable Base:</span>
                   <span className="text-white font-bold">₹{posSubtotal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-[#9CA3AF]">
                   <span>CGST (2.5%):</span>
-                  <span className="text-[#14F1D9]">+₹{posCgst.toFixed(2)}</span>
+                  <span className="text-[#14F1D9]">₹{posCgst.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-[#9CA3AF]">
                   <span>SGST (2.5%):</span>
-                  <span className="text-[#14F1D9]">+₹{posSgst.toFixed(2)}</span>
+                  <span className="text-[#14F1D9]">₹{posSgst.toFixed(2)}</span>
                 </div>
                 <div className="pt-2 border-t border-white/10 flex justify-between items-center font-black">
-                  <span className="text-xs text-white uppercase tracking-wider">Final Payable:</span>
+                  <span className="text-xs text-white uppercase tracking-wider">Total (Incl. 5% GST):</span>
                   <span className="text-2xl font-mono text-[#14F1D9] shadow-sm">₹{posGrandTotal.toFixed(2)}</span>
                 </div>
               </div>

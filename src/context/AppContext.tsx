@@ -2534,13 +2534,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Daily sequential token number: 101, 102, 103...
     const todayFoodOrdersCount = orders.filter(o => o.createdAt && o.createdAt.startsWith(todayStr)).length;
     const tokenNumber = 101 + todayFoodOrdersCount;
-    // 5% GST calculation for Food Street
-    const subtotal = Math.round(foodCart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
+    // 5% GST calculation for Food Street (GST Inclusive in MRP / Item Price)
+    const grandMRP = Math.round(foodCart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
+    const subtotal = Math.round((grandMRP / 1.05) * 100) / 100;
+    const taxAmount = Math.round((grandMRP - subtotal) * 100) / 100;
+    const cgstAmount = Math.round((taxAmount / 2) * 100) / 100;
+    const sgstAmount = Math.round((taxAmount - cgstAmount) * 100) / 100;
+    const totalAmount = grandMRP;
     const taxRate = 0.05;
-    const taxAmount = Math.round(subtotal * 0.05 * 100) / 100;
-    const cgstAmount = Math.round(subtotal * 0.025 * 100) / 100;
-    const sgstAmount = Math.round(subtotal * 0.025 * 100) / 100;
-    const totalAmount = Math.round((subtotal + taxAmount) * 100) / 100;
     const invoiceNumber = `INV-FS-${Date.now().toString().slice(-6)}`;
 
     const newOrder: FoodOrder = {

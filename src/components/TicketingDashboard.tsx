@@ -677,18 +677,18 @@ const TicketingDashboard: React.FC = () => {
                 </div>
 
                 {(() => {
-                  const foodSubtotal = foodCart.reduce((s, i) => s + (i.price * i.quantity), 0);
-                  const foodGst = Math.round(foodSubtotal * 0.05 * 100) / 100;
-                  const foodGrandTotal = Math.round((foodSubtotal + foodGst) * 100) / 100;
+                  const foodGrandTotal = Math.round(foodCart.reduce((s, i) => s + (i.price * i.quantity), 0) * 100) / 100;
+                  const foodSubtotal = Math.round((foodGrandTotal / 1.05) * 100) / 100;
+                  const foodGst = Math.round((foodGrandTotal - foodSubtotal) * 100) / 100;
                   return (
                     <div className="space-y-1.5 pt-2 border-t border-[#1C1C1C] text-xs font-mono">
                       <div className="flex justify-between text-[#94A3B8]">
-                        <span>Subtotal:</span>
+                        <span>Taxable Base:</span>
                         <span>₹{foodSubtotal.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-[#94A3B8]">
-                        <span>GST (5%):</span>
-                        <span className="text-[#00ABAB]">+₹{foodGst.toFixed(2)}</span>
+                        <span>GST (5% Incl.):</span>
+                        <span className="text-[#00ABAB]">₹{foodGst.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between items-center pt-1 border-t border-white/10 font-bold">
                         <span className="text-xs uppercase text-white">Grand Total:</span>
