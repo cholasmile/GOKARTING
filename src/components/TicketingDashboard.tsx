@@ -488,7 +488,7 @@ const TicketingDashboard: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-bold font-mono text-cyan-400">₹{todayActivityRevenue.toLocaleString('en-IN')}</span>
-                  <div className="text-[9px] text-[#94A3B8] font-mono">{todayActivityList.length} passes</div>
+                  <div className="text-[9px] text-[#94A3B8] font-mono">{todayActivityPaidList.length} passes</div>
                 </div>
               </div>
 
@@ -499,7 +499,7 @@ const TicketingDashboard: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-bold font-mono text-amber-400">₹{todayFoodRevenue.toLocaleString('en-IN')}</span>
-                  <div className="text-[9px] text-[#94A3B8] font-mono">{todayFoodList.length} orders</div>
+                  <div className="text-[9px] text-[#94A3B8] font-mono">{todayFoodPaidList.length} orders</div>
                 </div>
               </div>
 
