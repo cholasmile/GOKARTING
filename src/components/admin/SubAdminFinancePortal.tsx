@@ -32,10 +32,11 @@ import {
   Receipt, Wallet, Upload, Clock, CheckCircle, XCircle, 
   AlertTriangle, Plus, Search, Filter, Edit, Trash2, 
   FileText, ArrowRight, Eye, ShieldAlert, Sparkles, Check, 
-  RotateCcw, Download, X
+  RotateCcw, Download, X, Coffee, Utensils
 } from 'lucide-react';
 import { SupplierRecord, PurchaseItemRecord, ExpenseRecord, EntryWorkflowStatus } from '../../types';
 import { StaffManagementPanel } from './StaffManagementPanel';
+import { FoodStreetInventoryPanel } from './FoodStreetInventoryPanel';
 
 type SubAdminSection = 
   | 'staff_master'
@@ -58,6 +59,7 @@ export const SubAdminFinancePortal: React.FC = () => {
   } = useAppContext();
 
   const [activeSection, setActiveSection] = useState<SubAdminSection>('activity_purchases');
+  const [purchaseSubMode, setPurchaseSubMode] = useState<'general' | 'cafe'>('general');
 
   // ── 1. Activity Master State (Local Custom Activities) ──
   const [customActivities, setCustomActivities] = useState<string[]>(() => {
@@ -829,15 +831,72 @@ export const SubAdminFinancePortal: React.FC = () => {
             </div>
           )}
 
-          <div className="glass-panel p-6 rounded-2xl border border-[#00ABAB]/30 space-y-5">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <ShoppingCart className="w-5 h-5 text-[#00ABAB]" /> Activity-Wise Purchase Entry
-              </h3>
-              <p className="text-xs text-[#9CA3AF]">
-                Record activity-specific goods, equipment, groceries, spare parts, and ammunition purchases.
-              </p>
+          {/* Sub-menu bar for Activity Purchases: All Activities vs Cafe / Food Street */}
+          <div className="flex items-center gap-2 border-b border-[#1C1C1C] pb-2">
+            <button
+              type="button"
+              onClick={() => setPurchaseSubMode('general')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                purchaseSubMode === 'general'
+                  ? 'bg-[#00ABAB] text-black shadow-[0_0_15px_rgba(0,171,171,0.3)]'
+                  : 'bg-[#0A0A0A] text-[#9CA3AF] hover:text-white border border-[#2C2C2C]'
+              }`}
+            >
+              <ShoppingCart className="w-3.5 h-3.5" />
+              General Activity Purchases Entry
+            </button>
+            <button
+              type="button"
+              onClick={() => setPurchaseSubMode('cafe')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                purchaseSubMode === 'cafe'
+                  ? 'bg-amber-400 text-black shadow-[0_0_15px_rgba(251,191,36,0.3)]'
+                  : 'bg-[#0A0A0A] text-[#9CA3AF] hover:text-white border border-[#2C2C2C]'
+              }`}
+            >
+              <Coffee className="w-3.5 h-3.5 text-amber-500" />
+              Cafe &amp; Food Street Purchases (Raw Materials &amp; Menu Stock)
+            </button>
+          </div>
+
+          {purchaseSubMode === 'cafe' ? (
+            <div className="space-y-4">
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex justify-between items-center">
+                <div>
+                  <h4 className="text-xs font-bold text-amber-300 flex items-center gap-2">
+                    <Coffee className="w-4 h-4" /> Cafe &amp; Food Street Inventory Integration
+                  </h4>
+                  <p className="text-[11px] text-[#9CA3AF] mt-0.5">
+                    Record Food Street grocery, raw material, packaged item purchases, and manage vendor item recipes.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPurchaseForm(prev => ({
+                      ...prev,
+                      department: 'Cafe / Food Street',
+                      category: 'Inventory / Stock'
+                    }));
+                    setPurchaseSubMode('general');
+                  }}
+                  className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Fast Cafe Voucher
+                </button>
+              </div>
+              <FoodStreetInventoryPanel isSubAdminPortal={true} />
             </div>
+          ) : (
+            <div className="glass-panel p-6 rounded-2xl border border-[#00ABAB]/30 space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-[#00ABAB]" /> Activity-Wise Purchase Entry
+                </h3>
+                <p className="text-xs text-[#9CA3AF]">
+                  Record activity-specific goods, equipment, groceries, spare parts, and ammunition purchases.
+                </p>
+              </div>
 
             <form onSubmit={handleSavePurchaseEntry} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1074,6 +1133,7 @@ export const SubAdminFinancePortal: React.FC = () => {
               </div>
             </form>
           </div>
+          )}
         </div>
       )}
 

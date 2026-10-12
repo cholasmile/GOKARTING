@@ -14,10 +14,11 @@ import {
   CheckCircle, XCircle, AlertCircle, Building2, Tag, Truck,
   Calendar, ChevronDown, ChevronUp, RefreshCw, Printer,
   PieChart, ArrowUpRight, ArrowDownRight, Layers, Settings,
-  Save, X, AlertTriangle, Users, Clock, Check, ShieldCheck
+  Save, X, AlertTriangle, Users, Clock, Check, ShieldCheck, Coffee
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { StaffManagementPanel } from './StaffManagementPanel';
+import { FoodStreetInventoryPanel } from './FoodStreetInventoryPanel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -270,7 +271,7 @@ const AccountsFinancePanel: React.FC = () => {
   useEffect(() => { saveToLS(LS_KEY_CUSTOM_CATS, customCats); }, [customCats]);
 
   // ── UI State ──────────────────────────────────────────────────────────────
-  type FinanceSubTab = 'overview' | 'entry' | 'register' | 'reports' | 'staff_payroll' | 'subadmin_submissions' | 'settings';
+  type FinanceSubTab = 'overview' | 'entry' | 'register' | 'cafe_purchases' | 'reports' | 'staff_payroll' | 'subadmin_submissions' | 'settings';
   const [subTab, setSubTab] = useState<FinanceSubTab>('overview');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -526,6 +527,7 @@ const AccountsFinancePanel: React.FC = () => {
     { key: 'overview', label: 'Overview', icon: <BarChart2 className="w-3.5 h-3.5" /> },
     { key: 'entry', label: 'New Entry', icon: <Plus className="w-3.5 h-3.5" /> },
     { key: 'register', label: 'Purchase Register', icon: <FileText className="w-3.5 h-3.5" /> },
+    { key: 'cafe_purchases', label: 'Cafe & Food Street Purchases', icon: <Coffee className="w-3.5 h-3.5 text-amber-400" /> },
     { key: 'reports', label: 'Reports', icon: <TrendingUp className="w-3.5 h-3.5" /> },
     { key: 'staff_payroll', label: 'Staff Attendance & Payroll', icon: <Users className="w-3.5 h-3.5" /> },
     { key: 'subadmin_submissions', label: 'Sub-Admin Entries & Approvals', icon: <Clock className="w-3.5 h-3.5" /> },
@@ -1133,6 +1135,46 @@ const AccountsFinancePanel: React.FC = () => {
               </div>
             </details>
           )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* CAFE & FOOD STREET PURCHASES / INVENTORY TAB                          */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {subTab === 'cafe_purchases' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="p-4 bg-gradient-to-r from-[#121A24] via-[#0A0A0A] to-[#121A24] border border-[#00ABAB]/30 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Coffee className="w-5 h-5 text-amber-400" />
+                <h4 className="text-sm font-bold text-white">
+                  Cafe &amp; Food Street Activity Purchases &amp; Inventory Integration
+                </h4>
+              </div>
+              <p className="text-xs text-[#9CA3AF] mt-0.5">
+                Item-wise purchase entries, raw material deliveries, goods receipt approval into stock, and live consumption history.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setFormData({
+                    ...blankForm(),
+                    department: 'Cafe / Food Street',
+                    category: 'Inventory / Stock'
+                  });
+                  setEditingId(null);
+                  setSubTab('entry');
+                }}
+                className="px-3.5 py-1.5 bg-[#00ABAB] hover:bg-[#40E0D0] text-black font-black text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Record Cafe Purchase
+              </button>
+            </div>
+          </div>
+
+          {/* Embedded Food Street Inventory & Purchase Management */}
+          <FoodStreetInventoryPanel isSubAdminPortal={false} />
         </div>
       )}
 
