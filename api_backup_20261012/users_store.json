@@ -1,0 +1,121 @@
+[
+  {
+    "id": "usr-g-1791514924823",
+    "name": "Admin Boss Brenda",
+    "email": "admin.leader@deucepark.com",
+    "role": "super_admin",
+    "organizationId": "org_deuce_default",
+    "createdAt": "2026-10-09T03:02:04.823Z",
+    "updatedAt": "2026-10-12T02:24:21.557Z"
+  },
+  {
+    "id": "usr-g-1791514924808",
+    "name": "Counter Staff Alex",
+    "email": "counter.staff@deucepark.com",
+    "role": "ticket_counter_staff",
+    "organizationId": "org_deuce_default",
+    "createdAt": "2026-10-09T03:02:04.808Z",
+    "updatedAt": "2026-10-12T02:24:21.577Z"
+  },
+  {
+    "id": "user-1",
+    "name": "System Super Admin",
+    "email": "admin@adventurepark.com",
+    "role": "super_admin",
+    "department": "management"
+  },
+  {
+    "id": "user-2",
+    "name": "Activity Ranger Smith",
+    "email": "staff@adventurepark.com",
+    "role": "activity_staff",
+    "department": "act-horse-riding"
+  },
+  {
+    "id": "user-3",
+    "name": "Forest Cafe Manager",
+    "email": "vendor@adventurepark.com",
+    "role": "food_vendor",
+    "department": "vendor-forest-cafe"
+  },
+  {
+    "id": "usr-gkm",
+    "name": "Karting Manager",
+    "email": "kartingmanager@adventurepark.com",
+    "role": "go_karting_manager"
+  },
+  {
+    "id": "usr-gks",
+    "name": "Karting Staff",
+    "email": "kartingstaff@adventurepark.com",
+    "role": "go_karting_staff"
+  },
+  {
+    "id": "usr-tcs",
+    "name": "Ticket Counter Staff",
+    "email": "ticketing@adventurepark.com",
+    "role": "ticket_counter_staff"
+  },
+  {
+    "id": "usr-admin",
+    "name": "Executive Director Cooper",
+    "email": "admin@deucepark.com",
+    "role": "super_admin"
+  },
+  {
+    "id": "usr-staff",
+    "name": "Activity Ranger Smith",
+    "email": "staff@deucepark.com",
+    "role": "activity_staff"
+  },
+  {
+    "id": "usr-vendor",
+    "name": "Sarah Jenkins",
+    "email": "vendor@deucepark.com",
+    "role": "food_vendor",
+    "vendorId": "vendor-forest-cafe"
+  },
+  {
+    "id": "usr-gkm",
+    "name": "Karting Manager",
+    "email": "kartingmanager@deucepark.com",
+    "role": "go_karting_manager"
+  },
+  {
+    "id": "usr-gks",
+    "name": "Karting Staff",
+    "email": "kartingstaff@deucepark.com",
+    "role": "go_karting_staff"
+  },
+  {
+    "id": "usr-tcs",
+    "name": "Ticket Counter Staff",
+    "email": "ticketing@deucepark.com",
+    "role": "ticket_counter_staff"
+  },
+  {
+    "id": "usr-cafe",
+    "name": "Deuce Cafe Staff",
+    "email": "cafe@deucepark.com",
+    "role": "cafe_staff",
+    "vendorId": "vendor-forest-cafe"
+  },
+  {
+    "id": "usr-hrs",
+    "name": "Horse Riding Staff",
+    "email": "horseriding@deucepark.com",
+    "role": "horse_riding_staff"
+  },
+  {
+    "id": "usr-sht",
+    "name": "Precision Shooting Range Staff",
+    "email": "shooting@deucepark.com",
+    "role": "shooting_staff"
+  },
+  {
+    "id": "usr-customer-watson",
+    "name": "John Watson",
+    "email": "watson@baker.street",
+    "role": "customer"
+  }
+]

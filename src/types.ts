@@ -15,6 +15,57 @@ export interface User {
   vendorId?: string; // If role is 'food_vendor'
   organizationId?: string;
   updatedAt?: string;
+  // Staff Master & Banking details for Payroll
+  accountNumber?: string;
+  bankName?: string;
+  ifscCode?: string;
+  branchName?: string;
+  panNumber?: string;
+  aadhaarNumber?: string;
+  department?: string;
+  designation?: string;
+  monthlySalary?: number;
+  dailyRate?: number;
+}
+
+export interface StaffAttendanceRecord {
+  id: string;
+  staffId: string;
+  staffName: string;
+  date: string; // YYYY-MM-DD
+  status: 'present' | 'absent' | 'half_day' | 'leave';
+  checkInTime?: string; // HH:mm
+  checkOutTime?: string; // HH:mm
+  notes?: string;
+  markedBy?: string;
+  timestamp: string;
+}
+
+export interface StaffSalaryPayment {
+  id: string;
+  staffId: string;
+  staffName: string;
+  month: string; // YYYY-MM
+  baseSalary: number;
+  dailyRate: number;
+  totalDaysInMonth: number;
+  presentDays: number;
+  halfDays: number;
+  absentDays: number;
+  payableDays: number;
+  calculatedSalary: number;
+  bonusAmount: number;
+  deductionAmount: number;
+  netPayable: number;
+  paymentMethod: 'Bank Transfer' | 'Cash' | 'UPI' | 'Cheque';
+  paymentStatus: 'Paid' | 'Pending';
+  paidAt?: string;
+  transactionRef?: string;
+  bankName?: string;
+  accountNumber?: string;
+  ifscCode?: string;
+  notes?: string;
+  createdAt: string;
 }
 
 export interface ActivityPackage {
@@ -199,10 +250,95 @@ export interface InventoryItem {
   id: string;
   vendorId: string;
   name: string;
+  category?: string;
   currentStock: number;
   minStockLevel: number;
   unit: string;
+  openingStock?: number;
+  totalPurchased?: number;
+  totalConsumed?: number;
+  totalSold?: number;
+  totalWasted?: number;
+  lastPurchaseDate?: string;
+  lastPurchasePrice?: number;
+  supplier?: string;
+  costPrice?: number;
   organizationId?: string;
+  updatedAt?: string;
+}
+
+export type StockMovementType =
+  | 'purchase_receipt'
+  | 'consumption'
+  | 'sale_deduction'
+  | 'wastage'
+  | 'damaged'
+  | 'return_to_supplier'
+  | 'adjustment_add'
+  | 'adjustment_sub';
+
+export interface StockMovement {
+  id: string;
+  itemId: string;
+  itemName: string;
+  vendorId: string;
+  type: StockMovementType;
+  quantity: number;
+  unit: string;
+  previousStock: number;
+  newStock: number;
+  referenceId?: string; // Purchase ID or Order ID
+  reason?: string;
+  recordedBy?: string;
+  timestamp: string;
+  organizationId?: string;
+}
+
+export interface FoodStreetPurchaseRecord {
+  id: string;
+  purchaseDate: string; // YYYY-MM-DD
+  vendorId: string;
+  supplierName: string;
+  supplierInvoiceNumber: string;
+  itemName: string;
+  itemCategory: string;
+  itemId?: string; // Links to existing InventoryItem if matched
+  quantityPurchased: number;
+  unit: string; // kg, g, litre, ml, packet, bottle, piece, box, bag
+  ratePerUnit: number;
+  discount: number;
+  gstRate: number; // 0, 5, 12, 18, 28
+  gstAmount: number;
+  totalPurchaseValue: number;
+  quantityReceived: number;
+  quantityRejected: number;
+  quantityAccepted: number; // added to stock
+  amountPaid: number;
+  outstandingBalance: number;
+  paymentMethod: 'Cash' | 'UPI' | 'Bank Transfer' | 'Cheque' | 'Credit';
+  paymentStatus: 'Paid' | 'Partially Paid' | 'Unpaid';
+  invoiceReceiptUrl?: string;
+  remarks?: string;
+  status: 'pending_receipt' | 'accepted_into_stock' | 'rejected';
+  receivedAt?: string;
+  recordedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  postedToFinance: boolean;
+  postedToFinanceAt?: string;
+}
+
+export interface RecipeIngredient {
+  inventoryItemId: string;
+  inventoryItemName: string;
+  quantityRequired: number; // e.g. 0.05 kg coffee beans, 0.15 litre milk
+  unit: string;
+}
+
+export interface MenuItemRecipe {
+  menuItemId: string;
+  menuItemName: string;
+  ingredients: RecipeIngredient[];
   updatedAt?: string;
 }
 

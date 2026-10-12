@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import ActivityManagementPanel from './admin/ActivityManagementPanel';
 import AccountsFinancePanel from './admin/AccountsFinancePanel';
+import { FoodStreetInventoryPanel } from './admin/FoodStreetInventoryPanel';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
 import { compressImageFile } from '../lib/imageUtils';
 
@@ -142,6 +143,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Active Admin Tabs
   const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'payments' | 'pay_settings' | 'database' | 'accounts_finance'>('analytics');
+  const [cafeRetailSubTab, setCafeRetailSubTab] = useState<'sales_sync' | 'stock_inventory'>('sales_sync');
   const [activeDbSubTab, setActiveDbSubTab] = useState<'schema' | 'rls' | 'hierarchy' | 'api_routes' | 'deploy'>('schema');
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -1983,20 +1985,49 @@ export const AdminDashboard: React.FC = () => {
 
         return (
           <div className="space-y-6">
-            {/* Header with Live Sync Status */}
-            <div className="flex flex-wrap justify-between items-center text-[#FFFFFF] gap-4">
-              <div>
-                <div className="flex items-center gap-2.5 mb-1">
-                  <h3 className="font-bold text-lg text-[#FFFFFF] font-sans">Cafe & Retail Synchronized Sales</h3>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    Live Synced
-                  </span>
-                </div>
-                <p className="text-xs text-[#9CA3AF] font-sans">
-                  Real-time sales stream and margin analytics synchronized from Cafe POS & Food Outlets.
-                </p>
-              </div>
+            {/* Sub-tab Navigation for Cafe & Retail */}
+            <div className="flex border-b border-[#00ABAB]/30 gap-2 overflow-x-auto text-xs font-bold pb-1">
+              <button
+                onClick={() => setCafeRetailSubTab('sales_sync')}
+                className={`px-4 py-2 border-b-2 flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+                  cafeRetailSubTab === 'sales_sync'
+                    ? 'border-[#14F1D9] text-[#14F1D9] font-black bg-white/5 rounded-t-lg'
+                    : 'border-transparent text-[#94A3B8] hover:text-white'
+                }`}
+              >
+                <Utensils className="w-4 h-4 text-[#14F1D9]" /> ☕ Cafe & Retail Sales Sync
+              </button>
+
+              <button
+                onClick={() => setCafeRetailSubTab('stock_inventory')}
+                className={`px-4 py-2 border-b-2 flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+                  cafeRetailSubTab === 'stock_inventory'
+                    ? 'border-[#14F1D9] text-[#14F1D9] font-black bg-white/5 rounded-t-lg'
+                    : 'border-transparent text-[#94A3B8] hover:text-white'
+                }`}
+              >
+                <Package className="w-4 h-4 text-amber-400" /> 📦 Food Street Purchases & Item-Wise Stock
+              </button>
+            </div>
+
+            {cafeRetailSubTab === 'stock_inventory' ? (
+              <FoodStreetInventoryPanel isSubAdminPortal={true} />
+            ) : (
+              <>
+                {/* Header with Live Sync Status */}
+                <div className="flex flex-wrap justify-between items-center text-[#FFFFFF] gap-4">
+                  <div>
+                    <div className="flex items-center gap-2.5 mb-1">
+                      <h3 className="font-bold text-lg text-[#FFFFFF] font-sans">Cafe & Retail Synchronized Sales</h3>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Live Synced
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#9CA3AF] font-sans">
+                      Real-time sales stream and margin analytics synchronized from Cafe POS & Food Outlets.
+                    </p>
+                  </div>
 
               <div className="flex items-center gap-3">
                 <div className="flex items-center bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-xl p-1 text-xs font-mono">
@@ -2346,9 +2377,11 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
-        );
-      })()}
+          </>
+          )}
+        </div>
+      );
+    })()}
 
       {/* ----------------------------------------------------------------- */}
       {/* 4. USER MANAGEMENT VIEW */}

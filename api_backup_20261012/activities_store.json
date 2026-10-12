@@ -1,0 +1,75 @@
+[
+  {
+    "id": "act-go-karting",
+    "name": "High-Octane Go-Karting",
+    "description": "Race on our winding 800-meter asphalt track with professional grade electronic lap timing and high-torque pro-karts.",
+    "adultPrice": 100,
+    "childPrice": 100,
+    "image": "/gokart-night.png",
+    "photos": [
+      { "id": "photo-kart-1", "url": "/gokart-night.png", "caption": "Night Track Racing", "uploadedAt": "2026-01-01T00:00:00.000Z", "order": 0 },
+      { "id": "photo-kart-2", "url": "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=800&q=80", "caption": "Daytime Sprints", "uploadedAt": "2026-01-01T00:00:00.000Z", "order": 1 }
+    ],
+    "dailyLimit": 500,
+    "safetyInstructions": [
+      "Helmets and safety harnesses must be tightly secured at all times.",
+      "Never step out of the kart while on the racing track.",
+      "No intentional bumping, blocking, or dangerous maneuvering.",
+      "Obey the track marshal flags immediately (Red: Stop, Yellow: Slow down)."
+    ],
+    "type": "go_karting",
+    "packages": [
+      { "id": "pkg-kart-single", "name": "Single Rider Experience (10 Mins)", "price": 100, "description": "Classic single-seat kart session with lap analysis." },
+      { "id": "pkg-kart-double", "name": "Double Co-Pilot Ride (10 Mins)", "price": 150, "description": "Twin-seater kart perfect for a parent and child pairing." },
+      { "id": "pkg-kart-race", "name": "Grand Prix Tournament (30 Mins)", "price": 250, "description": "Warm-up, qualifying session, and an 8-lap medal race." }
+    ]
+  },
+  {
+    "id": "act-air-gun",
+    "name": "Precision Air Gun Shooting",
+    "description": "Test your focus and aim in a professional, safety-hardened indoor air gun shooting range with electronic target retrieval.",
+    "adultPrice": 25,
+    "childPrice": 15,
+    "image": "https://www.gunforglory.in/wp-content/uploads/2026/04/GFG-BLOG-FEATURE-3-1.png",
+    "photos": [
+      { "id": "photo-shoot-1", "url": "https://www.gunforglory.in/wp-content/uploads/2026/04/GFG-BLOG-FEATURE-3-1.png", "caption": "Olympic 10m Air Rifle", "uploadedAt": "2026-01-01T00:00:00.000Z", "order": 0 }
+    ],
+    "dailyLimit": 60,
+    "safetyInstructions": [
+      "Keep the gun pointed downrange at all times.",
+      "Do not place your finger on the trigger until you are ready to fire.",
+      "Always wear the provided protective eye-goggles.",
+      "Treat every air rifle as if it were fully loaded at all times."
+    ],
+    "type": "shooting",
+    "packages": [
+      { "id": "pkg-shoot-1", "name": "Starter Aim (15 Shots)", "price": 15, "description": "Great for beginners looking to learn basic trigger control.", "shots": 15 },
+      { "id": "pkg-shoot-2", "name": "Sharp Shooter (30 Shots)", "price": 25, "description": "Our most popular range package with professional coaching.", "shots": 30 },
+      { "id": "pkg-shoot-3", "name": "Marksman Elite (50 Shots)", "price": 35, "description": "Advanced targets, high-grade ammo, and full score analysis.", "shots": 50 }
+    ]
+  },
+  {
+    "id": "act-horse-riding",
+    "name": "Royal Horse Riding",
+    "description": "Experience guided horseback rides through scenic nature trails under expert handler supervision. Perfect for families, beginners, and seasoned riders alike.",
+    "adultPrice": 45,
+    "childPrice": 25,
+    "image": "https://www.huntleyequestrian.com/cdn/shop/articles/Is-Horse-Riding-a-Sport-Huntley-Equestrian-110301396.jpg?crop=center&height=1200&v=1743859147&width=1200",
+    "photos": [
+      { "id": "photo-horse-1", "url": "https://www.huntleyequestrian.com/cdn/shop/articles/Is-Horse-Riding-a-Sport-Huntley-Equestrian-110301396.jpg?crop=center&height=1200&v=1743859147&width=1200", "caption": "Royal Equestrian Trails", "uploadedAt": "2026-01-01T00:00:00.000Z", "order": 0 }
+    ],
+    "dailyLimit": 40,
+    "safetyInstructions": [
+      "Always wear the provided certified riding helmet.",
+      "Approach the horse from the front-side, never from directly behind.",
+      "Avoid sudden movements or loud noises while near the horses.",
+      "Maintain upright posture and keep both feet securely in the stirrups."
+    ],
+    "type": "horse_riding",
+    "packages": [
+      { "id": "pkg-horse-pony", "name": "Pony Walk (15 Mins)", "price": 25, "description": "Gentle pony lead walk on flat trails — perfect for young children." },
+      { "id": "pkg-horse-guided", "name": "Guided Trail Ride (30 Mins)", "price": 45, "description": "Scenic guided nature trail ride with an experienced handler." },
+      { "id": "pkg-horse-advanced", "name": "Advanced Forest Trek (60 Mins)", "price": 80, "description": "Full forest trail with trotting/cantering for confident riders." }
+    ]
+  }
+]

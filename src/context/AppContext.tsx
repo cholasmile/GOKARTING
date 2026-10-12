@@ -9,7 +9,7 @@ import {
   InventoryItem, Booking, Ticket, FoodOrder, Payment, 
   NotificationLog, OrderStatus, FoodOrderItem, ActivityPackage,
   Kart, GoKartingSession, LapRecord, GoKartingWaiver, KartStatus, SessionStatus,
-  ActivityPhoto, ActivityOffer
+  ActivityPhoto, ActivityOffer, FoodStreetPurchaseRecord, StockMovement, MenuItemRecipe, StockMovementType
 } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { db } from '../db/db';
@@ -36,6 +36,11 @@ interface AppContextProps {
   notifications: NotificationLog[];
   payments: Payment[];
   timeSlots: string[];
+
+  // Food Street Purchases & Stock Tracking State
+  foodStreetPurchases: FoodStreetPurchaseRecord[];
+  stockMovements: StockMovement[];
+  menuItemRecipes: MenuItemRecipe[];
 
   // Go Karting Specific State
   karts: Kart[];
@@ -70,7 +75,8 @@ interface AppContextProps {
 
   // Mutators - Users
   updateUserRole: (userId: string, role: UserRole) => void;
-  addUser: (user: Omit<User, 'id'>) => void;
+  addUser: (user: Omit<User, 'id'> | User) => void;
+  updateUser: (user: User) => void;
 
   // Mutators - Bookings & Tickets
   createBooking: (bookingData: {
@@ -154,9 +160,24 @@ interface AppContextProps {
   updateMenuItemStock: (itemId: string, newStock: number) => void;
   adjustMenuItemStock: (itemId: string, delta: number) => void;
 
-  // Mutators - Inventory
+  // Mutators - Inventory & Stock Control
   updateInventoryStock: (id: string, amount: number, mode: 'set' | 'adjust') => void;
-  addInventoryItem: (item: Omit<InventoryItem, 'id'>) => void;
+  addInventoryItem: (item: Omit<InventoryItem, 'id'>) => InventoryItem;
+  updateInventoryItem: (item: InventoryItem) => void;
+  deleteInventoryItem: (id: string) => void;
+  recordStockMovement: (params: {
+    itemId: string;
+    vendorId: string;
+    type: StockMovementType;
+    quantity: number;
+    referenceId?: string;
+    reason?: string;
+    recordedBy?: string;
+  }) => StockMovement | null;
+  addFoodStreetPurchase: (purchase: Omit<FoodStreetPurchaseRecord, 'id' | 'createdAt' | 'updatedAt' | 'postedToFinance'>) => FoodStreetPurchaseRecord;
+  acceptPurchaseIntoStock: (purchaseId: string, quantityAccepted?: number) => { success: boolean; message: string };
+  updateFoodStreetPurchase: (purchase: FoodStreetPurchaseRecord) => void;
+  setMenuItemRecipe: (recipe: MenuItemRecipe) => void;
 
   // Mutators - Food Orders & Cart
   foodCart: FoodOrderItem[];
@@ -651,6 +672,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return prev;
     });
   }, [bookings, orders]);
+
+  // ── Food Street Purchases & Stock Tracking State ──
+  const [foodStreetPurchases, setFoodStreetPurchases] = useState<FoodStreetPurchaseRecord[]>(() => {
+    const cached = localStorage.getItem('ap_food_purchases');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => {
+    const cached = localStorage.getItem('ap_stock_movements');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+
+  const [menuItemRecipes, setMenuItemRecipes] = useState<MenuItemRecipe[]>(() => {
+    const cached = localStorage.getItem('ap_menu_recipes');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
 
   // ── Go Karting State (empty — loaded from Supabase or localStorage cache) ──
   const [karts, setKarts] = useState<Kart[]>(() => {
@@ -1637,6 +1692,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     writeToLocalAndSync('users', 'insert', newUser);
   };
 
+  const updateUser = (userData: User) => {
+    const now = new Date().toISOString();
+    const updatedUser = { ...userData, updatedAt: now };
+
+    setUsers(prev => {
+      const updated = prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u);
+      try {
+        localStorage.setItem('ap_users', JSON.stringify(updated));
+        db.users.bulkPut(updated);
+      } catch (err) {
+        console.warn('[frontend] Failed to update user in localStorage:', err);
+      }
+      return updated;
+    });
+
+    writeToLocalAndSync('users', 'update', updatedUser);
+  };
+
   const createBooking = (data: {
     customerName: string;
     customerEmail: string; customerPhone?: string;
@@ -2439,11 +2512,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const addInventoryItem = (item: Omit<InventoryItem, 'id'>) => {
+  const addInventoryItem = (item: Omit<InventoryItem, 'id'>): InventoryItem => {
     const now = new Date().toISOString();
     const newItem: InventoryItem = {
       ...item,
-      id: `inv-dynamic-${Date.now()}`,
+      id: `inv-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      openingStock: item.openingStock ?? item.currentStock,
+      totalPurchased: item.totalPurchased ?? 0,
+      totalConsumed: item.totalConsumed ?? 0,
+      totalSold: item.totalSold ?? 0,
+      totalWasted: item.totalWasted ?? 0,
       updatedAt: now
     };
     setInventory(prev => {
@@ -2455,6 +2533,343 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return updated;
     });
     writeToLocalAndSync('inventory', 'insert', newItem);
+    return newItem;
+  };
+
+  const updateInventoryItem = (item: InventoryItem) => {
+    const now = new Date().toISOString();
+    const updatedItem = { ...item, updatedAt: now };
+    setInventory(prev => {
+      const updated = prev.map(i => i.id === updatedItem.id ? updatedItem : i);
+      try {
+        localStorage.setItem('ap_inventory', JSON.stringify(updated));
+        db.inventory.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+    writeToLocalAndSync('inventory', 'update', updatedItem);
+  };
+
+  const deleteInventoryItem = (id: string) => {
+    setInventory(prev => {
+      const updated = prev.filter(i => i.id !== id);
+      try {
+        localStorage.setItem('ap_inventory', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+    writeToLocalAndSync('inventory', 'delete', { id });
+  };
+
+  // Record Stock Movement with full audit trail and idempotency
+  const recordStockMovement = (params: {
+    itemId: string;
+    vendorId: string;
+    type: StockMovementType;
+    quantity: number;
+    referenceId?: string;
+    reason?: string;
+    recordedBy?: string;
+  }): StockMovement | null => {
+    const now = new Date().toISOString();
+    const targetItem = inventory.find(i => i.id === params.itemId);
+    if (!targetItem) return null;
+
+    const prevStock = targetItem.currentStock;
+    let newStock = prevStock;
+
+    if (params.type === 'purchase_receipt' || params.type === 'adjustment_add') {
+      newStock = prevStock + params.quantity;
+    } else {
+      // consumption, sale_deduction, wastage, damaged, return_to_supplier, adjustment_sub
+      newStock = Math.max(0, prevStock - params.quantity);
+    }
+
+    const movement: StockMovement = {
+      id: `sm-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      itemId: params.itemId,
+      itemName: targetItem.name,
+      vendorId: params.vendorId || targetItem.vendorId,
+      type: params.type,
+      quantity: params.quantity,
+      unit: targetItem.unit,
+      previousStock: prevStock,
+      newStock,
+      referenceId: params.referenceId,
+      reason: params.reason,
+      recordedBy: params.recordedBy || currentUser?.name || 'Staff',
+      timestamp: now,
+      organizationId: 'org_deuce_default'
+    };
+
+    // Update inventory item currentStock and tracking totals
+    const updatedItem: InventoryItem = {
+      ...targetItem,
+      currentStock: newStock,
+      totalPurchased: params.type === 'purchase_receipt' ? (targetItem.totalPurchased || 0) + params.quantity : targetItem.totalPurchased,
+      totalConsumed: params.type === 'consumption' ? (targetItem.totalConsumed || 0) + params.quantity : targetItem.totalConsumed,
+      totalSold: params.type === 'sale_deduction' ? (targetItem.totalSold || 0) + params.quantity : targetItem.totalSold,
+      totalWasted: (params.type === 'wastage' || params.type === 'damaged') ? (targetItem.totalWasted || 0) + params.quantity : targetItem.totalWasted,
+      updatedAt: now
+    };
+
+    setInventory(prev => {
+      const updated = prev.map(i => i.id === targetItem.id ? updatedItem : i);
+      try {
+        localStorage.setItem('ap_inventory', JSON.stringify(updated));
+        db.inventory.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+
+    setStockMovements(prev => {
+      const updated = [movement, ...prev];
+      try {
+        localStorage.setItem('ap_stock_movements', JSON.stringify(updated));
+        db.stockMovements.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+
+    writeToLocalAndSync('inventory', 'update', updatedItem);
+    writeToLocalAndSync('stockMovements', 'insert', movement);
+
+    return movement;
+  };
+
+  // Add Food Street Purchase (Sub-Admin entry)
+  const addFoodStreetPurchase = (
+    purchaseData: Omit<FoodStreetPurchaseRecord, 'id' | 'createdAt' | 'updatedAt' | 'postedToFinance'>
+  ): FoodStreetPurchaseRecord => {
+    const now = new Date().toISOString();
+    const purchaseId = `fsp-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    const newPurchase: FoodStreetPurchaseRecord = {
+      ...purchaseData,
+      id: purchaseId,
+      createdAt: now,
+      updatedAt: now,
+      postedToFinance: false
+    };
+
+    setFoodStreetPurchases(prev => {
+      const updated = [newPurchase, ...prev];
+      try {
+        localStorage.setItem('ap_food_purchases', JSON.stringify(updated));
+        db.foodStreetPurchases.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+
+    // If already accepted into stock on entry, trigger stock receipt automatically
+    if (newPurchase.status === 'accepted_into_stock' && newPurchase.quantityAccepted > 0) {
+      setTimeout(() => {
+        acceptPurchaseIntoStock(purchaseId, newPurchase.quantityAccepted);
+      }, 50);
+    }
+
+    writeToLocalAndSync('foodStreetPurchases', 'insert', newPurchase);
+    return newPurchase;
+  };
+
+  // Accept Purchase into Stock — Idempotent goods receipt workflow
+  const acceptPurchaseIntoStock = (
+    purchaseId: string,
+    quantityAcceptedOverride?: number
+  ): { success: boolean; message: string } => {
+    const purchase = foodStreetPurchases.find(p => p.id === purchaseId);
+    if (!purchase) return { success: false, message: 'Purchase record not found.' };
+
+    const acceptedQty = quantityAcceptedOverride !== undefined ? quantityAcceptedOverride : purchase.quantityAccepted;
+    if (acceptedQty <= 0) return { success: false, message: 'Accepted quantity must be greater than 0.' };
+
+    // Prevent duplicate stock increments (Idempotency check)
+    const alreadyMoved = stockMovements.some(sm => sm.referenceId === purchaseId && sm.type === 'purchase_receipt');
+    if (alreadyMoved) {
+      return { success: false, message: 'Stock for this purchase has already been accepted and credited.' };
+    }
+
+    const now = new Date().toISOString();
+
+    // 1. Locate or create corresponding inventory item
+    let targetInventoryItem = inventory.find(i => 
+      (purchase.itemId && i.id === purchase.itemId) ||
+      (i.vendorId === purchase.vendorId && i.name.trim().toLowerCase() === purchase.itemName.trim().toLowerCase())
+    );
+
+    let updatedInventoryList = [...inventory];
+
+    if (!targetInventoryItem) {
+      // Create new inventory item seamlessly
+      const newItem: InventoryItem = {
+        id: `inv-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        vendorId: purchase.vendorId,
+        name: purchase.itemName.trim(),
+        category: purchase.itemCategory || 'Ingredients',
+        currentStock: acceptedQty,
+        minStockLevel: 5,
+        unit: purchase.unit,
+        openingStock: 0,
+        totalPurchased: acceptedQty,
+        totalConsumed: 0,
+        totalSold: 0,
+        totalWasted: 0,
+        lastPurchaseDate: purchase.purchaseDate,
+        lastPurchasePrice: purchase.ratePerUnit,
+        supplier: purchase.supplierName,
+        costPrice: purchase.ratePerUnit,
+        updatedAt: now
+      };
+      targetInventoryItem = newItem;
+      updatedInventoryList.push(newItem);
+    } else {
+      const prevStock = targetInventoryItem.currentStock;
+      const newStock = prevStock + acceptedQty;
+      targetInventoryItem = {
+        ...targetInventoryItem,
+        currentStock: newStock,
+        totalPurchased: (targetInventoryItem.totalPurchased || 0) + acceptedQty,
+        lastPurchaseDate: purchase.purchaseDate,
+        lastPurchasePrice: purchase.ratePerUnit,
+        supplier: purchase.supplierName,
+        costPrice: purchase.ratePerUnit,
+        updatedAt: now
+      };
+      updatedInventoryList = updatedInventoryList.map(i => i.id === targetInventoryItem!.id ? targetInventoryItem! : i);
+    }
+
+    // 2. Record Stock Movement
+    const movement: StockMovement = {
+      id: `sm-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      itemId: targetInventoryItem.id,
+      itemName: targetInventoryItem.name,
+      vendorId: purchase.vendorId,
+      type: 'purchase_receipt',
+      quantity: acceptedQty,
+      unit: purchase.unit,
+      previousStock: targetInventoryItem.currentStock - acceptedQty,
+      newStock: targetInventoryItem.currentStock,
+      referenceId: purchase.id,
+      reason: `Goods receipt from supplier ${purchase.supplierName} (Inv: ${purchase.supplierInvoiceNumber})`,
+      recordedBy: currentUser?.name || 'Sub-Admin / Storekeeper',
+      timestamp: now,
+      organizationId: 'org_deuce_default'
+    };
+
+    // 3. Mark purchase record as accepted and post to Finance
+    const updatedPurchase: FoodStreetPurchaseRecord = {
+      ...purchase,
+      status: 'accepted_into_stock',
+      quantityAccepted: acceptedQty,
+      receivedAt: now,
+      updatedAt: now,
+      postedToFinance: true,
+      postedToFinanceAt: now
+    };
+
+    // 4. Update Super Admin Accounts & Finance (Post to Purchases register without duplication)
+    try {
+      const existingFinancePurchasesRaw = localStorage.getItem('dp_purchases_v1');
+      let financePurchases: any[] = existingFinancePurchasesRaw ? JSON.parse(existingFinancePurchasesRaw) : [];
+      const alreadyInFinance = financePurchases.some(fp => fp.invoiceNumber === purchase.supplierInvoiceNumber && fp.supplier === purchase.supplierName && fp.itemName === purchase.itemName);
+      
+      if (!alreadyInFinance) {
+        const financeEntry = {
+          id: `purch-fs-${purchase.id}`,
+          date: purchase.purchaseDate,
+          department: 'Cafe / Food Street',
+          category: 'Inventory / Stock',
+          itemName: purchase.itemName,
+          description: `Food Street Purchase - Inv ${purchase.supplierInvoiceNumber}`,
+          supplier: purchase.supplierName,
+          invoiceNumber: purchase.supplierInvoiceNumber,
+          quantity: purchase.quantityPurchased,
+          unit: purchase.unit,
+          unitPrice: purchase.ratePerUnit,
+          gstPercent: purchase.gstRate,
+          gstAmount: purchase.gstAmount,
+          totalCost: purchase.totalPurchaseValue,
+          paymentMethod: purchase.paymentMethod,
+          amountPaid: purchase.amountPaid,
+          outstandingBalance: purchase.outstandingBalance,
+          paymentStatus: purchase.paymentStatus,
+          notes: purchase.remarks || 'Accepted into Food Street inventory',
+          isInventory: true,
+          isFixedAsset: false,
+          createdAt: now,
+          updatedAt: now,
+          createdBy: currentUser?.name || 'Sub-Admin'
+        };
+        financePurchases.unshift(financeEntry);
+        localStorage.setItem('dp_purchases_v1', JSON.stringify(financePurchases));
+        db.purchases.put(financeEntry);
+      }
+    } catch (e) {
+      console.warn('[FoodStreet] Failed to post to dp_purchases_v1:', e);
+    }
+
+    // 5. Commit all state
+    setInventory(updatedInventoryList);
+    try {
+      localStorage.setItem('ap_inventory', JSON.stringify(updatedInventoryList));
+      db.inventory.bulkPut(updatedInventoryList);
+    } catch (e) {}
+
+    setStockMovements(prev => {
+      const updated = [movement, ...prev];
+      try {
+        localStorage.setItem('ap_stock_movements', JSON.stringify(updated));
+        db.stockMovements.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+
+    setFoodStreetPurchases(prev => {
+      const updated = prev.map(p => p.id === purchase.id ? updatedPurchase : p);
+      try {
+        localStorage.setItem('ap_food_purchases', JSON.stringify(updated));
+        db.foodStreetPurchases.bulkPut(updated);
+      } catch (e) {}
+      return updated;
+    });
+
+    writeToLocalAndSync('inventory', 'update', targetInventoryItem);
+    writeToLocalAndSync('stockMovements', 'insert', movement);
+    writeToLocalAndSync('foodStreetPurchases', 'update', updatedPurchase);
+
+    return {
+      success: true,
+      message: `Successfully accepted ${acceptedQty} ${purchase.unit} of "${purchase.itemName}" into Food Street inventory and posted to Finance.`
+    };
+  };
+
+  const updateFoodStreetPurchase = (purchase: FoodStreetPurchaseRecord) => {
+    const now = new Date().toISOString();
+    const updated = { ...purchase, updatedAt: now };
+    setFoodStreetPurchases(prev => {
+      const list = prev.map(p => p.id === updated.id ? updated : p);
+      try {
+        localStorage.setItem('ap_food_purchases', JSON.stringify(list));
+        db.foodStreetPurchases.bulkPut(list);
+      } catch (e) {}
+      return list;
+    });
+    writeToLocalAndSync('foodStreetPurchases', 'update', updated);
+  };
+
+  const setMenuItemRecipe = (recipe: MenuItemRecipe) => {
+    const now = new Date().toISOString();
+    const updatedRecipe = { ...recipe, updatedAt: now };
+    setMenuItemRecipes(prev => {
+      const list = prev.filter(r => r.menuItemId !== updatedRecipe.menuItemId);
+      const next = [...list, updatedRecipe];
+      try {
+        localStorage.setItem('ap_menu_recipes', JSON.stringify(next));
+        db.menuItemRecipes.bulkPut(next);
+      } catch (e) {}
+      return next;
+    });
+    writeToLocalAndSync('menuItemRecipes', 'insert', updatedRecipe);
   };
 
   // Food Cart Actions with live stock position checks
@@ -2619,19 +3034,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return updatedList;
     });
 
-    // ── DEDUCT LINKED INGREDIENT INVENTORIES ──
+    // ── DEDUCT LINKED INGREDIENT INVENTORIES (RECIPES / INGREDIENT MAPPING) ──
     foodCart.forEach(cartItem => {
-      const matchingIngredients = inventory.filter(inv => 
-        inv.vendorId === cartItem.vendorId && 
-        (cartItem.name.toLowerCase().includes(inv.name.split(' ')[0].toLowerCase()) || 
-         inv.name.toLowerCase().includes('bun') && cartItem.name.toLowerCase().includes('burger') ||
-         inv.name.toLowerCase().includes('coffee') && cartItem.name.toLowerCase().includes('espresso') ||
-         inv.name.toLowerCase().includes('milk') && cartItem.name.toLowerCase().includes('latte'))
-      );
+      // Check if user has explicitly configured a recipe for this menu item
+      const configuredRecipe = menuItemRecipes.find(r => r.menuItemId === cartItem.menuItemId);
+      if (configuredRecipe && configuredRecipe.ingredients.length > 0) {
+        configuredRecipe.ingredients.forEach(ing => {
+          const deductQty = ing.quantityRequired * cartItem.quantity;
+          recordStockMovement({
+            itemId: ing.inventoryItemId,
+            vendorId: cartItem.vendorId,
+            type: 'sale_deduction',
+            quantity: deductQty,
+            referenceId: orderId,
+            reason: `Recipe deduction for ${cartItem.quantity}x ${cartItem.name} (Order: ${orderId})`,
+            recordedBy: 'POS Sales Engine'
+          });
+        });
+      } else {
+        // Fallback: check matching ingredients by vendor and name
+        const matchingIngredients = inventory.filter(inv => 
+          inv.vendorId === cartItem.vendorId && 
+          (cartItem.name.toLowerCase().includes(inv.name.split(' ')[0].toLowerCase()) || 
+           (inv.name.toLowerCase().includes('bun') && cartItem.name.toLowerCase().includes('burger')) ||
+           (inv.name.toLowerCase().includes('coffee') && cartItem.name.toLowerCase().includes('espresso')) ||
+           (inv.name.toLowerCase().includes('milk') && cartItem.name.toLowerCase().includes('latte')))
+        );
 
-      matchingIngredients.forEach(ing => {
-        updateInventoryStock(ing.id, -cartItem.quantity, 'adjust');
-      });
+        matchingIngredients.forEach(ing => {
+          recordStockMovement({
+            itemId: ing.id,
+            vendorId: cartItem.vendorId,
+            type: 'sale_deduction',
+            quantity: cartItem.quantity,
+            referenceId: orderId,
+            reason: `Sale deduction for ${cartItem.quantity}x ${cartItem.name} (Order: ${orderId})`,
+            recordedBy: 'POS Sales Engine'
+          });
+        });
+      }
     });
 
     clearFoodCart();
@@ -2788,6 +3229,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setOfferActive,
       updateUserRole,
       addUser,
+      updateUser,
       
       createBooking,
       markBookingAsPaid,
@@ -2817,6 +3259,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       updateInventoryStock,
       addInventoryItem,
+      updateInventoryItem,
+      deleteInventoryItem,
+      recordStockMovement,
+      addFoodStreetPurchase,
+      acceptPurchaseIntoStock,
+      updateFoodStreetPurchase,
+      setMenuItemRecipe,
+
+      // Food Street Purchase & Stock Tracking State
+      foodStreetPurchases,
+      stockMovements,
+      menuItemRecipes,
 
       foodCart,
       addToFoodCart,

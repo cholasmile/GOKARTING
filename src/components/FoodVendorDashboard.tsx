@@ -8,6 +8,7 @@ import { useAppContext } from '../context/AppContext';
 import { MenuItem, InventoryItem, FoodOrder } from '../types';
 import { printTicket } from '../lib/printTicket';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
+import { FoodStreetInventoryPanel } from './admin/FoodStreetInventoryPanel';
 import { 
   Plus, Edit, Trash2, Check, X, ShieldAlert, 
   Utensils, Clipboard, Package, ShoppingBag, 
@@ -1253,69 +1254,7 @@ export const FoodVendorDashboard: React.FC = () => {
       {/* ----------------------------------------------------------------- */}
       {vendorTab === 'inventory' && (
         <div className="space-y-4">
-          <div>
-            <h3 className="font-bold text-base text-[#FFFFFF] font-sans">Stock Control & Ingredients</h3>
-            <p className="text-xs text-[#9CA3AF] font-sans">Monitor active stocks, receive low stock notifications, and execute replenishments</p>
-          </div>
-
-          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-[#0A0A0A] text-[#9CA3AF] font-mono font-bold border-b border-[#00ABAB]/30">
-                    <th className="p-3.5">Ingredient Name</th>
-                    <th className="p-3.5">Stock Level</th>
-                    <th className="p-3.5">Min Alert Level</th>
-                    <th className="p-3.5">Status Check</th>
-                    <th className="p-3.5 text-right">Replenish</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-teal-100">
-                  {stallInventory.map(ing => {
-                    const isLow = ing.currentStock <= ing.minStockLevel;
-
-                    return (
-                      <tr key={ing.id} id={`inventory-row-${ing.id}`} className="hover:bg-[#0A0A0A]/50 transition-colors">
-                        <td className="p-3.5">
-                          <div className="font-bold text-[#FFFFFF] font-sans">{ing.name}</div>
-                          <div className="text-[10px] text-[#9CA3AF] font-mono">ID: {ing.id}</div>
-                        </td>
-                        <td className="p-3.5 font-mono font-bold text-[#FFFFFF]">
-                          {ing.currentStock} {ing.unit}
-                        </td>
-                        <td className="p-3.5 font-mono text-[#9CA3AF] font-medium">
-                          {ing.minStockLevel} {ing.unit}
-                        </td>
-                        <td className="p-3.5">
-                          {isLow ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-800 border border-red-200 animate-pulse">
-                              <ShieldAlert className="h-3.5 w-3.5 text-red-600 flex-shrink-0" /> Low Stock
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#0A0A0A] text-[#40E0D0] border border-teal-150">
-                              âœ“ Stock OK
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3.5 text-right">
-                          <button
-                            id={`btn-vendor-restock-${ing.id}`}
-                            onClick={() => {
-                              setRestockItem(ing);
-                              setRestockAmount(20);
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg border border-[#00ABAB]/30 hover:bg-[#0A0A0A] text-[#40E0D0] font-bold text-[11px] flex items-center gap-1 ml-auto cursor-pointer"
-                          >
-                            <RefreshCw className="h-3.5 w-3.5 text-teal-500" /> Restock
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <FoodStreetInventoryPanel vendorIdFilter={currentVendor?.id} />
         </div>
       )}
 
