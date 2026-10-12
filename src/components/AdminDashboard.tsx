@@ -2433,6 +2433,7 @@ export const AdminDashboard: React.FC = () => {
                           }}
                         >
                           <option value="super_admin">Super Admin</option>
+                          <option value="finance_sub_admin">Finance Entry Sub-Admin</option>
                           <option value="ticket_counter_staff">Ticket Counter Staff</option>
                           <option value="activity_staff">Activity Staff</option>
                           <option value="food_vendor">Food Vendor</option>
@@ -3760,6 +3761,7 @@ export const AdminDashboard: React.FC = () => {
                   onChange={e => setUserForm({...userForm, role: e.target.value as any})}
                 >
                   <option value="customer">Guest / Customer</option>
+                  <option value="finance_sub_admin">Finance Entry Sub-Admin</option>
                   <option value="food_vendor">Food Vendor</option>
                   <option value="activity_staff">Activity Staff</option>
                   <option value="ticket_counter_staff">Ticket Counter Staff</option>

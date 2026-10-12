@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type UserRole = 'super_admin' | 'activity_staff' | 'food_vendor' | 'cafe_staff' | 'customer' | 'go_karting_manager' | 'go_karting_staff' | 'ticket_counter_staff' | 'horse_riding_staff' | 'shooting_staff';
+export type UserRole = 'super_admin' | 'finance_sub_admin' | 'activity_staff' | 'food_vendor' | 'cafe_staff' | 'customer' | 'go_karting_manager' | 'go_karting_staff' | 'ticket_counter_staff' | 'horse_riding_staff' | 'shooting_staff';
 
 export interface User {
   id: string;
@@ -608,5 +608,83 @@ export interface AllotmentAuditEntry {
   staffId: string;
   staffName: string;
   notes?: string;
+}
+
+// ==========================================
+// FINANCE ENTRY SUB-ADMIN PORTAL TYPES
+// ==========================================
+
+export type EntryWorkflowStatus = 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'posted';
+
+export interface SupplierRecord {
+  id: string; // e.g. SUP-1001
+  supplierName: string;
+  contactPerson?: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  gstin?: string;
+  supplierType: 'Vendor' | 'Contractor' | 'Service Provider' | 'Manufacturer' | 'Wholesaler' | string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PurchaseItemRecord {
+  id: string; // e.g. ITEM-2001
+  itemCode: string;
+  itemName: string;
+  category: string;
+  defaultUnit: string;
+  taxClassification?: string; // e.g. 'Standard GST 5%', 'Standard GST 18%', 'Nil Rated'
+  defaultGstPercent: number;
+  defaultSupplierId?: string;
+  defaultSupplierName?: string;
+  defaultRate?: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExpenseRecord {
+  id: string;
+  expenseRef: string; // e.g. EXP-2026-001
+  expenseDate: string; // YYYY-MM-DD
+  department: string;
+  expenseCategory: string;
+  description: string;
+  payee: string;
+  invoiceOrRefNumber?: string;
+  amountBeforeTax: number;
+  gstPercent: number;
+  gstAmount: number;
+  totalAmount: number;
+  paymentMethod: 'Cash' | 'UPI' | 'Bank Transfer' | 'Cheque' | 'Card' | 'Credit';
+  paymentStatus: 'Paid' | 'Partially Paid' | 'Unpaid';
+  amountPaid: number;
+  receiptAttachment?: string; // base64 or receipt URL
+  notes?: string;
+  createdBy: string;
+  createdByEmail?: string;
+  workflowStatus: EntryWorkflowStatus;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
+  postedLedgerId?: string;
+  postedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  entityType: 'purchase' | 'expense' | 'salary' | 'supplier' | 'item' | 'staff';
+  entityId: string;
+  action: 'create' | 'update' | 'submit' | 'approve' | 'reject' | 'post' | 'reverse' | 'deactivate';
+  performedBy: string;
+  performedByRole: string;
+  timestamp: string;
+  details?: string;
 }
 

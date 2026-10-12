@@ -31,6 +31,7 @@ export const INITIAL_USERS: User[] = [
   { id: 'usr-hrs', name: 'Horse Riding Staff', email: 'horseriding@deucepark.com', password: 'staff', role: 'horse_riding_staff' },
   { id: 'usr-sht', name: 'Precision Shooting Range Staff', email: 'shooting@deucepark.com', password: 'staff', role: 'shooting_staff' },
   { id: 'usr-tcs', name: 'Ticket Counter Staff', email: 'ticketing@deucepark.com', password: 'staff', role: 'ticket_counter_staff' },
+  { id: 'usr-fin', name: 'Finance Entry Sub-Admin', email: 'finance@deucepark.com', password: 'finance', role: 'finance_sub_admin', department: 'Administration / Office', designation: 'Accounts Sub-Admin' },
 ];
 
 // ── Demo Activities (NEVER auto-loaded in production) ──

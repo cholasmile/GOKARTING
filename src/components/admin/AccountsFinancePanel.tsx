@@ -14,7 +14,7 @@ import {
   CheckCircle, XCircle, AlertCircle, Building2, Tag, Truck,
   Calendar, ChevronDown, ChevronUp, RefreshCw, Printer,
   PieChart, ArrowUpRight, ArrowDownRight, Layers, Settings,
-  Save, X, AlertTriangle, Users
+  Save, X, AlertTriangle, Users, Clock, Check, ShieldCheck
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { StaffManagementPanel } from './StaffManagementPanel';
@@ -245,7 +245,10 @@ const StatCard: React.FC<{
 // ─────────────────────────────────────────────────────────────────────────────
 
 const AccountsFinancePanel: React.FC = () => {
-  const { bookings, orders, activities, currentUser } = useAppContext();
+  const { 
+    bookings, orders, activities, currentUser, 
+    dayExpenses, updateExpenseWorkflowStatus, suppliers, purchaseItems 
+  } = useAppContext();
 
   // ── Persisted State ────────────────────────────────────────────────────────
   const [purchases, setPurchases] = useState<PurchaseEntry[]>(() =>
@@ -267,7 +270,7 @@ const AccountsFinancePanel: React.FC = () => {
   useEffect(() => { saveToLS(LS_KEY_CUSTOM_CATS, customCats); }, [customCats]);
 
   // ── UI State ──────────────────────────────────────────────────────────────
-  type FinanceSubTab = 'overview' | 'entry' | 'register' | 'reports' | 'staff_payroll' | 'settings';
+  type FinanceSubTab = 'overview' | 'entry' | 'register' | 'reports' | 'staff_payroll' | 'subadmin_submissions' | 'settings';
   const [subTab, setSubTab] = useState<FinanceSubTab>('overview');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -525,6 +528,7 @@ const AccountsFinancePanel: React.FC = () => {
     { key: 'register', label: 'Purchase Register', icon: <FileText className="w-3.5 h-3.5" /> },
     { key: 'reports', label: 'Reports', icon: <TrendingUp className="w-3.5 h-3.5" /> },
     { key: 'staff_payroll', label: 'Staff Attendance & Payroll', icon: <Users className="w-3.5 h-3.5" /> },
+    { key: 'subadmin_submissions', label: 'Sub-Admin Entries & Approvals', icon: <Clock className="w-3.5 h-3.5" /> },
     { key: 'settings', label: 'Categories', icon: <Settings className="w-3.5 h-3.5" /> },
   ];
 
@@ -1403,6 +1407,134 @@ const AccountsFinancePanel: React.FC = () => {
       {subTab === 'staff_payroll' && (
         <div className="space-y-4">
           <StaffManagementPanel isSuperAdmin={currentUser?.role === 'super_admin'} />
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* SUB-ADMIN ENTRIES REVIEW & APPROVAL WORKFLOW                           */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {subTab === 'subadmin_submissions' && (
+        <div className="space-y-6">
+          <div className="p-4 bg-[#121A24] border border-[#00ABAB]/30 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#00ABAB]" /> Super Admin Review &amp; Approval Queue
+              </h4>
+              <p className="text-xs text-[#9CA3AF]">
+                Review operational expense vouchers submitted by Sub-Admins. Approved entries automatically post into the general ledger.
+              </p>
+            </div>
+            <div className="text-xs font-mono text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20">
+              Pending Review: {dayExpenses.filter(e => e.workflowStatus === 'submitted').length}
+            </div>
+          </div>
+
+          {/* Master records overview counts */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl space-y-1">
+              <span className="text-[10px] font-mono uppercase text-[#94A3B8]">Approved Suppliers</span>
+              <div className="text-xl font-bold font-mono text-white">{suppliers.length} Registered</div>
+              <p className="text-[10px] text-[#6B7280]">Maintained by Sub-Admin</p>
+            </div>
+            <div className="p-4 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl space-y-1">
+              <span className="text-[10px] font-mono uppercase text-[#94A3B8]">Configured Purchase Items</span>
+              <div className="text-xl font-bold font-mono text-white">{purchaseItems.length} Items</div>
+              <p className="text-[10px] text-[#6B7280]">With standard tax classifications</p>
+            </div>
+            <div className="p-4 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl space-y-1">
+              <span className="text-[10px] font-mono uppercase text-[#94A3B8]">Expense Vouchers</span>
+              <div className="text-xl font-bold font-mono text-white">{dayExpenses.length} Total</div>
+              <p className="text-[10px] text-emerald-400">{dayExpenses.filter(e => e.workflowStatus === 'approved').length} Approved &amp; Posted</p>
+            </div>
+          </div>
+
+          {/* Expense Review Table */}
+          <div className="glass-panel border border-[#1C1C1C] rounded-2xl overflow-hidden">
+            <div className="p-4 border-b border-[#1C1C1C] bg-[#0A0A0A]/50 font-bold text-xs text-white">
+              Submitted Operating Expense Vouchers
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-[#0A0A0A] border-b border-[#1C1C1C] text-[#9CA3AF] font-mono font-bold">
+                    <th className="p-3">Ref</th>
+                    <th className="p-3">Date</th>
+                    <th className="p-3">Department</th>
+                    <th className="p-3">Category</th>
+                    <th className="p-3">Payee</th>
+                    <th className="p-3">Description</th>
+                    <th className="p-3 text-right">Taxable</th>
+                    <th className="p-3 text-right">GST</th>
+                    <th className="p-3 text-right">Total (₹)</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right">Approval Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1C1C1C]">
+                  {dayExpenses.map(e => (
+                    <tr key={e.id} className="hover:bg-white/5 transition-colors">
+                      <td className="p-3 font-mono text-amber-300 font-bold">{e.expenseRef}</td>
+                      <td className="p-3 font-mono text-[#9CA3AF]">{e.expenseDate}</td>
+                      <td className="p-3 font-bold text-white">{e.department}</td>
+                      <td className="p-3 font-mono text-slate-300">{e.expenseCategory}</td>
+                      <td className="p-3 text-slate-200">{e.payee}</td>
+                      <td className="p-3 text-[#9CA3AF] max-w-[180px] truncate">{e.description}</td>
+                      <td className="p-3 text-right font-mono text-white">₹{(e.amountBeforeTax || 0).toFixed(2)}</td>
+                      <td className="p-3 text-right font-mono text-violet-400">₹{(e.gstAmount || 0).toFixed(2)}</td>
+                      <td className="p-3 text-right font-mono font-bold text-white">₹{(e.totalAmount || 0).toFixed(2)}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                          e.workflowStatus === 'approved' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
+                          e.workflowStatus === 'rejected' ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30' :
+                          'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                        }`}>
+                          {e.workflowStatus.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right">
+                        {e.workflowStatus === 'submitted' ? (
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              onClick={() => {
+                                if (confirm(`Approve expense ${e.expenseRef} and post ₹${e.totalAmount} to ledger?`)) {
+                                  updateExpenseWorkflowStatus(e.id, 'approved');
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-[11px] rounded-lg transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+                            >
+                              <Check className="w-3 h-3" /> Approve
+                            </button>
+                            <button
+                              onClick={() => {
+                                const reason = prompt(`Reason for rejecting ${e.expenseRef}:`);
+                                if (reason) {
+                                  updateExpenseWorkflowStatus(e.id, 'rejected', reason);
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-mono text-[#6B7280]">
+                            {e.workflowStatus === 'approved' ? `Approved by ${e.reviewedBy || 'Admin'}` : `Rejected: ${e.rejectionReason || 'N/A'}`}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {dayExpenses.length === 0 && (
+                    <tr>
+                      <td colSpan={11} className="text-center py-8 text-[#9CA3AF] text-xs font-mono">
+                        No Sub-Admin expense vouchers in queue.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -18,6 +18,7 @@ import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { CustomerMobileRaceView } from './components/karting/timingSystem/CustomerMobileRaceView';
 import { CustomerTvDisplayView } from './components/karting/timingSystem/CustomerTvDisplayView';
 import { RaceTimingMaster } from './components/karting/timingSystem/RaceTimingMaster';
+import { SubAdminFinancePortal } from './components/admin/SubAdminFinancePortal';
 import { INITIAL_USERS } from './data/initialData';
 import { Mail, Lock, KeyRound, LogIn } from 'lucide-react';
 
@@ -68,12 +69,14 @@ function LoginPage() {
         (matchedUser.role === 'go_karting_staff' && (password === 'staff' || password === 'karting')) ||
         (matchedUser.role === 'horse_riding_staff' && (password === 'staff' || password === 'horse')) ||
         (matchedUser.role === 'shooting_staff' && (password === 'staff' || password === 'shooting')) ||
-        (matchedUser.role === 'ticket_counter_staff' && (password === 'staff' || password === 'ticketing'));
+        (matchedUser.role === 'ticket_counter_staff' && (password === 'staff' || password === 'ticketing')) ||
+        (matchedUser.role === 'finance_sub_admin' && (password === 'finance' || password === 'staff' || password === 'admin'));
 
       if (isValidPassword) {
         setCurrentUser(matchedUser);
         
         if (matchedUser.role === 'super_admin') navigate('/admin');
+        else if (matchedUser.role === 'finance_sub_admin') navigate('/finance-portal');
         else if (matchedUser.role === 'go_karting_manager' || matchedUser.role === 'go_karting_staff') navigate('/staff/karting');
         else if (matchedUser.role === 'horse_riding_staff') navigate('/staff/horse-riding');
         else if (matchedUser.role === 'shooting_staff') navigate('/staff/shooting');
@@ -433,6 +436,11 @@ export default function App() {
             <Route path="/staff/ticketing/*" element={
               <ProtectedRoute allowedRoles={['ticket_counter_staff', 'super_admin']}>
                 <TicketingDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/finance-portal/*" element={
+              <ProtectedRoute allowedRoles={['finance_sub_admin', 'super_admin']}>
+                <SubAdminFinancePortal />
               </ProtectedRoute>
             } />
           </Route>

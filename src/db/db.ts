@@ -42,6 +42,10 @@ export class AppDB extends Dexie {
   menuItemRecipes!: Table<any, string>;
   shifts!: Table<any, string>;
   leaveRequests!: Table<any, string>;
+  suppliers!: Table<any, string>;
+  purchaseItems!: Table<any, string>;
+  dayExpenses!: Table<any, string>;
+  financeAuditLogs!: Table<any, string>;
 
   syncQueue!: Table<SyncQueueItem, number>;
 
@@ -152,6 +156,36 @@ export class AppDB extends Dexie {
       menuItemRecipes: 'menuItemId',
       shifts: 'id, name, isActive',
       leaveRequests: 'id, staffId, startDate, status',
+      syncQueue: '++id, table, action, status, createdAt'
+    });
+    // Version 7: add suppliers, purchaseItems, dayExpenses, financeAuditLogs for Sub-Admin Finance Portal
+    this.version(7).stores({
+      users: 'id, role, email, employeeId, department',
+      activities: 'id, type',
+      vendors: 'id, type',
+      menuItems: 'id, vendorId, category',
+      inventory: 'id, vendorId, name',
+      bookings: 'id, activityId, customerEmail, date',
+      tickets: 'id, bookingId, qrCodeValue, status',
+      orders: 'id, customerEmail, status',
+      notifications: 'id, recipient, channel',
+      payments: 'id, bookingId, orderId, status',
+      karts: 'id, status',
+      sessions: 'id, status',
+      lapRecords: 'id, sessionId, driverId',
+      waivers: 'id, ticketId',
+      purchases: 'id, department, category, supplier, date, paymentStatus, workflowStatus',
+      staffAttendance: 'id, staffId, date, status',
+      staffSalaryPayments: 'id, staffId, month, paymentStatus, workflowStatus',
+      foodStreetPurchases: 'id, vendorId, purchaseDate, status, supplierName',
+      stockMovements: 'id, itemId, vendorId, type, timestamp',
+      menuItemRecipes: 'menuItemId',
+      shifts: 'id, name, isActive',
+      leaveRequests: 'id, staffId, startDate, status',
+      suppliers: 'id, supplierName, supplierType, isActive',
+      purchaseItems: 'id, itemCode, category, isActive',
+      dayExpenses: 'id, expenseRef, department, expenseCategory, workflowStatus, expenseDate',
+      financeAuditLogs: 'id, entityType, entityId, performedBy, timestamp',
       syncQueue: '++id, table, action, status, createdAt'
     });
   }

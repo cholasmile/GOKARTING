@@ -10,7 +10,8 @@ import {
   NotificationLog, OrderStatus, FoodOrderItem, ActivityPackage,
   Kart, GoKartingSession, LapRecord, GoKartingWaiver, KartStatus, SessionStatus,
   ActivityPhoto, ActivityOffer, FoodStreetPurchaseRecord, StockMovement, MenuItemRecipe, StockMovementType,
-  ShiftDefinition, LeaveRequestRecord, StaffAttendanceRecord, StaffSalaryPayment, AttendanceStatusType
+  ShiftDefinition, LeaveRequestRecord, StaffAttendanceRecord, StaffSalaryPayment, AttendanceStatusType,
+  SupplierRecord, PurchaseItemRecord, ExpenseRecord, AuditLogEntry, EntryWorkflowStatus
 } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { db } from '../db/db';
@@ -48,6 +49,12 @@ interface AppContextProps {
   foodStreetPurchases: FoodStreetPurchaseRecord[];
   stockMovements: StockMovement[];
   menuItemRecipes: MenuItemRecipe[];
+
+  // Finance Sub-Admin Master & Entries State
+  suppliers: SupplierRecord[];
+  purchaseItems: PurchaseItemRecord[];
+  dayExpenses: ExpenseRecord[];
+  financeAuditLogs: AuditLogEntry[];
 
   // Go Karting Specific State
   karts: Kart[];
@@ -97,6 +104,18 @@ interface AppContextProps {
   updateLeaveRequestStatus: (leaveId: string, status: 'Approved' | 'Rejected', reason?: string) => void;
   saveSalaryPayment: (salary: Omit<StaffSalaryPayment, 'id' | 'createdAt'>) => StaffSalaryPayment;
   approveSalaryPayment: (salaryId: string) => void;
+
+  // Mutators - Finance Sub-Admin Master & Entries
+  addSupplier: (supplier: Omit<SupplierRecord, 'id' | 'createdAt' | 'updatedAt'>) => SupplierRecord;
+  updateSupplier: (supplier: SupplierRecord) => void;
+  toggleSupplierStatus: (id: string) => void;
+  addPurchaseItem: (item: Omit<PurchaseItemRecord, 'id' | 'createdAt' | 'updatedAt'>) => PurchaseItemRecord;
+  updatePurchaseItem: (item: PurchaseItemRecord) => void;
+  togglePurchaseItemStatus: (id: string) => void;
+  addExpenseRecord: (expense: Omit<ExpenseRecord, 'id' | 'createdAt' | 'updatedAt'>) => ExpenseRecord;
+  updateExpenseRecord: (expense: ExpenseRecord) => void;
+  updateExpenseWorkflowStatus: (id: string, status: EntryWorkflowStatus, reason?: string) => void;
+  logFinanceAudit: (log: Omit<AuditLogEntry, 'id' | 'timestamp'>) => void;
 
   // Mutators - Bookings & Tickets
   createBooking: (bookingData: {
@@ -768,6 +787,65 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [menuItemRecipes, setMenuItemRecipes] = useState<MenuItemRecipe[]>(() => {
     const cached = localStorage.getItem('ap_menu_recipes');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+
+  // ── Finance Sub-Admin Master & Expenditure State ──
+  const [suppliers, setSuppliers] = useState<SupplierRecord[]>(() => {
+    const cached = localStorage.getItem('ap_finance_suppliers');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return [
+      { id: 'sup-101', supplierName: 'Deuce Farm & Dairy Ltd', contactPerson: 'Ravi Kumar', phone: '9845012345', email: 'dairy@deucefarms.in', gstin: '33AABCT1332L1Z4', supplierType: 'Vendor', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'sup-102', supplierName: 'Sodi Racing Parts International', contactPerson: 'Arun Singh', phone: '9876543210', email: 'parts@sodiracing.in', gstin: '33AAECS5432R1ZF', supplierType: 'Wholesaler', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'sup-103', supplierName: 'Precision Target Systems Ltd', contactPerson: 'Col. K. Verma', phone: '9789012345', email: 'targets@precision.in', gstin: '33AABCP9876N1ZP', supplierType: 'Manufacturer', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'sup-104', supplierName: 'Equine Feeds & Veterinary Care', contactPerson: 'Dr. Ramesh', phone: '9443212345', email: 'equine@vetfeeds.in', gstin: '33AAACE3210M1ZQ', supplierType: 'Service Provider', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'sup-105', supplierName: 'Yelagiri Utilities & Gas Agency', contactPerson: 'Suresh', phone: '9442156789', email: 'gas@yelagiri.in', gstin: '33AAEFG4567P1ZR', supplierType: 'Contractor', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    ];
+  });
+
+  const [purchaseItems, setPurchaseItems] = useState<PurchaseItemRecord[]>(() => {
+    const cached = localStorage.getItem('ap_purchase_items');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return [
+      { id: 'item-101', itemCode: 'KART-TYRE-F', itemName: 'Front Kart Tyre 10x4.50-5', category: 'Spare Parts', defaultUnit: 'piece', taxClassification: 'Standard GST 18%', defaultGstPercent: 18, defaultRate: 2800, defaultSupplierId: 'sup-102', defaultSupplierName: 'Sodi Racing Parts International', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'item-102', itemCode: 'KART-FUEL-2T', itemName: 'High-Octane 2T Petrol & Synthetic Oil Blend', category: 'Fuel & Lubricants', defaultUnit: 'litre', taxClassification: 'Standard GST 18%', defaultGstPercent: 18, defaultRate: 145, defaultSupplierId: 'sup-105', defaultSupplierName: 'Yelagiri Utilities & Gas Agency', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'item-103', itemCode: 'SHOOT-PELLET', itemName: '0.177 Calibre Match Air Rifle Pellets (500/tin)', category: 'Consumables', defaultUnit: 'box', taxClassification: 'Standard GST 12%', defaultGstPercent: 12, defaultRate: 650, defaultSupplierId: 'sup-103', defaultSupplierName: 'Precision Target Systems Ltd', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'item-104', itemCode: 'SHOOT-TARGET', itemName: '10m Air Rifle Target Cards (Pack of 100)', category: 'Consumables', defaultUnit: 'packet', taxClassification: 'Standard GST 12%', defaultGstPercent: 12, defaultRate: 350, defaultSupplierId: 'sup-103', defaultSupplierName: 'Precision Target Systems Ltd', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'item-105', itemCode: 'HORSE-FEED-L', itemName: 'Nutritious Equine Pellets & Lucerne Fodder (50kg)', category: 'Feed & Fodder', defaultUnit: 'bag', taxClassification: 'Nil Rated 0%', defaultGstPercent: 0, defaultRate: 2100, defaultSupplierId: 'sup-104', defaultSupplierName: 'Equine Feeds & Veterinary Care', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'item-106', itemCode: 'CAFE-MILK-T', itemName: 'Fresh Farm Cow Milk (Full Cream)', category: 'Raw Materials', defaultUnit: 'litre', taxClassification: 'Nil Rated 0%', defaultGstPercent: 0, defaultRate: 48, defaultSupplierId: 'sup-101', defaultSupplierName: 'Deuce Farm & Dairy Ltd', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'item-107', itemCode: 'CAFE-LPG-19', itemName: 'Commercial LPG Cylinder (19 Kg)', category: 'Utilities', defaultUnit: 'bottle', taxClassification: 'Standard GST 5%', defaultGstPercent: 5, defaultRate: 1850, defaultSupplierId: 'sup-105', defaultSupplierName: 'Yelagiri Utilities & Gas Agency', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    ];
+  });
+
+  const [dayExpenses, setDayExpenses] = useState<ExpenseRecord[]>(() => {
+    const cached = localStorage.getItem('ap_day_expenses');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+
+  const [financeAuditLogs, setFinanceAuditLogs] = useState<AuditLogEntry[]>(() => {
+    const cached = localStorage.getItem('ap_finance_audit_logs');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -2071,6 +2149,286 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     } catch (e) {
       console.warn('Failed to post salary to dp_purchases_v1:', e);
+    }
+  };
+
+  // ── Finance Sub-Admin Master & Entries Mutators ──
+  const logFinanceAudit = (logData: Omit<AuditLogEntry, 'id' | 'timestamp'>) => {
+    const newLog: AuditLogEntry = {
+      ...logData,
+      id: `audit-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      timestamp: new Date().toISOString()
+    };
+    setFinanceAuditLogs(prev => {
+      const updated = [newLog, ...prev];
+      try {
+        localStorage.setItem('ap_finance_audit_logs', JSON.stringify(updated));
+        db.financeAuditLogs.put(newLog);
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const addSupplier = (supData: Omit<SupplierRecord, 'id' | 'createdAt' | 'updatedAt'>): SupplierRecord => {
+    const now = new Date().toISOString();
+    const newSup: SupplierRecord = {
+      ...supData,
+      id: `sup-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: now,
+      updatedAt: now
+    };
+    setSuppliers(prev => {
+      const updated = [newSup, ...prev];
+      try {
+        localStorage.setItem('ap_finance_suppliers', JSON.stringify(updated));
+        db.suppliers.put(newSup);
+      } catch (e) {}
+      return updated;
+    });
+    logFinanceAudit({
+      entityType: 'supplier',
+      entityId: newSup.id,
+      action: 'create',
+      performedBy: currentUser?.name || 'Sub-Admin',
+      performedByRole: currentUser?.role || 'finance_sub_admin',
+      details: `Added supplier: ${newSup.supplierName} (${newSup.phone})`
+    });
+    return newSup;
+  };
+
+  const updateSupplier = (sup: SupplierRecord) => {
+    const now = new Date().toISOString();
+    const updatedSup = { ...sup, updatedAt: now };
+    setSuppliers(prev => {
+      const updated = prev.map(s => s.id === sup.id ? updatedSup : s);
+      try {
+        localStorage.setItem('ap_finance_suppliers', JSON.stringify(updated));
+        db.suppliers.put(updatedSup);
+      } catch (e) {}
+      return updated;
+    });
+    logFinanceAudit({
+      entityType: 'supplier',
+      entityId: sup.id,
+      action: 'update',
+      performedBy: currentUser?.name || 'Sub-Admin',
+      performedByRole: currentUser?.role || 'finance_sub_admin',
+      details: `Updated supplier: ${sup.supplierName}`
+    });
+  };
+
+  const toggleSupplierStatus = (id: string) => {
+    const sup = suppliers.find(s => s.id === id);
+    if (!sup) return;
+    const updatedSup = { ...sup, isActive: !sup.isActive, updatedAt: new Date().toISOString() };
+    setSuppliers(prev => {
+      const updated = prev.map(s => s.id === id ? updatedSup : s);
+      try {
+        localStorage.setItem('ap_finance_suppliers', JSON.stringify(updated));
+        db.suppliers.put(updatedSup);
+      } catch (e) {}
+      return updated;
+    });
+    logFinanceAudit({
+      entityType: 'supplier',
+      entityId: id,
+      action: 'deactivate',
+      performedBy: currentUser?.name || 'Sub-Admin',
+      performedByRole: currentUser?.role || 'finance_sub_admin',
+      details: `${updatedSup.isActive ? 'Reactivated' : 'Deactivated'} supplier: ${sup.supplierName}`
+    });
+  };
+
+  const addPurchaseItem = (itemData: Omit<PurchaseItemRecord, 'id' | 'createdAt' | 'updatedAt'>): PurchaseItemRecord => {
+    const now = new Date().toISOString();
+    const newItem: PurchaseItemRecord = {
+      ...itemData,
+      id: `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: now,
+      updatedAt: now
+    };
+    setPurchaseItems(prev => {
+      const updated = [newItem, ...prev];
+      try {
+        localStorage.setItem('ap_purchase_items', JSON.stringify(updated));
+        db.purchaseItems.put(newItem);
+      } catch (e) {}
+      return updated;
+    });
+    logFinanceAudit({
+      entityType: 'item',
+      entityId: newItem.id,
+      action: 'create',
+      performedBy: currentUser?.name || 'Sub-Admin',
+      performedByRole: currentUser?.role || 'finance_sub_admin',
+      details: `Added purchase item: [${newItem.itemCode}] ${newItem.itemName}`
+    });
+    return newItem;
+  };
+
+  const updatePurchaseItem = (item: PurchaseItemRecord) => {
+    const now = new Date().toISOString();
+    const updatedItem = { ...item, updatedAt: now };
+    setPurchaseItems(prev => {
+      const updated = prev.map(i => i.id === item.id ? updatedItem : i);
+      try {
+        localStorage.setItem('ap_purchase_items', JSON.stringify(updated));
+        db.purchaseItems.put(updatedItem);
+      } catch (e) {}
+      return updated;
+    });
+    logFinanceAudit({
+      entityType: 'item',
+      entityId: item.id,
+      action: 'update',
+      performedBy: currentUser?.name || 'Sub-Admin',
+      performedByRole: currentUser?.role || 'finance_sub_admin',
+      details: `Updated purchase item: [${item.itemCode}] ${item.itemName}`
+    });
+  };
+
+  const togglePurchaseItemStatus = (id: string) => {
+    const item = purchaseItems.find(i => i.id === id);
+    if (!item) return;
+    const updatedItem = { ...item, isActive: !item.isActive, updatedAt: new Date().toISOString() };
+    setPurchaseItems(prev => {
+      const updated = prev.map(i => i.id === id ? updatedItem : i);
+      try {
+        localStorage.setItem('ap_purchase_items', JSON.stringify(updated));
+        db.purchaseItems.put(updatedItem);
+      } catch (e) {}
+      return updated;
+    });
+    logFinanceAudit({
+      entityType: 'item',
+      entityId: id,
+      action: 'deactivate',
+      performedBy: currentUser?.name || 'Sub-Admin',
+      performedByRole: currentUser?.role || 'finance_sub_admin',
+      details: `${updatedItem.isActive ? 'Reactivated' : 'Deactivated'} item: [${item.itemCode}] ${item.itemName}`
+    });
+  };
+
+  const addExpenseRecord = (expData: Omit<ExpenseRecord, 'id' | 'createdAt' | 'updatedAt'>): ExpenseRecord => {
+    const now = new Date().toISOString();
+    const newExp: ExpenseRecord = {
+      ...expData,
+      id: `exp-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: now,
+      updatedAt: now
+    };
+    setDayExpenses(prev => {
+      const updated = [newExp, ...prev];
+      try {
+        localStorage.setItem('ap_day_expenses', JSON.stringify(updated));
+        db.dayExpenses.put(newExp);
+      } catch (e) {}
+      return updated;
+    });
+    logFinanceAudit({
+      entityType: 'expense',
+      entityId: newExp.id,
+      action: expData.workflowStatus === 'submitted' ? 'submit' : 'create',
+      performedBy: currentUser?.name || 'Sub-Admin',
+      performedByRole: currentUser?.role || 'finance_sub_admin',
+      details: `Created expense ${newExp.expenseRef}: ${newExp.description} (₹${newExp.totalAmount})`
+    });
+    return newExp;
+  };
+
+  const updateExpenseRecord = (exp: ExpenseRecord) => {
+    const now = new Date().toISOString();
+    const updatedExp = { ...exp, updatedAt: now };
+    setDayExpenses(prev => {
+      const updated = prev.map(e => e.id === exp.id ? updatedExp : e);
+      try {
+        localStorage.setItem('ap_day_expenses', JSON.stringify(updated));
+        db.dayExpenses.put(updatedExp);
+      } catch (e) {}
+      return updated;
+    });
+    logFinanceAudit({
+      entityType: 'expense',
+      entityId: exp.id,
+      action: 'update',
+      performedBy: currentUser?.name || 'Sub-Admin',
+      performedByRole: currentUser?.role || 'finance_sub_admin',
+      details: `Updated expense ${exp.expenseRef}: ${exp.description}`
+    });
+  };
+
+  const updateExpenseWorkflowStatus = (id: string, status: EntryWorkflowStatus, reason?: string) => {
+    const exp = dayExpenses.find(e => e.id === id);
+    if (!exp) return;
+    const now = new Date().toISOString();
+    const updatedExp: ExpenseRecord = {
+      ...exp,
+      workflowStatus: status,
+      reviewedBy: (status === 'approved' || status === 'rejected') ? currentUser?.name || 'Super Admin' : exp.reviewedBy,
+      reviewedAt: (status === 'approved' || status === 'rejected') ? now : exp.reviewedAt,
+      rejectionReason: status === 'rejected' ? reason : undefined,
+      postedAt: status === 'approved' || status === 'posted' ? now : exp.postedAt,
+      updatedAt: now
+    };
+
+    setDayExpenses(prev => {
+      const updated = prev.map(e => e.id === id ? updatedExp : e);
+      try {
+        localStorage.setItem('ap_day_expenses', JSON.stringify(updated));
+        db.dayExpenses.put(updatedExp);
+      } catch (e) {}
+      return updated;
+    });
+
+    logFinanceAudit({
+      entityType: 'expense',
+      entityId: id,
+      action: status === 'approved' ? 'approve' : status === 'rejected' ? 'reject' : status === 'submitted' ? 'submit' : 'update',
+      performedBy: currentUser?.name || 'User',
+      performedByRole: currentUser?.role || 'super_admin',
+      details: `Expense ${exp.expenseRef} status changed to ${status}${reason ? ` Reason: ${reason}` : ''}`
+    });
+
+    // When Super Admin approves, post automatically into the accounting ledger (dp_purchases_v1)
+    if (status === 'approved') {
+      try {
+        const existingRaw = localStorage.getItem('dp_purchases_v1');
+        let purchases: any[] = existingRaw ? JSON.parse(existingRaw) : [];
+        const alreadyInPurchases = purchases.some(p => p.id === `ledger-exp-${exp.id}`);
+        if (!alreadyInPurchases) {
+          const ledgerEntry = {
+            id: `ledger-exp-${exp.id}`,
+            date: exp.expenseDate,
+            department: exp.department,
+            category: exp.expenseCategory,
+            itemName: exp.description,
+            description: `Voucher: ${exp.expenseRef} • Payee: ${exp.payee}${exp.invoiceOrRefNumber ? ` • Inv: ${exp.invoiceOrRefNumber}` : ''}`,
+            supplier: exp.payee,
+            invoiceNumber: exp.invoiceOrRefNumber || exp.expenseRef,
+            quantity: 1,
+            unit: 'item',
+            unitPrice: exp.amountBeforeTax,
+            gstPercent: exp.gstPercent,
+            gstAmount: exp.gstAmount,
+            totalCost: exp.totalAmount,
+            paymentMethod: exp.paymentMethod,
+            amountPaid: exp.amountPaid,
+            outstandingBalance: Math.max(0, exp.totalAmount - exp.amountPaid),
+            paymentStatus: exp.paymentStatus,
+            notes: exp.notes,
+            isInventory: false,
+            isFixedAsset: false,
+            createdAt: now,
+            updatedAt: now,
+            createdBy: exp.createdBy || 'Finance Sub-Admin'
+          };
+          purchases.unshift(ledgerEntry);
+          localStorage.setItem('dp_purchases_v1', JSON.stringify(purchases));
+          db.purchases.put(ledgerEntry);
+        }
+      } catch (e) {
+        console.warn('Failed to post approved expense to dp_purchases_v1:', e);
+      }
     }
   };
 
@@ -3611,6 +3969,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       updateLeaveRequestStatus,
       saveSalaryPayment,
       approveSalaryPayment,
+
+      // Finance Sub-Admin Master & Entries
+      suppliers,
+      purchaseItems,
+      dayExpenses,
+      financeAuditLogs,
+      addSupplier,
+      updateSupplier,
+      toggleSupplierStatus,
+      addPurchaseItem,
+      updatePurchaseItem,
+      togglePurchaseItemStatus,
+      addExpenseRecord,
+      updateExpenseRecord,
+      updateExpenseWorkflowStatus,
+      logFinanceAudit,
       
       createBooking,
       markBookingAsPaid,
