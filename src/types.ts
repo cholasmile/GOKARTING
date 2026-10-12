@@ -19,6 +19,10 @@ export interface User {
   employeeId?: string; // unique (e.g. EMP-101)
   profilePhoto?: string;
   address?: string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
   emergencyContact?: string;
   assignedActivity?: string;
   dateOfJoining?: string; // YYYY-MM-DD

@@ -125,6 +125,9 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
                (s.email || '').toLowerCase().includes(q) || 
                (s.phone || '').includes(q) ||
                (s.employeeId || '').toLowerCase().includes(q) ||
+               (s.aadhaarNumber || '').includes(q) ||
+               (s.address || '').toLowerCase().includes(q) ||
+               (s.city || '').toLowerCase().includes(q) ||
                (s.department || '').toLowerCase().includes(q);
       }
       return true;
@@ -739,11 +742,14 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-[#0A0A0A] text-[#94A3B8] font-mono font-bold border-b border-[#00ABAB]/30">
-                    <th className="p-3.5">Employee Name & ID</th>
-                    <th className="p-3.5">Department & Activity</th>
+                    <th className="p-3.5">Employee Name &amp; ID</th>
+                    <th className="p-3.5">Department &amp; Activity</th>
                     <th className="p-3.5">Contact Details</th>
+                    <th className="p-3.5">Residential Address &amp; Aadhaar</th>
                     <th className="p-3.5">Bank Master (Payroll)</th>
-                    <th className="p-3.5 text-right">Agreed Base Pay</th>
+                    {isSuperAdmin && (
+                      <th className="p-3.5 text-right">Salary (Super Admin)</th>
+                    )}
                     <th className="p-3.5">Status</th>
                     <th className="p-3.5 text-right">Actions</th>
                   </tr>
@@ -774,6 +780,26 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
                       </td>
 
                       <td className="p-3.5 font-mono">
+                        <div className="text-white text-xs max-w-xs truncate" title={staff.address || staff.streetAddress || 'Address not recorded'}>
+                          {staff.streetAddress ? (
+                            <span>{staff.streetAddress}{staff.city ? `, ${staff.city}` : ''}</span>
+                          ) : staff.address ? (
+                            <span>{staff.address}</span>
+                          ) : (
+                            <span className="text-[#666] italic">No address provided</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-[#40E0D0] mt-0.5 font-bold flex items-center gap-1">
+                          {staff.aadhaarNumber ? (
+                            <span>Aadhaar: {staff.aadhaarNumber}</span>
+                          ) : (
+                            <span className="text-amber-400 font-normal">Aadhaar: Pending</span>
+                          )}
+                          {staff.pincode && <span className="text-[#888]">• PIN {staff.pincode}</span>}
+                        </div>
+                      </td>
+
+                      <td className="p-3.5 font-mono">
                         {staff.accountNumber ? (
                           <div>
                             <div className="text-emerald-400 font-bold">{staff.bankName}</div>
@@ -784,12 +810,14 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
                         )}
                       </td>
 
-                      <td className="p-3.5 text-right font-mono font-black text-sm text-emerald-400">
-                        ₹{(staff.monthlySalary || 18000).toLocaleString('en-IN')}
-                        <span className="text-[9px] text-[#666] block font-normal">
-                          ₹{staff.dailyRate || 600}/day
-                        </span>
-                      </td>
+                      {isSuperAdmin && (
+                        <td className="p-3.5 text-right font-mono font-black text-sm text-emerald-400">
+                          ₹{(staff.monthlySalary || 18000).toLocaleString('en-IN')}
+                          <span className="text-[9px] text-[#666] block font-normal">
+                            ₹{staff.dailyRate || 600}/day
+                          </span>
+                        </td>
+                      )}
 
                       <td className="p-3.5">
                         <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
@@ -809,7 +837,7 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
                               setIsStaffModalOpen(true);
                             }}
                             className="p-1.5 rounded-lg border border-white/10 text-teal-300 hover:bg-white/5 transition-colors cursor-pointer"
-                            title="Edit Staff & Banking Profile"
+                            title="Edit Staff &amp; Banking Profile"
                           >
                             <Edit className="w-3.5 h-3.5" />
                           </button>
@@ -1030,7 +1058,7 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
                 <thead>
                   <tr className="bg-[#0A0A0A] text-[#94A3B8] font-mono font-bold border-b border-[#00ABAB]/30">
                     <th className="p-3.5">Employee Name</th>
-                    <th className="p-3.5 text-right">Agreed Base Pay</th>
+                    <th className="p-3.5 text-right">Salary Amount (Super Admin)</th>
                     <th className="p-3.5 text-center">Present</th>
                     <th className="p-3.5 text-center">Paid Leave</th>
                     <th className="p-3.5 text-center">Absent</th>
@@ -1213,6 +1241,7 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
           else addUser(updated);
         }}
         isNew={!editingStaff}
+        isSuperAdmin={isSuperAdmin}
       />
 
       {/* Leave Application Modal */}

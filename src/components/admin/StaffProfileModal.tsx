@@ -11,7 +11,7 @@ import React, { useState } from 'react';
 import { User, UserRole } from '../../types';
 import { 
   Building2, CreditCard, UserCheck, Mail, Phone, Briefcase, 
-  IndianRupee, X, Save, AlertCircle 
+  IndianRupee, X, Save, AlertCircle, MapPin, Home, ShieldCheck, Lock
 } from 'lucide-react';
 
 interface StaffProfileModalProps {
@@ -20,6 +20,7 @@ interface StaffProfileModalProps {
   staff: User | null;
   onSave: (updatedStaff: User) => void;
   isNew?: boolean;
+  isSuperAdmin?: boolean;
 }
 
 const ROLE_OPTIONS: { role: UserRole; label: string }[] = [
@@ -39,7 +40,8 @@ export const StaffProfileModal: React.FC<StaffProfileModalProps> = ({
   onClose,
   staff,
   onSave,
-  isNew = false
+  isNew = false,
+  isSuperAdmin = false
 }) => {
   if (!isOpen) return null;
 
@@ -54,6 +56,11 @@ export const StaffProfileModal: React.FC<StaffProfileModalProps> = ({
       role: 'ticket_counter_staff',
       department: 'Ticketing & Counter',
       designation: 'Counter Executive',
+      streetAddress: '',
+      city: '',
+      state: 'Tamil Nadu',
+      pincode: '',
+      address: '',
       accountNumber: '',
       bankName: '',
       ifscCode: '',
@@ -90,6 +97,15 @@ export const StaffProfileModal: React.FC<StaffProfileModalProps> = ({
       return;
     }
 
+    // Combine street, city, state, pincode into address string for backward compatibility
+    const detailedParts = [
+      formData.streetAddress?.trim(),
+      formData.city?.trim(),
+      formData.state?.trim(),
+      formData.pincode?.trim() ? `PIN: ${formData.pincode.trim()}` : ''
+    ].filter(Boolean);
+    const combinedAddress = detailedParts.join(', ') || formData.address?.trim() || '';
+
     const payload: User = {
       id: formData.id || `usr-staff-${Date.now()}`,
       name: formData.name.trim(),
@@ -98,14 +114,19 @@ export const StaffProfileModal: React.FC<StaffProfileModalProps> = ({
       role: (formData.role as UserRole) || 'ticket_counter_staff',
       department: formData.department || 'Ticketing & Counter',
       designation: formData.designation || 'Staff',
+      streetAddress: formData.streetAddress?.trim() || '',
+      city: formData.city?.trim() || '',
+      state: formData.state?.trim() || '',
+      pincode: formData.pincode?.trim() || '',
+      address: combinedAddress,
       accountNumber: formData.accountNumber?.trim() || '',
       bankName: formData.bankName?.trim() || '',
       ifscCode: formData.ifscCode?.trim().toUpperCase() || '',
       branchName: formData.branchName?.trim() || '',
       panNumber: formData.panNumber?.trim().toUpperCase() || '',
       aadhaarNumber: formData.aadhaarNumber?.trim() || '',
-      monthlySalary: Number(formData.monthlySalary) || 0,
-      dailyRate: Number(formData.dailyRate) || 0,
+      monthlySalary: isSuperAdmin ? (Number(formData.monthlySalary) || 0) : (staff?.monthlySalary ?? Number(formData.monthlySalary) ?? 18000),
+      dailyRate: isSuperAdmin ? (Number(formData.dailyRate) || 0) : (staff?.dailyRate ?? Number(formData.dailyRate) ?? 600),
       updatedAt: new Date().toISOString()
     };
 
@@ -233,10 +254,82 @@ export const StaffProfileModal: React.FC<StaffProfileModalProps> = ({
             </div>
           </div>
 
-          {/* 2. Bank Account Details (Master) */}
+          {/* 2. Detailed Address & Identification Master */}
+          <div className="space-y-4 pt-3 border-t border-[#1C1C1C]">
+            <h3 className="text-xs font-mono uppercase font-bold text-[#40E0D0] tracking-wider flex items-center gap-2">
+              <MapPin className="w-3.5 h-3.5 text-[#00ABAB]" /> 2. Detailed Address &amp; Identity (Aadhaar)
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-mono text-[#94A3B8] mb-1 font-bold">Street Address / Door No / Landmark</label>
+                <div className="relative">
+                  <Home className="w-3.5 h-3.5 text-[#666] absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    value={formData.streetAddress || ''}
+                    onChange={e => handleChange('streetAddress', e.target.value)}
+                    placeholder="e.g. No. 42/B, Park View Avenue, Near Bus Stand"
+                    className="w-full bg-[#141414] border border-[#262626] focus:border-[#00ABAB] rounded-xl pl-9 pr-3.5 py-2.5 text-white text-xs outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-[#94A3B8] mb-1 font-bold">City / Town / Village</label>
+                <input
+                  type="text"
+                  value={formData.city || ''}
+                  onChange={e => handleChange('city', e.target.value)}
+                  placeholder="e.g. Yelagiri / Tirupattur"
+                  className="w-full bg-[#141414] border border-[#262626] focus:border-[#00ABAB] rounded-xl px-3.5 py-2.5 text-white text-xs outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-[#94A3B8] mb-1 font-bold">State</label>
+                <input
+                  type="text"
+                  value={formData.state || ''}
+                  onChange={e => handleChange('state', e.target.value)}
+                  placeholder="Tamil Nadu"
+                  className="w-full bg-[#141414] border border-[#262626] focus:border-[#00ABAB] rounded-xl px-3.5 py-2.5 text-white text-xs outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-[#94A3B8] mb-1 font-bold">Postal PIN Code</label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={formData.pincode || ''}
+                  onChange={e => handleChange('pincode', e.target.value)}
+                  placeholder="635853"
+                  className="w-full bg-[#141414] border border-[#262626] focus:border-[#00ABAB] rounded-xl px-3.5 py-2.5 text-white text-xs outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-[#40E0D0] mb-1 font-bold">Aadhaar Card Number *</label>
+                <div className="relative">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#00ABAB] absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    maxLength={14}
+                    value={formData.aadhaarNumber || ''}
+                    onChange={e => handleChange('aadhaarNumber', e.target.value)}
+                    placeholder="12-digit Aadhaar (e.g. 1234 5678 9012)"
+                    className="w-full bg-[#141414] border border-[#00ABAB]/40 focus:border-[#00ABAB] rounded-xl pl-9 pr-3.5 py-2.5 text-white text-xs outline-none font-mono tracking-wider font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Bank Account Details (Master) */}
           <div className="space-y-4 pt-3 border-t border-[#1C1C1C]">
             <h3 className="text-xs font-mono uppercase font-bold text-amber-400 tracking-wider flex items-center gap-2">
-              <Building2 className="w-3.5 h-3.5" /> 2. Bank Account Master (For Salary Disbursal)
+              <Building2 className="w-3.5 h-3.5" /> 3. Bank Account Master (For Salary Disbursal)
             </h3>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -297,54 +390,66 @@ export const StaffProfileModal: React.FC<StaffProfileModalProps> = ({
                   className="w-full bg-[#141414] border border-[#262626] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-white text-xs outline-none font-mono uppercase"
                 />
               </div>
-
-              <div>
-                <label className="block text-[11px] font-mono text-[#94A3B8] mb-1 font-bold">Aadhaar Card (Optional)</label>
-                <input
-                  type="text"
-                  value={formData.aadhaarNumber || ''}
-                  onChange={e => handleChange('aadhaarNumber', e.target.value)}
-                  placeholder="12-digit Aadhaar"
-                  className="w-full bg-[#141414] border border-[#262626] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-white text-xs outline-none font-mono"
-                />
-              </div>
             </div>
           </div>
 
-          {/* 3. Salary & Pay Structure */}
+          {/* 4. Salary & Pay Structure (SUPER ADMIN ONLY) */}
           <div className="space-y-4 pt-3 border-t border-[#1C1C1C]">
-            <h3 className="text-xs font-mono uppercase font-bold text-emerald-400 tracking-wider flex items-center gap-2">
-              <IndianRupee className="w-3.5 h-3.5" /> 3. Salary & Wage Structure
-            </h3>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[11px] font-mono text-[#94A3B8] mb-1 font-bold">Monthly Base Salary (₹)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="500"
-                  value={formData.monthlySalary ?? 18000}
-                  onChange={e => handleChange('monthlySalary', Number(e.target.value))}
-                  placeholder="18000"
-                  className="w-full bg-[#141414] border border-[#262626] focus:border-emerald-400 rounded-xl px-3.5 py-2.5 text-emerald-400 font-mono font-bold text-sm outline-none"
-                />
-                <p className="text-[10px] text-[#666] mt-1 font-mono">Used for monthly pro-rata calculation</p>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-mono text-[#94A3B8] mb-1 font-bold">Calculated Per-Day Wage (₹)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={formData.dailyRate ?? 600}
-                  onChange={e => handleChange('dailyRate', Number(e.target.value))}
-                  placeholder="600"
-                  className="w-full bg-[#141414] border border-[#262626] focus:border-emerald-400 rounded-xl px-3.5 py-2.5 text-white font-mono text-sm outline-none"
-                />
-                <p className="text-[10px] text-[#666] mt-1 font-mono">Base salary ÷ 30 days</p>
-              </div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-mono uppercase font-bold text-emerald-400 tracking-wider flex items-center gap-2">
+                <IndianRupee className="w-3.5 h-3.5" /> 4. Salary &amp; Wage Structure
+              </h3>
+              {!isSuperAdmin && (
+                <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  <Lock className="w-3 h-3" /> Super Admin Only
+                </span>
+              )}
             </div>
+            
+            {isSuperAdmin ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-mono text-[#94A3B8] mb-1 font-bold">Monthly Salary Amount (₹) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="500"
+                    value={formData.monthlySalary ?? 18000}
+                    onChange={e => handleChange('monthlySalary', Number(e.target.value))}
+                    placeholder="18000"
+                    className="w-full bg-[#141414] border border-[#262626] focus:border-emerald-400 rounded-xl px-3.5 py-2.5 text-emerald-400 font-mono font-bold text-sm outline-none"
+                  />
+                  <p className="text-[10px] text-[#666] mt-1 font-mono">Entered exclusively by Super Admin for payroll</p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-mono text-[#94A3B8] mb-1 font-bold">Calculated Per-Day Wage (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.dailyRate ?? 600}
+                    onChange={e => handleChange('dailyRate', Number(e.target.value))}
+                    placeholder="600"
+                    className="w-full bg-[#141414] border border-[#262626] focus:border-emerald-400 rounded-xl px-3.5 py-2.5 text-white font-mono text-sm outline-none"
+                  />
+                  <p className="text-[10px] text-[#666] mt-1 font-mono">Base salary ÷ 30 days</p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 bg-[#0D1520] border border-[#00ABAB]/20 rounded-xl text-xs text-[#9CA3AF] flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-white flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-amber-400" /> Confidential Salary Configuration
+                  </p>
+                  <p className="text-[11px] text-[#94A3B8] mt-0.5">
+                    Salary amounts are restricted to Super Admin review and Accounts &amp; Finance disbursement.
+                  </p>
+                </div>
+                <div className="text-right font-mono text-[11px] text-[#40E0D0] font-bold">
+                  Protected by Access Policy
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
