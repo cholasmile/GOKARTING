@@ -462,7 +462,7 @@ const TicketingDashboard: React.FC = () => {
                 </span>
                 <div>
                   <h3 className="text-sm font-bold text-white font-sans">
-                    Today's Total Sales Summary ({todayCounterList.length} Transactions)
+                    Today's Total Sales Summary ({todayPaidCounterList.length} Transactions)
                   </h3>
                   <p className="text-[10px] text-[#94A3B8]">
                     Combined Activities & Food Street Total: <strong className="text-[#40E0D0]">₹{todayTotalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
