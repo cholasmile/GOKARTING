@@ -344,17 +344,17 @@ const TicketingDashboard: React.FC = () => {
       : selectedActivities.map(a => a.name).join(' + ');
 
     return (
-      <div className="min-h-screen bg-[#0A0A0A] text-white">
+      <div className="fixed inset-0 z-50 bg-[#0A0A0A] text-white flex flex-col overflow-hidden m-0 p-0">
         <div className="p-4 border-b border-[#00ABAB]/30 flex justify-between items-center bg-[#1C1C1C]">
           <h2 className="text-xl font-bold font-sans">Ticketing POS - {combinedName}</h2>
           <button 
             onClick={() => setIsCheckoutOpen(false)}
-            className="px-4 py-2 bg-rose-500/10 text-rose-400 rounded-lg font-bold hover:bg-rose-500/20"
+            className="px-4 py-2 bg-rose-500/10 text-rose-400 rounded-lg font-bold hover:bg-rose-500/20 cursor-pointer"
           >
             Cancel POS
           </button>
         </div>
-        <div className="overflow-y-auto h-[calc(100vh-80px)]">
+        <div className="overflow-y-auto flex-1 p-4 md:p-6">
           <UnifiedTicketingFlow activities={selectedActivities.map(s => activities.find(a => a.id === s.id) || s)} onCancel={() => setIsCheckoutOpen(false)} />
         </div>
       </div>
@@ -362,7 +362,7 @@ const TicketingDashboard: React.FC = () => {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 text-white min-h-screen">
+    <div className="space-y-6 text-white w-full m-0 p-0">
       <div className="flex justify-between items-center bg-[#1C1C1C] p-6 rounded-2xl border border-[#00ABAB]/30 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-[#3E8EDE]/5 rounded-full blur-3xl pointer-events-none"></div>
         <div>

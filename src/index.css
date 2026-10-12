@@ -23,14 +23,27 @@
   --color-text-muted: #94A3B8;
 }
 
-/* Global Base */
+/* Global Base Reset - zero out any browser user-agent margins */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100%;
+  min-height: 100%;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
   background-attachment: fixed;
   min-height: 100vh;
-  margin: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden;
   
   /* High-energy speed lines and radial Turquoise glow */
   background-image: 
