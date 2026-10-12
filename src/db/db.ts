@@ -33,6 +33,7 @@ export class AppDB extends Dexie {
   sessions!: Table<GoKartingSession, string>;
   lapRecords!: Table<LapRecord, string>;
   waivers!: Table<GoKartingWaiver, string>;
+  purchases!: Table<any, string>;
 
   syncQueue!: Table<SyncQueueItem, number>;
 
@@ -53,6 +54,25 @@ export class AppDB extends Dexie {
       sessions: 'id, status',
       lapRecords: 'id, sessionId, driverId',
       waivers: 'id, ticketId',
+      syncQueue: '++id, table, action, status, createdAt'
+    });
+    // Version 3: add purchases table for activity-wise expense management
+    this.version(3).stores({
+      users: 'id, role, email',
+      activities: 'id, type',
+      vendors: 'id, type',
+      menuItems: 'id, vendorId, category',
+      inventory: 'id, vendorId',
+      bookings: 'id, activityId, customerEmail, date',
+      tickets: 'id, bookingId, qrCodeValue, status',
+      orders: 'id, customerEmail, status',
+      notifications: 'id, recipient, channel',
+      payments: 'id, bookingId, orderId, status',
+      karts: 'id, status',
+      sessions: 'id, status',
+      lapRecords: 'id, sessionId, driverId',
+      waivers: 'id, ticketId',
+      purchases: 'id, department, category, supplier, date, paymentStatus',
       syncQueue: '++id, table, action, status, createdAt'
     });
   }

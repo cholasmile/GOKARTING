@@ -18,6 +18,7 @@ import {
   CalendarRange, Clock, ArrowUpRight, ChevronDown, CalendarDays, ShoppingBag, Sparkles
 } from 'lucide-react';
 import ActivityManagementPanel from './admin/ActivityManagementPanel';
+import AccountsFinancePanel from './admin/AccountsFinancePanel';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
 import { compressImageFile } from '../lib/imageUtils';
 
@@ -140,7 +141,7 @@ export const AdminDashboard: React.FC = () => {
   const [reconciliationTab, setReconciliationTab] = useState<'reports' | 'reconciliation'>('reports');
 
   // Active Admin Tabs
-  const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'payments' | 'pay_settings' | 'database'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'payments' | 'pay_settings' | 'database' | 'accounts_finance'>('analytics');
   const [activeDbSubTab, setActiveDbSubTab] = useState<'schema' | 'rls' | 'hierarchy' | 'api_routes' | 'deploy'>('schema');
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -867,9 +868,8 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Admin Tabs */}
       <div className="flex border-b border-[#14F1D9]/20 gap-1.5 overflow-x-auto text-[#FFFFFF] pb-2">
-        {(['analytics', 'activities', 'activity_mgmt', 'vendors', 'retail_menu', 'users', 'reports', 'payments', 'pay_settings', 'database'] as const).map(tab => (
+        {(['analytics', 'activities', 'activity_mgmt', 'vendors', 'retail_menu', 'users', 'reports', 'payments', 'accounts_finance', 'pay_settings', 'database'] as const).map(tab => (
           <button
             key={tab}
             id={`btn-admin-tab-${tab}`}
@@ -888,6 +888,7 @@ export const AdminDashboard: React.FC = () => {
             {tab === 'users' && <Users className="h-4 w-4" />}
             {tab === 'reports' && <FileText className="h-4 w-4" />}
             {tab === 'payments' && <IndianRupee className="h-4 w-4" />}
+            {tab === 'accounts_finance' && <Banknote className="h-4 w-4" />}
             {tab === 'pay_settings' && <Settings className="h-4 w-4" />}
             {tab === 'database' && <Database className="h-4 w-4" />}
             {tab === 'database' ? 'Supabase & RLS'
@@ -895,6 +896,7 @@ export const AdminDashboard: React.FC = () => {
               : tab === 'payments' ? 'Pay Reports'
               : tab === 'activity_mgmt' ? 'Activity Mgmt'
               : tab === 'retail_menu' ? 'Cafe & Retail Sales Sync'
+              : tab === 'accounts_finance' ? 'Accounts & Finance'
               : tab}
           </button>
         ))}
@@ -2865,7 +2867,15 @@ export const AdminDashboard: React.FC = () => {
         );
       })()}
 
+      {/* ── ACCOUNTS & FINANCE TAB ── */}
+      {activeTab === 'accounts_finance' && (
+        <div className="glass-panel border border-[#00ABAB]/20 rounded-2xl p-6">
+          <AccountsFinancePanel />
+        </div>
+      )}
+
       {activeTab === 'pay_settings' && (
+
         <div className="space-y-6">
           <div className="glass-panel p-6 rounded-2xl border border-[#00ABAB]/30">
             <h3 className="font-bold text-xl text-white flex items-center gap-2 mb-2"><Settings className="w-5 h-5 text-[#00ABAB]" /> Payment Configuration</h3>
