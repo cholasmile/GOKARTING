@@ -755,7 +755,11 @@ export const CustomerDashboard: React.FC = () => {
       {/* 3. HISTORY & WALLET SUB-TAB */}
       {/* ----------------------------------------------------------------- */}
       {activeSubTab === 'history' && (() => {
-        const effectiveEmail = (historySearchEmail.trim() || currentUser?.email || customerEmail || 'watson@baker.street').toLowerCase();
+        const isStaffOrAdmin = currentUser && currentUser.role !== 'customer';
+        const effectiveEmail = (
+          historySearchEmail.trim() || 
+          (isStaffOrAdmin ? '' : (currentUser?.email || customerEmail))
+        ).toLowerCase();
         const userTickets = tickets.filter(t => !effectiveEmail || t.customerEmail?.toLowerCase().includes(effectiveEmail));
         const userOrders = orders.filter(o => !effectiveEmail || o.customerEmail?.toLowerCase().includes(effectiveEmail));
 
@@ -769,7 +773,7 @@ export const CustomerDashboard: React.FC = () => {
                   <Search className="w-4 h-4 text-[#40E0D0]" /> Retrieve Booking Data & Admission Passes
                 </h3>
                 <p className="text-xs text-[#9CA3AF] mt-0.5">
-                  {currentUser ? `Showing verified member records for ${currentUser.email}` : 'Enter your email below to retrieve guest tickets and food order status instantly.'}
+                  {currentUser ? (isStaffOrAdmin ? `Logged in as authorized staff (${currentUser.email} - ${currentUser.role}). Showing shared records.` : `Showing verified member records for ${currentUser.email}`) : 'Enter your email below to retrieve guest tickets and food order status instantly.'}
                 </p>
               </div>
 
@@ -790,7 +794,7 @@ export const CustomerDashboard: React.FC = () => {
               <span className="text-[10px] uppercase font-bold text-[#40E0D0] font-mono tracking-wider block">My Gate Admission Passes (QR Tickets)</span>
               {userTickets.length === 0 ? (
                 <div className="text-center py-12 glass-panel border border-[#00ABAB]/30 rounded-2xl text-xs text-[#9CA3AF]">
-                  No active admission passes found for {effectiveEmail || 'search query'}.
+                  {effectiveEmail ? `No active admission passes found for ${effectiveEmail}.` : 'No admission passes found. Enter your email above to look up passes.'}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

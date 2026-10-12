@@ -11,7 +11,8 @@ import { BulkAddMenuModal } from './BulkAddMenuModal';
 import { 
   Plus, Edit, Trash2, Check, X, ShieldAlert, 
   Utensils, Clipboard, Package, ShoppingBag, 
-  Eye, TrendingUp, RefreshCw, CreditCard, Search, CheckCircle, Printer, Coffee
+  Eye, TrendingUp, RefreshCw, CreditCard, Search, CheckCircle, Printer, Coffee,
+  Receipt, Calendar, FileText, Download
 } from 'lucide-react';
 
 export const FoodVendorDashboard: React.FC = () => {
@@ -28,8 +29,8 @@ export const FoodVendorDashboard: React.FC = () => {
   // Find currently selected vendor details
   const currentVendor = vendors.find(v => v.id === selectedVendorId) || vendors[0];
 
-  // Active dashboard view (Default to 'pos' for Deuce Cafe Counter Billing)
-  const [vendorTab, setVendorTab] = useState<'pos' | 'orders' | 'menu' | 'inventory'>('pos');
+  // Active dashboard view (Default to 'pos' for Food Street Retail POS Billing)
+  const [vendorTab, setVendorTab] = useState<'pos' | 'history' | 'menu' | 'inventory'>('pos');
 
   // Staff POS Billing Cart state
   const [posCart, setPosCart] = useState<Array<{
@@ -43,9 +44,17 @@ export const FoodVendorDashboard: React.FC = () => {
   const [posSearch, setPosSearch] = useState('');
   const [posCategoryFilter, setPosCategoryFilter] = useState('all');
   const [posCustomerName, setPosCustomerName] = useState('Walk-in Guest');
+  const [posCustomerPhone, setPosCustomerPhone] = useState('');
   const [posCustomerEmail, setPosCustomerEmail] = useState('');
-  const [posPaymentMethod, setPosPaymentMethod] = useState<'cash' | 'upi' | 'card'>('upi');
+  const [posPaymentMethod, setPosPaymentMethod] = useState<'cash' | 'upi' | 'card'>('cash');
+  const [isPosSubmitting, setIsPosSubmitting] = useState(false);
   const [generatedBillOrder, setGeneratedBillOrder] = useState<FoodOrder | null>(null);
+
+  // Sales History filter states
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyDateFilter, setHistoryDateFilter] = useState('');
+  const [historyPaymentFilter, setHistoryPaymentFilter] = useState('all');
+  const [historyViewOrder, setHistoryViewOrder] = useState<FoodOrder | null>(null);
 
   // Form states for creating/editing menu items
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
@@ -140,30 +149,43 @@ export const FoodVendorDashboard: React.FC = () => {
     });
   };
 
-  const posCartTotal = posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const posSubtotal = Math.round(posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
+  const posGst = Math.round(posSubtotal * 0.05 * 100) / 100;
+  const posCgst = Math.round(posSubtotal * 0.025 * 100) / 100;
+  const posSgst = Math.round(posSubtotal * 0.025 * 100) / 100;
+  const posGrandTotal = Math.round((posSubtotal + posGst) * 100) / 100;
 
   const handleStaffGenerateBill = (e: React.FormEvent) => {
     e.preventDefault();
-    if (posCart.length === 0) return;
+    if (posCart.length === 0 || isPosSubmitting) return;
+    setIsPosSubmitting(true);
 
-    clearFoodCart();
-    posCart.forEach(item => {
-      const mItem = menuItems.find(m => m.id === item.menuItemId);
-      if (mItem) {
-        addToFoodCart(mItem, item.quantity);
-      }
-    });
+    try {
+      clearFoodCart();
+      posCart.forEach(item => {
+        const mItem = menuItems.find(m => m.id === item.menuItemId);
+        if (mItem) {
+          addToFoodCart(mItem, item.quantity);
+        }
+      });
 
-    const order = submitFoodOrder(
-      posCustomerName.trim() || 'Walk-in Guest',
-      posCustomerEmail.trim() || 'guest@deucepark.com',
-      posPaymentMethod
-    );
+      const order = submitFoodOrder({
+        customerName: posCustomerName.trim() || 'Walk-in Guest',
+        customerEmail: posCustomerEmail.trim() || 'guest@deucepark.com',
+        customerPhone: posCustomerPhone.trim() || undefined,
+        paymentMethod: posPaymentMethod
+      });
 
-    setGeneratedBillOrder(order);
-    setPosCart([]);
-    setPosCustomerName('Walk-in Guest');
-    setPosCustomerEmail('');
+      setGeneratedBillOrder(order);
+      setPosCart([]);
+      setPosCustomerName('Walk-in Guest');
+      setPosCustomerPhone('');
+      setPosCustomerEmail('');
+    } catch (err: any) {
+      alert(err.message || 'Failed to generate bill.');
+    } finally {
+      setIsPosSubmitting(false);
+    }
   };
 
   // -----------------------------------------------------------------
@@ -328,13 +350,13 @@ export const FoodVendorDashboard: React.FC = () => {
           <CreditCard className="h-4 w-4 text-[#14F1D9]" /> ☕ Counter Billing & POS
         </button>
         <button
-          id="btn-vendor-tab-orders"
-          onClick={() => setVendorTab('orders')}
+          id="btn-vendor-tab-history"
+          onClick={() => setVendorTab('history')}
           className={`px-4 py-2 border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
-            vendorTab === 'orders' ? 'border-teal-600 text-[#40E0D0] font-extrabold bg-[#0A0A0A] rounded-t-lg' : 'border-transparent text-[#9CA3AF] hover:text-[#FFFFFF]'
+            vendorTab === 'history' ? 'border-[#14F1D9] text-[#14F1D9] font-extrabold bg-[#0A0A0A] rounded-t-lg shadow-[0_-2px_10px_rgba(20,241,217,0.15)]' : 'border-transparent text-[#9CA3AF] hover:text-[#FFFFFF]'
           }`}
         >
-          <ShoppingBag className="h-4 w-4" /> Kitchen Order Queue ({stallOrders.filter(o => o.status !== 'delivered').length})
+          <Receipt className="h-4 w-4" /> 📋 Sales History & Reports ({stallOrders.length})
         </button>
         <button
           id="btn-vendor-tab-menu"
@@ -502,19 +524,8 @@ export const FoodVendorDashboard: React.FC = () => {
               )}
             </div>
 
-            {/* Customer details for receipt */}
+            {/* POS Billing & Payment Method Selection (No customer details required; token generated automatically) */}
             <form onSubmit={handleStaffGenerateBill} className="space-y-3 border-t border-white/10 pt-3">
-              <div>
-                <label className="block text-[9px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Customer Name</label>
-                <input 
-                  type="text" 
-                  value={posCustomerName}
-                  onChange={e => setPosCustomerName(e.target.value)}
-                  placeholder="Walk-in Guest"
-                  className="w-full bg-[#050816] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-[#14F1D9] focus:outline-none font-mono"
-                />
-              </div>
-
               <div>
                 <label className="block text-[9px] font-mono uppercase font-bold text-[#9CA3AF] mb-1">Payment Method</label>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -535,17 +546,32 @@ export const FoodVendorDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-white/10 flex justify-between items-center font-black">
-                <span className="text-xs text-[#9CA3AF]">Total Bill</span>
-                <span className="text-xl font-mono text-[#14F1D9]">₹{posCartTotal.toFixed(2)}</span>
+              {/* 5% GST Retail Tax Calculation Box */}
+              <div className="pt-2 border-t border-white/10 space-y-1 font-mono text-xs">
+                <div className="flex justify-between text-[#9CA3AF]">
+                  <span>Items Subtotal:</span>
+                  <span className="text-white font-bold">₹{posSubtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[#9CA3AF]">
+                  <span>CGST (2.5%):</span>
+                  <span className="text-[#14F1D9]">+₹{posCgst.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[#9CA3AF]">
+                  <span>SGST (2.5%):</span>
+                  <span className="text-[#14F1D9]">+₹{posSgst.toFixed(2)}</span>
+                </div>
+                <div className="pt-2 border-t border-white/10 flex justify-between items-center font-black">
+                  <span className="text-xs text-white uppercase tracking-wider">Final Payable:</span>
+                  <span className="text-2xl font-mono text-[#14F1D9] shadow-sm">₹{posGrandTotal.toFixed(2)}</span>
+                </div>
               </div>
 
               <button
                 type="submit"
-                disabled={posCart.length === 0}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40 cursor-pointer shadow-[0_0_20px_rgba(20,241,217,0.3)]"
+                disabled={posCart.length === 0 || isPosSubmitting}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#050816] font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-[0_0_20px_rgba(20,241,217,0.3)]"
               >
-                ⚡ Generate Bill & Print Receipt
+                {isPosSubmitting ? '⚡ Generating Bill...' : '⚡ Generate Bill & Print Receipt'}
               </button>
             </form>
           </div>
@@ -553,125 +579,243 @@ export const FoodVendorDashboard: React.FC = () => {
       )}
 
       {/* ----------------------------------------------------------------- */}
-      {/* A. ORDERS PANEL */}
+      {/* A. RETAIL SALES HISTORY & REPORTS PANEL */}
       {/* ----------------------------------------------------------------- */}
-      {vendorTab === 'orders' && (
+      {vendorTab === 'history' && (
         <div className="space-y-4 text-[#FFFFFF]">
-          <div className="flex justify-between items-center">
+          {/* Header & Controls */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
-              <h3 className="font-bold text-base text-[#FFFFFF] font-sans">Live Kitchen Order queue</h3>
-              <p className="text-xs text-[#9CA3AF] font-sans">Process orders through Preparing, Ready, and Handed over stages</p>
+              <h3 className="font-bold text-base text-[#FFFFFF] font-sans flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-[#14F1D9]" /> Food Street Sales History & Transaction Reports
+              </h3>
+              <p className="text-xs text-[#9CA3AF] font-sans">
+                Review previous invoices, filter by date, verify 5% GST calculations, and reprint receipts
+              </p>
             </div>
           </div>
 
-          {stallOrders.length === 0 ? (
-            <div className="text-center py-16 glass-panel border border-[#00ABAB]/30 rounded-2xl text-xs text-[#9CA3AF]">
-              <Clipboard className="h-8 w-8 mx-auto mb-2 text-slate-400" />
-              No customer orders recorded for this food stall.
+          {/* Search & Filters */}
+          <div className="glass-panel border border-[#00ABAB]/30 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+              <Search className="h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by invoice #, token, or customer name..."
+                value={historySearch}
+                onChange={e => setHistorySearch(e.target.value)}
+                className="w-full bg-[#050816] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#14F1D9] font-mono"
+              />
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {stallOrders.map(order => {
-                const isCompleted = order.status === 'delivered';
-                const stallItems = currentVendor ? order.items.filter(item => item.vendorId === currentVendor.id) : [];
-                const orderTotalForThisStall = stallItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
-                return (
-                  <div 
-                    key={order.id} 
-                    id={`vendor-order-card-${order.id}`}
-                    className={`glass-panel border rounded-2xl overflow-hidden  hover: transition-shadow flex flex-col justify-between ${
-                      order.status === 'pending'
-                        ? 'border-amber-400 ring-1 ring-amber-400/20'
-                        : order.status === 'preparing'
-                        ? 'border-[#3E8EDE] ring-1 ring-[#7DF9FF]/10'
-                        : order.status === 'ready'
-                        ? 'border-teal-600 ring-1 ring-teal-600/20'
-                        : 'border-[#00ABAB]/30'
-                    }`}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 bg-[#050816] border border-white/10 rounded-lg px-2.5 py-1">
+                <Calendar className="h-3.5 w-3.5 text-[#14F1D9]" />
+                <input
+                  type="date"
+                  value={historyDateFilter}
+                  onChange={e => setHistoryDateFilter(e.target.value)}
+                  className="bg-transparent text-xs text-white focus:outline-none font-mono"
+                />
+                {historyDateFilter && (
+                  <button
+                    onClick={() => setHistoryDateFilter('')}
+                    className="text-gray-400 hover:text-white text-[10px] ml-1"
                   >
-                    {/* Header */}
-                    <div className="p-4 bg-[#0A0A0A] border-b border-[#00ABAB]/30 flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm text-[#FFFFFF]">{order.id}</span>
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                            order.status === 'pending'
-                              ? 'bg-amber-100 text-amber-900 border border-amber-200 animate-pulse'
-                              : order.status === 'preparing'
-                              ? 'btn-glow text-[#0B0F14] border border-teal-700'
-                              : order.status === 'ready'
-                              ? 'bg-teal-100 text-[#40E0D0] border border-[#00ABAB]/30'
-                              : 'bg-neutral-100 text-neutral-500'
-                          }`}>
-                            {order.status}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-[#9CA3AF] font-mono mt-0.5">
-                          {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                      <div className="text-right text-xs">
-                        <span className="text-[10px] font-mono text-[#9CA3AF] block uppercase">Stall Share</span>
-                        <span className="font-bold text-[#FFFFFF] font-mono">₹{orderTotalForThisStall.toFixed(2)}</span>
-                      </div>
-                    </div>
+                    ✕
+                  </button>
+                )}
+              </div>
 
-                    {/* Items specific to this stall */}
-                    <div className="p-4 flex-1 space-y-2 border-b border-[#00ABAB]/30 glass-panel">
-                      <span className="text-[9px] font-bold uppercase text-[#9CA3AF] font-mono block">Items to Prepare:</span>
-                      {stallItems.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-xs font-semibold text-[#FFFFFF]">
-                          <span>{item.quantity}x {item.name}</span>
-                          <span className="font-mono text-[#9CA3AF]">₹{(item.price * item.quantity).toFixed(2)}</span>
+              <select
+                value={historyPaymentFilter}
+                onChange={e => setHistoryPaymentFilter(e.target.value)}
+                className="bg-[#050816] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none font-mono"
+              >
+                <option value="all">All Payment Methods</option>
+                <option value="cash">Cash</option>
+                <option value="upi">UPI</option>
+                <option value="card">Card</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Sales Summary KPI Ribbon */}
+          {(() => {
+            const relevantOrders = stallOrders.filter(o => {
+              const matchesSearch = !historySearch || 
+                (o.invoiceNumber && o.invoiceNumber.toLowerCase().includes(historySearch.toLowerCase())) ||
+                o.id.toLowerCase().includes(historySearch.toLowerCase()) ||
+                (o.tokenNumber && String(o.tokenNumber).toLowerCase().includes(historySearch.toLowerCase())) ||
+                o.customerName.toLowerCase().includes(historySearch.toLowerCase());
+              
+              const matchesDate = !historyDateFilter || o.createdAt.startsWith(historyDateFilter);
+              const matchesPayment = historyPaymentFilter === 'all' || (o.paymentMethod || 'cash') === historyPaymentFilter;
+              return matchesSearch && matchesDate && matchesPayment;
+            });
+
+            const totalGross = relevantOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+            const totalTax = relevantOrders.reduce((sum, o) => {
+              if (o.taxAmount != null) return sum + o.taxAmount;
+              // Historical fallback 5% if not recorded
+              return sum + Math.round((o.totalAmount - (o.totalAmount / 1.05)) * 100) / 100;
+            }, 0);
+            const totalSubtotal = Math.round((totalGross - totalTax) * 100) / 100;
+
+            // Item-wise sales aggregation
+            const itemMap = new Map<string, { name: string; qty: number; sales: number }>();
+            relevantOrders.forEach(o => {
+              o.items.forEach(it => {
+                if (currentVendor && it.vendorId !== currentVendor.id && currentVendor.id !== 'all') return;
+                const existing = itemMap.get(it.name) || { name: it.name, qty: 0, sales: 0 };
+                existing.qty += it.quantity;
+                existing.sales += (it.price * it.quantity);
+                itemMap.set(it.name, existing);
+              });
+            });
+            const topItems = Array.from(itemMap.values()).sort((a, b) => b.qty - a.qty);
+
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3 glass-panel border border-[#00ABAB]/30 rounded-xl space-y-0.5">
+                    <span className="text-[10px] text-[#9CA3AF] font-bold uppercase font-mono block">Invoices Filtered</span>
+                    <div className="text-lg font-bold text-white font-mono">{relevantOrders.length}</div>
+                  </div>
+                  <div className="p-3 glass-panel border border-[#00ABAB]/30 rounded-xl space-y-0.5">
+                    <span className="text-[10px] text-[#9CA3AF] font-bold uppercase font-mono block">Taxable Subtotal</span>
+                    <div className="text-lg font-bold text-white font-mono">₹{totalSubtotal.toFixed(2)}</div>
+                  </div>
+                  <div className="p-3 glass-panel border border-[#00ABAB]/30 rounded-xl space-y-0.5">
+                    <span className="text-[10px] text-[#9CA3AF] font-bold uppercase font-mono block">5% GST Collected</span>
+                    <div className="text-lg font-bold text-[#14F1D9] font-mono">₹{totalTax.toFixed(2)}</div>
+                  </div>
+                  <div className="p-3 glass-panel border border-[#00ABAB]/30 rounded-xl space-y-0.5">
+                    <span className="text-[10px] text-[#9CA3AF] font-bold uppercase font-mono block">Grand Total Sales</span>
+                    <div className="text-lg font-extrabold text-[#14F1D9] font-mono">₹{totalGross.toFixed(2)}</div>
+                  </div>
+                </div>
+
+                {/* Item-wise Sales Mini Breakdown */}
+                {topItems.length > 0 && (
+                  <div className="p-3.5 glass-panel border border-[#00ABAB]/30 rounded-xl space-y-2">
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-[#9CA3AF] uppercase font-mono text-[10px]">Item-Wise Sales Summary</span>
+                      <span className="text-gray-400 font-mono text-[10px]">{topItems.length} unique items sold</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1 max-h-32 overflow-y-auto">
+                      {topItems.map((ti, idx) => (
+                        <div key={idx} className="bg-[#050816] border border-white/10 px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-2">
+                          <span className="text-white font-bold">{ti.name}</span>
+                          <span className="bg-[#14F1D9]/20 text-[#14F1D9] px-1.5 py-0.5 rounded text-[10px] font-bold">{ti.qty} sold</span>
+                          <span className="text-gray-400">₹{ti.sales.toFixed(2)}</span>
                         </div>
                       ))}
-
-                      <div className="border-t border-dashed border-[#00ABAB]/30 pt-2 text-[10px] text-[#9CA3AF] font-sans">
-                        Billed To: <strong className="text-[#FFFFFF] font-sans">{order.customerName}</strong> ({order.customerEmail})
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="p-3 bg-[#0A0A0A] flex justify-end gap-2 text-xs font-bold">
-                      {order.status === 'pending' && (
-                        <button
-                          id={`btn-vendor-prepare-${order.id}`}
-                          onClick={() => updateOrderStatus(order.id, 'preparing')}
-                          className="w-full py-1.5 rounded-lg btn-3d-primary text-[#0B0F14] font-bold cursor-pointer"
-                        >
-                          Start Preparing
-                        </button>
-                      )}
-                      {order.status === 'preparing' && (
-                        <button
-                          id={`btn-vendor-ready-${order.id}`}
-                          onClick={() => updateOrderStatus(order.id, 'ready')}
-                          className="w-full py-1.5 rounded-lg btn-3d-success text-[#0B0F14] font-bold cursor-pointer"
-                        >
-                          Mark as Ready
-                        </button>
-                      )}
-                      {order.status === 'ready' && (
-                        <button
-                          id={`btn-vendor-deliver-${order.id}`}
-                          onClick={() => updateOrderStatus(order.id, 'delivered')}
-                          className="w-full py-1.5 rounded-lg btn-3d-primary text-[#0B0F14] font-bold cursor-pointer"
-                        >
-                          Hand Over / Deliver
-                        </button>
-                      )}
-                      {isCompleted && (
-                        <div className="w-full text-center text-[#40E0D0] font-mono text-[11px] py-1 font-extrabold">
-                          âœ“ Successfully Handed Over
-                        </div>
-                      )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                )}
+
+                {/* Invoices Table */}
+                {relevantOrders.length === 0 ? (
+                  <div className="text-center py-12 glass-panel border border-[#00ABAB]/30 rounded-2xl text-xs text-[#9CA3AF]">
+                    <FileText className="h-8 w-8 mx-auto mb-2 text-slate-500" />
+                    No sales invoices found matching the current filter.
+                  </div>
+                ) : (
+                  <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs font-mono">
+                        <thead className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] uppercase text-[10px]">
+                          <tr>
+                            <th className="p-3">Invoice / Token</th>
+                            <th className="p-3">Date & Time</th>
+                            <th className="p-3">Customer</th>
+                            <th className="p-3">Items Sold</th>
+                            <th className="p-3 text-right">Subtotal</th>
+                            <th className="p-3 text-right">5% GST</th>
+                            <th className="p-3 text-right">Grand Total</th>
+                            <th className="p-3">Payment</th>
+                            <th className="p-3 text-center">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {relevantOrders.map(order => {
+                            const sub = order.subtotal != null 
+                              ? order.subtotal 
+                              : Math.round((order.totalAmount / 1.05) * 100) / 100;
+                            const gst = order.taxAmount != null 
+                              ? order.taxAmount 
+                              : Math.round((order.totalAmount - sub) * 100) / 100;
+
+                            return (
+                              <tr key={order.id} className="hover:bg-white/5 transition-colors">
+                                <td className="p-3">
+                                  <div className="font-bold text-white">{order.invoiceNumber || order.id}</div>
+                                  <div className="text-[10px] text-[#9CA3AF]">{order.tokenNumber ? `Token #${order.tokenNumber}` : order.id}</div>
+                                </td>
+                                <td className="p-3 text-[#9CA3AF]">
+                                  <div>{new Date(order.createdAt).toLocaleDateString()}</div>
+                                  <div className="text-[10px]">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                </td>
+                                <td className="p-3">
+                                  <div className="text-white font-semibold">{order.customerName}</div>
+                                  {order.customerPhone && <div className="text-[10px] text-[#9CA3AF]">{order.customerPhone}</div>}
+                                </td>
+                                <td className="p-3 text-white max-w-[200px]">
+                                  <div className="truncate">
+                                    {order.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}
+                                  </div>
+                                  <div className="text-[10px] text-[#9CA3AF]">{order.items.reduce((s, i) => s + i.quantity, 0)} items total</div>
+                                </td>
+                                <td className="p-3 text-right text-[#9CA3AF]">₹{sub.toFixed(2)}</td>
+                                <td className="p-3 text-right text-[#14F1D9]">₹{gst.toFixed(2)}</td>
+                                <td className="p-3 text-right font-bold text-white">₹{order.totalAmount.toFixed(2)}</td>
+                                <td className="p-3">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-white/10 text-white">
+                                    {order.paymentMethod || 'CASH'}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-center">
+                                  <button
+                                    onClick={() => {
+                                      printTicket({
+                                        receiptId: order.invoiceNumber || order.id,
+                                        tokenNumber: order.tokenNumber || order.id,
+                                        activityName: 'DEUCE FOOD & BEVERAGES',
+                                        packageName: 'Food Street Dining',
+                                        customerName: order.customerName,
+                                        customerPhone: order.customerPhone,
+                                        date: new Date(order.createdAt).toISOString(),
+                                        slot: 'FOOD COUNTER',
+                                        items: order.items.map(i => ({ 
+                                          label: `${i.quantity}x ${i.name}`, 
+                                          value: `₹${(i.price * i.quantity).toFixed(2)}` 
+                                        })),
+                                        subtotalAmount: order.subtotal != null ? order.subtotal : sub,
+                                        totalAmount: order.totalAmount,
+                                        paymentStatus: 'paid',
+                                        quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
+                                        paymentMethod: (order.paymentMethod || 'CASH').toUpperCase(),
+                                        counterStaff: 'Food Street POS'
+                                      });
+                                    }}
+                                    className="p-1.5 rounded-lg bg-[#14F1D9]/20 hover:bg-[#14F1D9] text-[#14F1D9] hover:text-[#050816] transition-all cursor-pointer font-bold inline-flex items-center gap-1 text-[10px]"
+                                    title="Reprint Invoice Receipt"
+                                  >
+                                    <Printer className="w-3.5 h-3.5" /> Reprint
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1385,10 +1529,10 @@ export const FoodVendorDashboard: React.FC = () => {
           <div className="glass-panel w-full max-w-sm p-6 rounded-3xl border border-[#14F1D9]/40 relative bg-[#050816] text-center font-sans shadow-[0_0_40px_rgba(20,241,217,0.2)]">
             <CheckCircle className="w-12 h-12 text-[#14F1D9] mx-auto mb-2" />
             <h3 className="text-xl font-black text-white uppercase tracking-tight">Bill Generated!</h3>
-            <p className="text-xs text-[#9CA3AF]">Kitchen Order Token: <span className="font-mono text-[#14F1D9] font-bold">{generatedBillOrder.id}</span></p>
+            <p className="text-xs text-[#9CA3AF]">Token No: <span className="font-mono text-[#14F1D9] font-black text-base">#{generatedBillOrder.tokenNumber || generatedBillOrder.id}</span></p>
 
             <div className="my-4 p-4 bg-[#0B1120] border border-white/10 rounded-2xl text-left text-xs font-mono space-y-1.5">
-              <div className="flex justify-between text-[#9CA3AF]"><span>Customer:</span> <span className="text-white font-bold">{generatedBillOrder.customerName}</span></div>
+              <div className="flex justify-between text-[#9CA3AF]"><span>Invoice #:</span> <span className="text-white font-bold">{generatedBillOrder.invoiceNumber || generatedBillOrder.id}</span></div>
               <div className="flex justify-between text-[#9CA3AF]"><span>Time:</span> <span className="text-white">{new Date(generatedBillOrder.createdAt).toLocaleTimeString()}</span></div>
               <div className="border-t border-white/10 my-2 pt-2 space-y-1">
                 {generatedBillOrder.items.map((item, idx) => (
@@ -1398,9 +1542,19 @@ export const FoodVendorDashboard: React.FC = () => {
                   </div>
                 ))}
               </div>
-              <div className="border-t border-white/10 pt-2 flex justify-between font-black text-sm text-[#14F1D9]">
-                <span>TOTAL PAID:</span>
-                <span>₹{generatedBillOrder.totalAmount.toFixed(2)}</span>
+              <div className="border-t border-white/10 pt-2 space-y-1 text-xs">
+                <div className="flex justify-between text-[#9CA3AF]">
+                  <span>Subtotal:</span>
+                  <span className="text-white">₹{(generatedBillOrder.subtotal != null ? generatedBillOrder.subtotal : (generatedBillOrder.totalAmount / 1.05)).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[#9CA3AF]">
+                  <span>GST (5%):</span>
+                  <span className="text-[#14F1D9]">+₹{(generatedBillOrder.taxAmount != null ? generatedBillOrder.taxAmount : (generatedBillOrder.totalAmount - (generatedBillOrder.totalAmount / 1.05))).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-black text-sm text-[#14F1D9] pt-1 border-t border-white/10">
+                  <span>TOTAL PAID:</span>
+                  <span>₹{generatedBillOrder.totalAmount.toFixed(2)}</span>
+                </div>
               </div>
             </div>
 
@@ -1410,19 +1564,21 @@ export const FoodVendorDashboard: React.FC = () => {
                 onClick={() => {
                   if (generatedBillOrder) {
                     printTicket({
-                      receiptId: `KOT-${generatedBillOrder.id}`,
-                      tokenNumber: generatedBillOrder.id,
+                      receiptId: generatedBillOrder.invoiceNumber || generatedBillOrder.id,
+                      tokenNumber: generatedBillOrder.tokenNumber || generatedBillOrder.id,
                       activityName: 'DEUCE FOOD & BEVERAGES',
+                      packageName: 'Food Street Dining',
                       customerName: generatedBillOrder.customerName,
                       customerPhone: generatedBillOrder.customerPhone,
                       date: new Date(generatedBillOrder.createdAt).toISOString(),
                       slot: 'FOOD COUNTER',
                       items: generatedBillOrder.items.map(i => ({ label: `${i.quantity}x ${i.name}`, value: `₹${(i.price * i.quantity).toFixed(2)}` })),
+                      subtotalAmount: generatedBillOrder.subtotal != null ? generatedBillOrder.subtotal : Math.round((generatedBillOrder.totalAmount / 1.05) * 100) / 100,
                       totalAmount: generatedBillOrder.totalAmount,
                       paymentStatus: 'paid',
                       quantity: generatedBillOrder.items.reduce((sum, item) => sum + item.quantity, 0),
-                      paymentMethod: 'CASH',
-                      counterStaff: 'Cafe Counter'
+                      paymentMethod: (generatedBillOrder.paymentMethod || 'CASH').toUpperCase(),
+                      counterStaff: 'Food Street POS'
                     });
                   }
                 }}

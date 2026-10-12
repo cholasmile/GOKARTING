@@ -179,9 +179,17 @@ export interface FoodOrder {
   customerName: string; customerPhone?: string;
   customerEmail: string;
   items: FoodOrderItem[];
+  subtotal?: number;
+  taxRate?: number;
+  taxAmount?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
   totalAmount: number;
   status: OrderStatus;
   paymentStatus: 'pending' | 'paid';
+  invoiceNumber?: string;
+  tokenNumber?: string | number;
+  paymentMethod?: 'cash' | 'upi' | 'card' | 'net_banking';
   createdAt: string;
   organizationId?: string;
   updatedAt?: string;

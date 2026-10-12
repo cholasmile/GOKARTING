@@ -275,7 +275,26 @@ const synthesizePayments = (currentPayments: Payment[], currentBookings: Booking
 
   currentPayments.forEach(p => {
     const key = p.bookingId ? `b_${p.bookingId}` : p.orderId ? `o_${p.orderId}` : p.id;
-    paymentMap.set(key, p);
+    let enriched = { ...p };
+    if (!enriched.counterId) {
+      enriched.counterId = 'counter_1';
+    }
+    if (enriched.bookingId) {
+      const b = currentBookings.find(bk => bk.id === enriched.bookingId);
+      if (b) {
+        if (!enriched.customerName || enriched.customerName === 'Guest') enriched.customerName = b.customerName;
+        if (!enriched.customerPhone) enriched.customerPhone = b.customerPhone;
+        if (!enriched.activityName) enriched.activityName = b.activityName;
+      }
+    } else if (enriched.orderId) {
+      const o = currentOrders.find(ord => ord.id === enriched.orderId);
+      if (o) {
+        if (!enriched.customerName || enriched.customerName === 'Guest') enriched.customerName = o.customerName;
+        if (!enriched.customerPhone && o.customerPhone) enriched.customerPhone = o.customerPhone;
+        if (!enriched.activityName) enriched.activityName = 'Food Street Dining';
+      }
+    }
+    paymentMap.set(key, enriched);
   });
 
   currentBookings.forEach(b => {
@@ -320,16 +339,17 @@ const synthesizePayments = (currentPayments: Payment[], currentBookings: Booking
         id: `pay-${o.id}`,
         orderId: o.id,
         amount: o.totalAmount,
-        method: 'cash',
+        method: (o.paymentMethod || 'cash') as any,
         status: 'success',
         transactionId: `TX-${o.id}`,
         timestamp: o.createdAt || new Date().toISOString(),
-        invoice_id: `INV-O-${o.id}`,
+        invoice_id: o.invoiceNumber || `INV-O-${o.id}`,
         customer_id: o.customerEmail,
         currency: 'INR',
-        payment_method: 'CASH',
+        payment_method: (o.paymentMethod || 'cash').toUpperCase(),
         payment_status: 'PAID',
         customerName: o.customerName,
+        customerPhone: o.customerPhone,
         activityName: 'Food Street Dining',
         counterId: 'counter_1'
       };
@@ -2509,7 +2529,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const orderId = generateOfflineId('ord');
     const txId = generateOfflineId('tx');
     const timestamp = new Date().toISOString();
-    const totalAmount = foodCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const todayStr = timestamp.split('T')[0];
+
+    // Daily sequential token number: 101, 102, 103...
+    const todayFoodOrdersCount = orders.filter(o => o.createdAt && o.createdAt.startsWith(todayStr)).length;
+    const tokenNumber = 101 + todayFoodOrdersCount;
+    // 5% GST calculation for Food Street
+    const subtotal = Math.round(foodCart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
+    const taxRate = 0.05;
+    const taxAmount = Math.round(subtotal * 0.05 * 100) / 100;
+    const cgstAmount = Math.round(subtotal * 0.025 * 100) / 100;
+    const sgstAmount = Math.round(subtotal * 0.025 * 100) / 100;
+    const totalAmount = Math.round((subtotal + taxAmount) * 100) / 100;
+    const invoiceNumber = `INV-FS-${Date.now().toString().slice(-6)}`;
 
     const newOrder: FoodOrder = {
       id: orderId,
@@ -2517,9 +2549,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       customerEmail: finalEmail,
       customerPhone: finalPhone,
       items: [...foodCart],
+      subtotal,
+      taxRate,
+      taxAmount,
+      cgstAmount,
+      sgstAmount,
       totalAmount,
-      status: 'pending',
+      status: 'delivered',
       paymentStatus: 'paid',
+      invoiceNumber,
+      tokenNumber,
+      paymentMethod: finalMethod,
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -2533,7 +2573,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       transactionId: txId,
       timestamp,
       created_at: timestamp,
-      updated_at: timestamp
+      updated_at: timestamp,
+      invoice_id: invoiceNumber,
+      customer_id: finalEmail,
+      currency: 'INR',
+      payment_method: String(finalMethod).toUpperCase(),
+      payment_status: 'PAID',
+      customerName: finalName,
+      customerPhone: finalPhone,
+      activityName: 'Food Street Dining',
+      counterId: 'counter_1'
     };
 
     setOrders(prev => [newOrder, ...prev]);

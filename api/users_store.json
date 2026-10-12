@@ -3,19 +3,19 @@
     "id": "usr-g-1791514924823",
     "name": "Admin Boss Brenda",
     "email": "admin.leader@deucepark.com",
-    "role": "customer",
+    "role": "super_admin",
     "organizationId": "org_deuce_default",
     "createdAt": "2026-10-09T03:02:04.823Z",
-    "updatedAt": "2026-10-09T03:02:51.566Z"
+    "updatedAt": "2026-10-12T02:24:21.557Z"
   },
   {
     "id": "usr-g-1791514924808",
     "name": "Counter Staff Alex",
     "email": "counter.staff@deucepark.com",
-    "role": "customer",
+    "role": "ticket_counter_staff",
     "organizationId": "org_deuce_default",
     "createdAt": "2026-10-09T03:02:04.808Z",
-    "updatedAt": "2026-10-09T03:02:51.555Z"
+    "updatedAt": "2026-10-12T02:24:21.577Z"
   },
   {
     "id": "user-1",

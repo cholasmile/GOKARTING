@@ -47,12 +47,29 @@ export function printTicket(opts: PrintTicketOptions) {
 
   const displayPackage = packageName || (items.length > 0 && items[0].label !== activityName ? items[0].label : 'Standard Package');
 
-  const netTaxable = Math.round((totalAmount / 1.18) * 100) / 100;
-  const sgst = Math.round(((totalAmount - netTaxable) / 2) * 100) / 100;
-  const cgst = Math.round(((totalAmount - netTaxable) / 2) * 100) / 100;
+  const isFood = activityName.toLowerCase().includes('food') || 
+                 activityName.toLowerCase().includes('cafe') || 
+                 activityName.toLowerCase().includes('dining') ||
+                 activityName.toLowerCase().includes('beverage') ||
+                 receiptId.startsWith('INV-FS-') ||
+                 receiptId.startsWith('KOT-') || 
+                 receiptId.startsWith('ord') ||
+                 slot === 'FOOD COUNTER' ||
+                 slot === 'CAFE COUNTER' ||
+                 slot === 'Counter POS';
+
+  // 5% GST specifically for Food Street (2.5% CGST + 2.5% SGST); 18% standard for non-food activities (9% CGST + 9% SGST)
+  const gstDivisor = isFood ? 1.05 : 1.18;
+  const netTaxable = subtotalAmount != null 
+    ? subtotalAmount 
+    : Math.round((totalAmount / gstDivisor) * 100) / 100;
+  const taxDiff = Math.max(0, Math.round((totalAmount - netTaxable) * 100) / 100);
+  const sgst = Math.round((taxDiff / 2) * 100) / 100;
+  const cgst = Math.round((taxDiff - sgst) * 100) / 100;
   const totalGst = sgst + cgst;
   const baseSubtotal = subtotalAmount != null ? subtotalAmount : (totalAmount + discountAmount);
   const grandTotal = totalAmount;
+  const gstRateText = isFood ? '2.5%' : '9%';
 
   const now = new Date().toLocaleString('en-IN', {
     day: '2-digit',
@@ -93,16 +110,6 @@ export function printTicket(opts: PrintTicketOptions) {
   const itemRows = items.length > 0 
     ? items.map(it => `<tr><td class="td-name">${it.label}</td><td class="td-val">${it.value}</td></tr>`).join('')
     : `<tr><td class="td-name">${activityName} (${quantity} Pax)</td><td class="td-val">₹${netTaxable.toFixed(2)}</td></tr>`;
-
-  const isFood = activityName.toLowerCase().includes('food') || 
-                 activityName.toLowerCase().includes('cafe') || 
-                 activityName.toLowerCase().includes('dining') ||
-                 activityName.toLowerCase().includes('beverage') ||
-                 receiptId.startsWith('KOT-') || 
-                 receiptId.startsWith('ord') ||
-                 slot === 'FOOD COUNTER' ||
-                 slot === 'CAFE COUNTER' ||
-                 slot === 'Counter POS';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -317,7 +324,12 @@ export function printTicket(opts: PrintTicketOptions) {
         </div>
       </div>
 
-      ${!isFood ? `
+      ${isFood ? `
+      <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 5px 0; margin: 5px 0; text-align: center;">
+        <div style="font-size: 13px; font-weight: 800; letter-spacing: 0.5px;">TOKEN NO: <span style="font-size: 16px;">${token}</span></div>
+        <div style="font-size: 10px; font-weight: 700; margin-top: 2px;">INVOICE: ${receiptId} &bull; ${visitDate}</div>
+      </div>
+      ` : `
       <div class="info-bar">
         <span>TOKEN: <strong>${token}</strong></span>
         <span class="status-tag ${statusBadgeClass}">${statusText}</span>
@@ -337,7 +349,7 @@ export function printTicket(opts: PrintTicketOptions) {
           ${qrSvg}
         </div>
       </div>
-      ` : ''}
+      `}
 
       <!-- Menu Items and Price Table -->
       <table class="items-table">
@@ -359,8 +371,8 @@ export function printTicket(opts: PrintTicketOptions) {
       <!-- Base Amount, SGST and CGST in one line -->
       <div style="font-size: 10px; font-weight: 700; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0; margin: 4px 0; display: flex; justify-content: space-between; text-align: center;">
         <span>Base: ₹${netTaxable.toFixed(2)}</span>
-        <span>SGST (9%): ₹${sgst.toFixed(2)}</span>
-        <span>CGST (9%): ₹${cgst.toFixed(2)}</span>
+        <span>SGST (${gstRateText}): ₹${sgst.toFixed(2)}</span>
+        <span>CGST (${gstRateText}): ₹${cgst.toFixed(2)}</span>
       </div>
 
       <div class="summary-box">

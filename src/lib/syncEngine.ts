@@ -51,6 +51,19 @@ export const TABLE_MAP_TO_SUPABASE: Record<string, string> = {
   'inventory': 'inventory'
 };
 
+export const SUPABASE_COLUMNS: Record<string, string[]> = {
+  'bookings': ['id', 'customerName', 'customerEmail', 'activityId', 'activityName', 'date', 'timeSlot', 'ticketType', 'details', 'quantity', 'totalAmount', 'paymentStatus', 'bookingDate'],
+  'tickets': ['id', 'bookingId', 'customerName', 'customerEmail', 'activityId', 'activityName', 'date', 'timeSlot', 'ticketType', 'quantity', 'qrCodeValue', 'status'],
+  'payments': ['id', 'orderId', 'bookingId', 'amount', 'method', 'status', 'transactionId', 'timestamp'],
+  'food_orders': ['id', 'customerName', 'customerEmail', 'items', 'totalAmount', 'status', 'paymentMethod', 'createdAt'],
+  'users': ['id', 'name', 'email', 'role', 'department'],
+  'activities': ['id', 'name', 'description', 'adultPrice', 'childPrice', 'image', 'dailyLimit', 'safetyInstructions', 'packages', 'type'],
+  'food_vendors': ['id', 'name', 'type', 'image', 'ownerName', 'stallNumber'],
+  'menu_items': ['id', 'vendorId', 'name', 'description', 'price', 'category', 'isAvailable', 'image'],
+  'inventory': ['id', 'vendorId', 'name', 'currentStock', 'minStockLevel', 'unit'],
+  'notifications': ['id', 'recipient', 'title', 'body', 'timestamp', 'channel', 'read']
+};
+
 // Dependency order: push parent tables before dependent foreign-key children
 const TABLE_DEPENDENCY_ORDER: string[] = [
   'users',
@@ -315,7 +328,7 @@ class SyncEngine {
 
   private async handleIncomingRealtimePayload(payload: any) {
     const { table, eventType, new: newRecord, old: oldRecord } = payload;
-    const record = newRecord && Object.keys(newRecord).length > 0 ? newRecord : oldRecord;
+    const record = (newRecord && Object.keys(newRecord).length > 0 ? newRecord : oldRecord) || payload.record;
 
     if (!table || !record) return;
 
@@ -543,8 +556,19 @@ class SyncEngine {
                 }
               }
             } else {
-              // Upsert operation
-              const { error } = await supabase.from(targetTable).upsert([item.payload], { onConflict: 'id' });
+              // Upsert operation: sanitize columns for Supabase schema to prevent unknown column rejections
+              const targetCols = SUPABASE_COLUMNS[targetTable];
+              let payloadToUpsert = item.payload;
+              if (targetCols && Array.isArray(targetCols) && item.payload && typeof item.payload === 'object') {
+                payloadToUpsert = {};
+                for (const col of targetCols) {
+                  if (item.payload[col] !== undefined) {
+                    payloadToUpsert[col] = item.payload[col];
+                  }
+                }
+              }
+
+              const { error } = await supabase.from(targetTable).upsert([payloadToUpsert], { onConflict: 'id' });
               if (!error) {
                 itemSuccess = true;
               } else {

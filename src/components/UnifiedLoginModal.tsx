@@ -183,13 +183,14 @@ export const UnifiedLoginModal: React.FC<UnifiedLoginModalProps> = ({
           authUser = existing;
         } else {
           let role: UserRole = 'customer';
-          if (cleanEmail.includes('admin')) role = 'super_admin';
-          else if (cleanEmail.includes('kartingmanager')) role = 'go_karting_manager';
+          if (cleanEmail.includes('admin') || cleanEmail.includes('director') || cleanEmail.includes('leader')) role = 'super_admin';
+          else if (cleanEmail.includes('kartingmanager') || cleanEmail.includes('karting_manager')) role = 'go_karting_manager';
           else if (cleanEmail.includes('karting')) role = 'go_karting_staff';
-          else if (cleanEmail.includes('ticketing')) role = 'ticket_counter_staff';
+          else if (cleanEmail.includes('ticketing') || cleanEmail.includes('counter') || cleanEmail.includes('ticket')) role = 'ticket_counter_staff';
           else if (cleanEmail.includes('horse')) role = 'horse_riding_staff';
           else if (cleanEmail.includes('shooting')) role = 'shooting_staff';
           else if (cleanEmail.includes('cafe') || cleanEmail.includes('vendor')) role = 'food_vendor';
+          else if (cleanEmail.includes('staff') || cleanEmail.endsWith('@deucepark.com') || cleanEmail.endsWith('@adventurepark.com')) role = 'activity_staff';
 
           authUser = {
             id: `usr-g-${Date.now()}`,

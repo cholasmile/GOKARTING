@@ -194,17 +194,20 @@ const TicketingDashboard: React.FC = () => {
     }
   };
 
+  const [isSubmittingFood, setIsSubmittingFood] = useState(false);
+
   const handleProcessFoodOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    if (foodCart.length === 0) return;
+    if (foodCart.length === 0 || isSubmittingFood) return;
+    setIsSubmittingFood(true);
     try {
       const order = submitFoodOrder(foodCustomerName, foodCustomerEmail, foodPaymentMethod);
       setFoodOrderSuccess(order);
 
-      // Print Receipt
+      // Print Receipt with 5% GST breakdown
       printTicket({
-        receiptId: order.id,
-        tokenNumber: order.id,
+        receiptId: order.invoiceNumber || order.id,
+        tokenNumber: order.tokenNumber || order.id,
         activityName: 'DEUCE FOOD & BEVERAGES',
         packageName: 'Food Street Dining',
         customerName: foodCustomerName,
@@ -212,6 +215,7 @@ const TicketingDashboard: React.FC = () => {
         date: new Date().toISOString().split('T')[0],
         slot: 'FOOD COUNTER',
         items: order.items.map(i => ({ label: `${i.quantity}x ${i.name}`, value: `₹${(i.price * i.quantity).toFixed(2)}` })),
+        subtotalAmount: order.subtotal,
         totalAmount: order.totalAmount,
         paymentStatus: 'paid',
         quantity: order.items.reduce((s, i) => s + i.quantity, 0),
@@ -221,6 +225,8 @@ const TicketingDashboard: React.FC = () => {
       clearFoodCart();
     } catch (err: any) {
       alert(err.message || 'Failed to submit food order.');
+    } finally {
+      setIsSubmittingFood(false);
     }
   };
 
@@ -233,7 +239,7 @@ const TicketingDashboard: React.FC = () => {
 
   // ── Unified Today's Counter & Food Ledger ─────────────────────────────
   const filteredRawPayments = payments.filter(p => {
-    const isCounter = p.counterId === 'counter_1' || p.staffId || p.method === 'cash' || p.method === 'qrcode' || p.method === 'upi' || p.method.startsWith('card') || p.orderId;
+    const isCounter = p.counterId === 'counter_1' || p.staffId || p.method === 'cash' || p.method === 'qrcode' || p.method === 'upi' || (p.method && p.method.startsWith('card')) || p.orderId || p.bookingId;
     if (!isCounter) return false;
 
     // Show strictly CURRENT DAY history only on the ticketing page
@@ -285,7 +291,7 @@ const TicketingDashboard: React.FC = () => {
 
   // Today-specific all counter payments for analytics KPI strip
   const todayAllCounterPayments = payments.filter(p => {
-    const isCounter = p.counterId === 'counter_1' || p.staffId || p.method === 'cash' || p.method === 'qrcode' || p.method === 'upi' || p.method.startsWith('card') || p.orderId;
+    const isCounter = p.counterId === 'counter_1' || p.staffId || p.method === 'cash' || p.method === 'qrcode' || p.method === 'upi' || (p.method && p.method.startsWith('card')) || p.orderId || p.bookingId;
     return isCounter && (p.status === 'paid' || p.status === 'success') && isDateToday(p.timestamp);
   });
 
@@ -648,18 +654,8 @@ const TicketingDashboard: React.FC = () => {
                 )}
               </div>
 
-              {/* Form & Settlement */}
+              {/* Form & Settlement (Token generated automatically, no customer details required) */}
               <form onSubmit={handleProcessFoodOrder} className="space-y-3 pt-3 border-t border-[#1C1C1C]">
-                <div>
-                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Guest Name</label>
-                  <input
-                    type="text"
-                    value={foodCustomerName}
-                    onChange={e => setFoodCustomerName(e.target.value)}
-                    className="w-full bg-[#1C1C1C] border border-[#1C1C1C] rounded-xl px-3 py-2 text-xs text-white focus:border-[#00ABAB] focus:outline-none"
-                  />
-                </div>
-
                 <div>
                   <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Payment Method</label>
                   <div className="grid grid-cols-3 gap-2">
@@ -680,19 +676,36 @@ const TicketingDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center pt-2">
-                  <span className="text-xs font-mono text-[#94A3B8] uppercase">Total Bill</span>
-                  <span className="text-2xl font-black font-mono text-[#00ABAB]">
-                    ₹{foodCart.reduce((s, i) => s + (i.price * i.quantity), 0).toFixed(2)}
-                  </span>
-                </div>
+                {(() => {
+                  const foodSubtotal = foodCart.reduce((s, i) => s + (i.price * i.quantity), 0);
+                  const foodGst = Math.round(foodSubtotal * 0.05 * 100) / 100;
+                  const foodGrandTotal = Math.round((foodSubtotal + foodGst) * 100) / 100;
+                  return (
+                    <div className="space-y-1.5 pt-2 border-t border-[#1C1C1C] text-xs font-mono">
+                      <div className="flex justify-between text-[#94A3B8]">
+                        <span>Subtotal:</span>
+                        <span>₹{foodSubtotal.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-[#94A3B8]">
+                        <span>GST (5%):</span>
+                        <span className="text-[#00ABAB]">+₹{foodGst.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center pt-1 border-t border-white/10 font-bold">
+                        <span className="text-xs uppercase text-white">Grand Total:</span>
+                        <span className="text-xl font-black font-mono text-[#00ABAB]">
+                          ₹{foodGrandTotal.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <button
                   type="submit"
-                  disabled={foodCart.length === 0}
+                  disabled={foodCart.length === 0 || isSubmittingFood}
                   className="w-full py-3 rounded-xl bg-[#00ABAB] hover:bg-[#00ABAB]/80 text-black font-black text-xs uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  Process & Print Receipt
+                  {isSubmittingFood ? 'Processing...' : 'Process & Print Receipt'}
                 </button>
               </form>
             </div>

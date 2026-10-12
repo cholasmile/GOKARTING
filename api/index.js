@@ -808,9 +808,32 @@ app.post('/api/auth/google', (req, res) => {
     const usersList = usersStore.get();
     let existingUser = usersList.find(u => u.email && u.email.toLowerCase() === cleanEmail);
 
+    // Determine role based on email or existing user
+    let role = existingUser?.role || 'customer';
+
+    // Map authorized organization personnel to their proper roles
+    if (cleanEmail.includes('admin') || cleanEmail.includes('director') || cleanEmail.includes('leader')) {
+      role = 'super_admin';
+    } else if (cleanEmail.includes('kartingmanager') || cleanEmail.includes('karting_manager')) {
+      role = 'go_karting_manager';
+    } else if (cleanEmail.includes('kartingstaff') || cleanEmail.includes('karting')) {
+      role = 'go_karting_staff';
+    } else if (cleanEmail.includes('ticketing') || cleanEmail.includes('counter') || cleanEmail.includes('ticket')) {
+      role = 'ticket_counter_staff';
+    } else if (cleanEmail.includes('horseriding') || cleanEmail.includes('horse')) {
+      role = 'horse_riding_staff';
+    } else if (cleanEmail.includes('shooting')) {
+      role = 'shooting_staff';
+    } else if (cleanEmail.includes('cafe') || cleanEmail.includes('vendor')) {
+      role = 'food_vendor';
+    } else if (cleanEmail.includes('staff') || cleanEmail.endsWith('@deucepark.com') || cleanEmail.endsWith('@adventurepark.com')) {
+      if (role === 'customer') role = 'activity_staff';
+    }
+
     if (existingUser) {
       const updated = {
         ...existingUser,
+        role: role !== 'customer' ? role : (existingUser.role || 'customer'),
         name: existingUser.name || name || cleanEmail.split('@')[0],
         organizationId: 'org_deuce_default',
         updatedAt: new Date().toISOString()
@@ -818,16 +841,6 @@ app.post('/api/auth/google', (req, res) => {
       usersStore.upsert(updated, 'users');
       return res.json({ success: true, user: updated });
     } else {
-      // Determine default role based on email or default to customer
-      let role = 'customer';
-      if (cleanEmail.includes('admin@')) role = 'super_admin';
-      else if (cleanEmail.includes('kartingmanager@')) role = 'go_karting_manager';
-      else if (cleanEmail.includes('kartingstaff@') || cleanEmail.includes('karting@')) role = 'go_karting_staff';
-      else if (cleanEmail.includes('ticketing@')) role = 'ticket_counter_staff';
-      else if (cleanEmail.includes('horseriding@')) role = 'horse_riding_staff';
-      else if (cleanEmail.includes('shooting@')) role = 'shooting_staff';
-      else if (cleanEmail.includes('cafe@') || cleanEmail.includes('vendor@')) role = 'food_vendor';
-
       const newUser = {
         id: `usr-g-${Date.now()}`,
         name: name || cleanEmail.split('@')[0],
