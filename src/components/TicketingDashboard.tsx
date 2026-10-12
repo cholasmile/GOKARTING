@@ -21,10 +21,8 @@ const TicketingDashboard: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'food_street' | 'history'>('new_booking');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Transaction Ledger Filters
-  const [transactionCategory, setTransactionCategory] = useState<'all' | 'ticketing' | 'food'>('all');
-  const [methodFilter, setMethodFilter] = useState<'all' | 'cash' | 'upi' | 'card'>('all');
-  const [periodFilter, setPeriodFilter] = useState<'today' | 'all'>('today');
+  // Current Day Transaction Filters (Cash & UPI Breakdown Only)
+  const [methodFilter, setMethodFilter] = useState<'all' | 'cash' | 'upi'>('all');
 
   // Cancel & Refund Modal States
   const [selectedRefundPayment, setSelectedRefundPayment] = useState<Payment | null>(null);
@@ -89,10 +87,12 @@ const TicketingDashboard: React.FC = () => {
                             d.getMonth() === now.getMonth() &&
                             d.getDate() === now.getDate();
     
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const todayLocalIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
     const todayIso = now.toISOString().split('T')[0];
     const itemIso = typeof timestampStr === 'string' && timestampStr.includes('-') ? timestampStr.split('T')[0] : '';
     
-    return isSameLocalDate || itemIso === todayIso;
+    return isSameLocalDate || itemIso === todayLocalIso || itemIso === todayIso;
   };
 
   const handlePrintReceipt = (p: any) => {
@@ -259,84 +259,53 @@ const TicketingDashboard: React.FC = () => {
 
   const allConsolidatedPayments = Array.from(allDeduplicatedPaymentsMap.values());
 
-  // ── 2. Today's Transactions & KPI Strip Calculations ───────────────────
-  const todayPaidCounterList = allConsolidatedPayments.filter(p => {
-    const isPaid = p.status === 'paid' || p.status === 'success' || p.payment_status === 'PAID';
-    return isPaid && isDateToday(p.timestamp || p.created_at);
+  // ── 2. Current Day Ticketing Sales & Cash / UPI Breakdown Calculations ───
+  // Strictly filter for current day's ticketing transactions with Cash & UPI (excludes other days, food orders, and other transaction types)
+  const todayTicketingPaymentsList = allConsolidatedPayments.filter(p => {
+    const isToday = isDateToday(p.timestamp || p.created_at);
+    const isFood = Boolean(
+      p.orderId || 
+      p.activityName === 'Food Street Dining' || 
+      p.activityName?.toLowerCase().includes('food') || 
+      p.activityName?.toLowerCase().includes('cafe') || 
+      p.activityName?.toLowerCase().includes('dining')
+    );
+    const isCashOrUpi = p.method === 'cash' || p.method === 'upi' || p.method === 'qrcode';
+    return isToday && !isFood && isCashOrUpi;
   });
 
-  // Display list for current selected period (Today or All)
-  const displayPeriodPayments = allConsolidatedPayments.filter(p => {
-    if (periodFilter === 'today') {
-      return isDateToday(p.timestamp || p.created_at);
-    }
-    return true;
-  });
+  // Current day paid ticketing transactions for revenue breakdown
+  const todayPaidTicketingList = todayTicketingPaymentsList.filter(
+    p => p.status === 'paid' || p.status === 'success' || p.payment_status === 'PAID'
+  );
 
-  // Today specific revenues for the KPI cards
-  const todayTotalRevenue = todayPaidCounterList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  
-  // Breakdown: Activity Ticketing vs Food Street
-  const todayActivityPaidList = todayPaidCounterList.filter(p => !p.orderId && p.activityName !== 'Food Street Dining' && !p.activityName?.toLowerCase().includes('food') && !p.activityName?.toLowerCase().includes('cafe'));
-  const todayFoodPaidList = todayPaidCounterList.filter(p => Boolean(p.orderId || p.activityName === 'Food Street Dining' || p.activityName?.toLowerCase().includes('food') || p.activityName?.toLowerCase().includes('cafe')));
+  const todayCashList = todayPaidTicketingList.filter(p => p.method === 'cash');
+  const todayUpiList = todayPaidTicketingList.filter(p => p.method === 'upi' || p.method === 'qrcode');
 
-  const todayActivityRevenue = todayActivityPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const todayFoodRevenue = todayFoodPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayCashRevenue = todayCashList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayCashCount = todayCashList.length;
 
-  const todayCashRevenue = todayPaidCounterList.filter(p => p.method === 'cash').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const todayUpiRevenue = todayPaidCounterList.filter(p => p.method === 'upi' || p.method === 'qrcode').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const todayCardRevenue = todayPaidCounterList.filter(p => p.method?.startsWith('card') || p.method === 'razorpay').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayUpiRevenue = todayUpiList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayUpiCount = todayUpiList.length;
 
-  // Filtered transactions for the Ledger Table based on search, category, and method filters
-  const counterPayments = displayPeriodPayments.filter(p => {
-    const isFood = Boolean(p.orderId || p.activityName === 'Food Street Dining' || p.activityName?.toLowerCase().includes('food') || p.activityName?.toLowerCase().includes('cafe') || p.activityName?.toLowerCase().includes('dining'));
+  const todayTotalRevenue = todayCashRevenue + todayUpiRevenue;
+  const todayTotalCount = todayPaidTicketingList.length;
 
-    if (transactionCategory === 'ticketing' && isFood) return false;
-    if (transactionCategory === 'food' && !isFood) return false;
-
-    if (methodFilter !== 'all') {
-      if (methodFilter === 'cash' && p.method !== 'cash') return false;
-      if (methodFilter === 'upi' && p.method !== 'upi' && p.method !== 'qrcode') return false;
-      if (methodFilter === 'card' && !p.method?.startsWith('card') && p.method !== 'razorpay') return false;
-    }
+  // Filtered transactions for the Current Day Table (Search & Cash/UPI toggle)
+  const counterPayments = todayTicketingPaymentsList.filter(p => {
+    if (methodFilter === 'cash' && p.method !== 'cash') return false;
+    if (methodFilter === 'upi' && p.method !== 'upi' && p.method !== 'qrcode') return false;
 
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return p.customerName?.toLowerCase().includes(searchLower) ||
            p.customer_id?.toLowerCase().includes(searchLower) ||
            p.bookingId?.toLowerCase().includes(searchLower) ||
-           p.orderId?.toLowerCase().includes(searchLower) ||
            p.ticketId?.toLowerCase().includes(searchLower) ||
            p.activityName?.toLowerCase().includes(searchLower) ||
            p.transactionId?.toLowerCase().includes(searchLower) ||
            p.referenceNumber?.toLowerCase().includes(searchLower);
   }).sort((a, b) => new Date(b.timestamp || b.created_at || 0).getTime() - new Date(a.timestamp || a.created_at || 0).getTime());
-
-  // Category counts for the active period
-  const displayCategoryActivityCount = displayPeriodPayments.filter(p => !p.orderId && p.activityName !== 'Food Street Dining' && !p.activityName?.toLowerCase().includes('food') && !p.activityName?.toLowerCase().includes('cafe')).length;
-  const displayCategoryFoodCount = displayPeriodPayments.filter(p => Boolean(p.orderId || p.activityName === 'Food Street Dining' || p.activityName?.toLowerCase().includes('food') || p.activityName?.toLowerCase().includes('cafe'))).length;
-  const displayTxnList = displayPeriodPayments;
-
-  // Today Food Orders specific metrics
-  const todayOrders = orders.filter(o => isDateToday(o.createdAt));
-  const todayFoodItemsCount = todayOrders.reduce((sum, o) => sum + (o.items?.reduce((s, i) => s + i.quantity, 0) || 0), 0);
-
-  // Stall revenue breakdown
-  const stallRevenueMap: Record<string, { name: string; revenue: number; ordersCount: number }> = {};
-  vendors.forEach(v => {
-    stallRevenueMap[v.id] = { name: v.name, revenue: 0, ordersCount: 0 };
-  });
-
-  todayOrders.forEach(o => {
-    (o.items || []).forEach(item => {
-      const vId = item.vendorId || 'other';
-      if (!stallRevenueMap[vId]) {
-        stallRevenueMap[vId] = { name: item.vendorName || 'Other Stall', revenue: 0, ordersCount: 0 };
-      }
-      stallRevenueMap[vId].revenue += (item.price * item.quantity);
-      stallRevenueMap[vId].ordersCount += 1;
-    });
-  });
 
   if (isCheckoutOpen && selectedActivities.length > 0) {
     const combinedName = selectedActivities.length === activities.length 
@@ -394,7 +363,7 @@ const TicketingDashboard: React.FC = () => {
           onClick={() => setActiveSubTab('history')}
           className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeSubTab === 'history' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
         >
-          <Clock className="w-4 h-4" /> Sales & Transactions ({displayTxnList.length})
+          <Clock className="w-4 h-4" /> Today's Sales ({todayTotalCount})
         </button>
       </div>
 
@@ -717,7 +686,7 @@ const TicketingDashboard: React.FC = () => {
            ═══════════════════════════════════════════════════════════════════ */
         <div className="glass-panel rounded-2xl p-6 border border-[#00ABAB]/30 space-y-6 animate-fade-in">
           
-          {/* ── 1. HEADER & TODAY FILTER BADGE ── */}
+          {/* ── 1. HEADER & TODAY BADGE ── */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#1C1C1C] pb-5">
             <div>
               <div className="flex items-center gap-2">
@@ -726,51 +695,25 @@ const TicketingDashboard: React.FC = () => {
                 </span>
                 <div>
                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                    Today's Integrated Sales & Transaction Ledger
+                    Current Day Ticketing Sales & Transactions
                     <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-[#00ABAB]/20 text-[#40E0D0] border border-[#00ABAB]/40 flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> Live Today
+                      <Clock className="w-3 h-3" /> Today Only
                     </span>
                   </h2>
                   <p className="text-xs text-[#94A3B8]">
-                    Real-time consolidated revenue audit for both Park Activity Passes and Food Street / Cafe orders
+                    Real-time single-day counter sales with Cash and UPI breakdown
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* Period Selector Toggle */}
-              <div className="flex items-center gap-1 bg-[#0A0A0A] p-1 rounded-xl border border-[#00ABAB]/30 text-xs font-mono">
-                <button
-                  onClick={() => setPeriodFilter('today')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    periodFilter === 'today'
-                      ? 'bg-[#00ABAB] text-black shadow-sm'
-                      : 'text-[#94A3B8] hover:text-white'
-                  }`}
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  Today's Sales ({todayPaidCounterList.length})
-                </button>
-                <button
-                  onClick={() => setPeriodFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    periodFilter === 'all'
-                      ? 'bg-[#00ABAB] text-black shadow-sm'
-                      : 'text-[#94A3B8] hover:text-white'
-                  }`}
-                >
-                  <Calendar className="w-3.5 h-3.5" />
-                  All Transactions ({allConsolidatedPayments.length})
-                </button>
-              </div>
-
               {/* Date Indicator Badge */}
               <div className="flex items-center gap-2 bg-[#0A0A0A] px-3.5 py-2 rounded-xl border border-[#00ABAB]/30 text-[#40E0D0] text-xs font-bold font-mono">
                 <Calendar className="w-3.5 h-3.5" />
-                <span>{periodFilter === 'today' ? new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : 'All-Time'}</span>
+                <span>{new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
                 <span className="bg-[#00ABAB]/20 px-2 py-0.5 rounded-md text-[10px] text-white">
-                  {counterPayments.length} Shown
+                  {counterPayments.length} Tickets Today
                 </span>
               </div>
 
@@ -783,197 +726,109 @@ const TicketingDashboard: React.FC = () => {
                   type="text"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  placeholder="Search ticket / food order..."
+                  placeholder="Search ticket / guest..."
                   className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl py-2 pl-9 pr-4 text-xs text-white placeholder-[#94A3B8] focus:outline-none focus:border-[#00ABAB] transition-all font-mono"
                 />
               </div>
             </div>
           </div>
 
-          {/* ── 2. EXECUTIVE KPI CARDS STRIP ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* ── 2. EXECUTIVE KPI CARDS: ONE DAY CURRENT SALES (CASH & UPI BREAKDOWN) ── */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             
-            {/* 1. Total Combined Collection */}
-            <div className="p-4 bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-2xl space-y-1.5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-[#00ABAB]/5 rounded-full blur-xl pointer-events-none"></div>
+            {/* 1. Current Day Total Sales */}
+            <div className="p-5 bg-[#0A0A0A] border border-[#00ABAB]/40 rounded-2xl space-y-2 relative overflow-hidden shadow-[0_0_25px_rgba(0,171,171,0.08)]">
+              <div className="absolute top-0 right-0 w-28 h-28 bg-[#00ABAB]/10 rounded-full blur-2xl pointer-events-none"></div>
               <div className="flex items-center justify-between text-[#94A3B8]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-[#40E0D0]">
-                  <TrendingUp className="w-3.5 h-3.5" /> Total Park Sales
+                <span className="text-xs uppercase tracking-wider font-extrabold font-sans flex items-center gap-2 text-[#40E0D0]">
+                  <TrendingUp className="w-4 h-4" /> Current Day Total Sales
                 </span>
-                <span className="p-1 bg-[#1C1C1C] text-[#40E0D0] rounded-md text-[10px] font-mono font-bold px-1.5">
-                  {todayPaidCounterList.length} Paid
+                <span className="p-1 bg-[#1C1C1C] text-[#40E0D0] border border-[#00ABAB]/30 rounded-md text-[11px] font-mono font-bold px-2">
+                  {todayTotalCount} Paid
                 </span>
               </div>
-              <div className="text-2xl font-extrabold text-[#40E0D0] font-mono">
+              <div className="text-3xl font-black text-[#40E0D0] font-mono tracking-tight">
                 ₹{todayTotalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <p className="text-[10px] text-[#94A3B8] font-mono">
-                Activities + Food Combined Collection (Today)
+              <p className="text-[11px] text-[#94A3B8] font-mono">
+                Combined Cash + UPI ticketing collection today
               </p>
             </div>
 
-            {/* 2. Activity Ticketing Sales */}
-            <div className="p-4 bg-[#0A0A0A] border border-cyan-500/30 rounded-2xl space-y-1.5">
+            {/* 2. Cash Breakdown */}
+            <div className="p-5 bg-[#0A0A0A] border border-emerald-500/30 rounded-2xl space-y-2 relative overflow-hidden shadow-[0_0_25px_rgba(16,185,129,0.06)]">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
               <div className="flex items-center justify-between text-[#94A3B8]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-cyan-400">
-                  <Ticket className="w-3.5 h-3.5" /> Activity Tickets
+                <span className="text-xs uppercase tracking-wider font-extrabold font-sans flex items-center gap-2 text-emerald-400">
+                  <Banknote className="w-4 h-4" /> Cash Sales Breakdown
                 </span>
-                <span className="p-1 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-md text-[10px] font-mono font-bold px-1.5">
-                  {todayActivityPaidList.length} Bookings
+                <span className="p-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md text-[11px] font-mono font-bold px-2">
+                  {todayCashCount} Txns
                 </span>
               </div>
-              <div className="text-2xl font-extrabold text-white font-mono">
-                ₹{todayActivityRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div className="text-3xl font-black text-white font-mono tracking-tight">
+                ₹{todayCashRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <p className="text-[10px] text-[#94A3B8] font-mono">
-                Go-Karting, Horse Riding, Shooting passes
+              <p className="text-[11px] text-[#94A3B8] font-mono">
+                Total physical cash received at counter today
               </p>
             </div>
 
-            {/* 3. Food Street / Cafe Sales */}
-            <div className="p-4 bg-[#0A0A0A] border border-amber-500/30 rounded-2xl space-y-1.5">
+            {/* 3. UPI Breakdown */}
+            <div className="p-5 bg-[#0A0A0A] border border-violet-500/30 rounded-2xl space-y-2 relative overflow-hidden shadow-[0_0_25px_rgba(139,92,246,0.06)]">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/10 rounded-full blur-2xl pointer-events-none"></div>
               <div className="flex items-center justify-between text-[#94A3B8]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-amber-400">
-                  <Utensils className="w-3.5 h-3.5" /> Food Street Sales
+                <span className="text-xs uppercase tracking-wider font-extrabold font-sans flex items-center gap-2 text-violet-400">
+                  <Smartphone className="w-4 h-4" /> UPI Sales Breakdown
                 </span>
-                <span className="p-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md text-[10px] font-mono font-bold px-1.5">
-                  {todayFoodPaidList.length} Orders
+                <span className="p-1 bg-violet-500/10 text-violet-400 border border-violet-500/20 rounded-md text-[11px] font-mono font-bold px-2">
+                  {todayUpiCount} Txns
                 </span>
               </div>
-              <div className="text-2xl font-extrabold text-white font-mono">
-                ₹{todayFoodRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div className="text-3xl font-black text-white font-mono tracking-tight">
+                ₹{todayUpiRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <p className="text-[10px] text-[#94A3B8] font-mono">
-                {todayFoodItemsCount} Dishes / Drinks served today
+              <p className="text-[11px] text-[#94A3B8] font-mono">
+                Total UPI QR & collect payments today
               </p>
             </div>
 
-            {/* 4. Cash vs UPI vs Card Split */}
-            <div className="p-4 bg-[#0A0A0A] border border-[#1C1C1C] rounded-2xl space-y-1.5">
-              <div className="flex items-center justify-between text-[#94A3B8]">
-                <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-emerald-400">
-                  <Coins className="w-3.5 h-3.5" /> Mode Breakdown
-                </span>
-                <span className="p-1 bg-white/5 text-slate-300 rounded-md text-[10px] font-mono font-bold px-1.5">
-                  Settlements
-                </span>
-              </div>
-              <div className="text-xs font-mono space-y-1 pt-1">
-                <div className="flex justify-between">
-                  <span className="text-emerald-400 font-bold flex items-center gap-1"><Banknote className="w-3 h-3" /> Cash:</span>
-                  <span className="text-white font-bold">₹{todayCashRevenue.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-violet-400 font-bold flex items-center gap-1"><Smartphone className="w-3 h-3" /> UPI:</span>
-                  <span className="text-white font-bold">₹{todayUpiRevenue.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-blue-400 font-bold flex items-center gap-1"><CreditCard className="w-3 h-3" /> Card:</span>
-                  <span className="text-white font-bold">₹{todayCardRevenue.toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* ── 3. FOOD STREET STALL-WISE SALES BREAKDOWN ── */}
-          <div className="bg-[#0A0A0A] p-4 rounded-2xl border border-[#1C1C1C] space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Store className="w-4 h-4 text-amber-400" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-white font-mono">
-                  Today's Food Street Stall Breakdown
-                </h3>
-              </div>
-              <span className="text-[10px] text-[#94A3B8] font-mono">
-                Total Food Revenue: <strong className="text-amber-400 font-bold">₹{todayFoodRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-              {vendors.map(v => {
-                const stallData = stallRevenueMap[v.id] || { revenue: 0, ordersCount: 0 };
-                return (
-                  <div key={v.id} className="p-3 bg-[#141414] border border-[#1C1C1C] rounded-xl flex items-center justify-between">
-                    <div className="min-w-0 pr-2">
-                      <p className="text-xs font-bold text-white truncate">{v.name}</p>
-                      <p className="text-[9px] text-[#94A3B8] font-mono">{v.stallNumber} • {stallData.ordersCount} items</p>
-                    </div>
-                    <span className="text-sm font-extrabold font-mono text-amber-400">
-                      ₹{stallData.revenue.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ── 4. CATEGORY & PAYMENT FILTER TABS ── */}
+          {/* ── 3. CASH & UPI METHOD FILTER ── */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-2">
-            {/* Category Toggle */}
-            <div className="flex items-center gap-2 bg-[#0A0A0A] p-1 rounded-xl border border-[#1C1C1C]">
-              <button
-                onClick={() => setTransactionCategory('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
-                  transactionCategory === 'all'
-                    ? 'bg-[#00ABAB] text-black shadow-sm'
-                    : 'text-[#94A3B8] hover:text-white'
-                }`}
-              >
-                All Sales ({displayTxnList.length})
-              </button>
-              <button
-                onClick={() => setTransactionCategory('ticketing')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
-                  transactionCategory === 'ticketing'
-                    ? 'bg-cyan-500 text-black shadow-sm'
-                    : 'text-[#94A3B8] hover:text-white'
-                }`}
-              >
-                <Ticket className="w-3.5 h-3.5" />
-                Tickets ({displayCategoryActivityCount})
-              </button>
-              <button
-                onClick={() => setTransactionCategory('food')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
-                  transactionCategory === 'food'
-                    ? 'bg-amber-500 text-black shadow-sm'
-                    : 'text-[#94A3B8] hover:text-white'
-                }`}
-              >
-                <Utensils className="w-3.5 h-3.5" />
-                Food Street ({displayCategoryFoodCount})
-              </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#94A3B8] font-mono uppercase font-bold">Showing:</span>
+              <span className="text-xs text-white font-bold font-mono">Current Day Ticketing Transactions ({counterPayments.length})</span>
             </div>
 
-            {/* Payment Method Filter */}
             <div className="flex items-center gap-1.5 text-xs font-mono">
-              <span className="text-[#94A3B8] text-[11px] uppercase mr-1">Method:</span>
-              {(['all', 'cash', 'upi', 'card'] as const).map(m => (
+              <span className="text-[#94A3B8] text-[11px] uppercase mr-1">Filter Method:</span>
+              {(['all', 'cash', 'upi'] as const).map(m => (
                 <button
                   key={m}
                   onClick={() => setMethodFilter(m)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase transition-all cursor-pointer border ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer border ${
                     methodFilter === m
-                      ? 'bg-white/10 text-[#40E0D0] border-[#00ABAB]'
-                      : 'border-transparent text-[#94A3B8] hover:text-white'
+                      ? 'bg-[#00ABAB] text-black border-[#00ABAB] shadow-sm'
+                      : 'bg-[#0A0A0A] border-[#1C1C1C] text-[#94A3B8] hover:text-white'
                   }`}
                 >
-                  {m}
+                  {m === 'all' ? `All Today (${todayTicketingPaymentsList.length})` : m === 'cash' ? `Cash (${todayCashCount})` : `UPI (${todayUpiCount})`}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* ── 5. TRANSACTION LEDGER TABLE (WITH FOOD STREET INTEGRATION) ── */}
+          {/* ── 4. CURRENT DAY TRANSACTION LEDGER TABLE ── */}
           <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-[#0A0A0A] border-b border-[#1C1C1C] text-[#94A3B8] font-mono uppercase tracking-wider">
-                  <th className="p-4 font-bold">Type</th>
-                  <th className="p-4 font-bold">Date / Time</th>
-                  <th className="p-4 font-bold">Reference / ID</th>
+                  <th className="p-4 font-bold">Time</th>
+                  <th className="p-4 font-bold">Booking / Ticket ID</th>
                   <th className="p-4 font-bold">Guest Info</th>
-                  <th className="p-4 font-bold">Activity / Food Items</th>
+                  <th className="p-4 font-bold">Activity / Package</th>
                   <th className="p-4 font-bold text-right">Amount (₹)</th>
                   <th className="p-4 font-bold">Payment Method & Settlement</th>
                   <th className="p-4 font-bold text-center">Status</th>
@@ -983,215 +838,143 @@ const TicketingDashboard: React.FC = () => {
               <tbody className="divide-y divide-[#1C1C1C]">
                 {counterPayments.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-12 text-center text-[#94A3B8] font-mono space-y-2">
+                    <td colSpan={8} className="p-12 text-center text-[#94A3B8] font-mono space-y-2">
                       <Receipt className="w-8 h-8 mx-auto text-[#1C1C1C]" />
-                      <p className="font-bold text-sm text-white">No Transactions Found Today</p>
+                      <p className="font-bold text-sm text-white">No Ticketing Transactions Found Today</p>
                       <p className="text-xs text-[#94A3B8]">
-                        No sales match your current search and filter criteria.
+                        Only current day Cash and UPI ticketing sales are displayed here.
                       </p>
                     </td>
                   </tr>
                 ) : (
-                  counterPayments.map(p => {
-                    const isTodayTxn = isDateToday(p.timestamp);
-                    const isFood = Boolean(p.orderId || p.activityName === 'Food Street Dining' || p.activityName?.toLowerCase().includes('food') || p.activityName?.toLowerCase().includes('cafe') || p.activityName?.toLowerCase().includes('dining'));
-                    const matchingOrder = isFood ? orders.find(o => o.id === p.orderId) : null;
+                  counterPayments.map(p => (
+                    <tr key={p.id} className="hover:bg-[#1C1C1C]/40 transition-colors">
+                      {/* 1. Time */}
+                      <td className="p-4 text-[#94A3B8] font-mono whitespace-nowrap">
+                        <div className="text-white font-bold">
+                          {new Date(p.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                        <div className="text-[10px] text-[#94A3B8] flex items-center gap-1 mt-0.5">
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-bold">Today</span>
+                        </div>
+                      </td>
 
-                    return (
-                      <tr key={p.id} className="hover:bg-[#1C1C1C]/40 transition-colors">
-                        
-                        {/* 0. Type Badge */}
-                        <td className="p-4">
-                          {isFood ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 whitespace-nowrap">
-                              <Utensils className="w-3 h-3" /> Food
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 whitespace-nowrap">
-                              <Ticket className="w-3 h-3" /> Ticket
-                            </span>
-                          )}
-                        </td>
-
-                        {/* 1. Date & Time */}
-                        <td className="p-4 text-[#94A3B8] font-mono whitespace-nowrap">
-                          <div className="text-white font-bold">
-                            {new Date(p.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      {/* 2. Booking / Ticket ID */}
+                      <td className="p-4 font-mono">
+                        <div>
+                          <div className="font-bold text-[#3E8EDE] flex items-center gap-1">
+                            {p.bookingId}
                           </div>
-                          <div className="text-[10px] text-[#94A3B8] flex items-center gap-1 mt-0.5">
-                            {isTodayTxn ? (
-                              <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-bold">Today</span>
-                            ) : (
-                              new Date(p.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-                            )}
+                          <div className="text-[10px] text-[#00ABAB] font-semibold mt-0.5 flex items-center gap-1">
+                            <Ticket className="w-3 h-3" />
+                            <span>{p.ticketId || `tkt-${p.bookingId?.slice(-6) || ''}`}</span>
                           </div>
-                        </td>
+                        </div>
+                      </td>
 
-                        {/* 2. Booking / Order ID */}
-                        <td className="p-4 font-mono">
-                          {isFood ? (
-                            <div>
-                              <div className="font-bold text-amber-400 flex items-center gap-1">
-                                {p.orderId || p.id}
-                              </div>
-                              <div className="text-[10px] text-[#94A3B8] mt-0.5">Food Bill</div>
+                      {/* 3. Guest Info */}
+                      <td className="p-4">
+                        <p className="font-bold text-white text-xs">{p.customerName || 'Walk-in Guest'}</p>
+                        <p className="text-[10px] text-[#94A3B8] font-mono">{p.customerPhone || p.customer_id || 'Counter'}</p>
+                      </td>
+
+                      {/* 4. Activity & Package */}
+                      <td className="p-4 max-w-xs">
+                        <div className="text-white font-semibold text-xs">{p.activityName || 'Adventure Sport'}</div>
+                        {p.packageName && (
+                          <div className="text-[10px] text-[#94A3B8] font-mono">{p.packageName}</div>
+                        )}
+                      </td>
+
+                      {/* 5. Amount */}
+                      <td className="p-4 text-right font-mono font-extrabold text-white text-sm whitespace-nowrap">
+                        ₹{p.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+
+                      {/* 6. Payment Method & Settlement */}
+                      <td className="p-4 font-mono text-xs">
+                        {p.method === 'cash' ? (
+                          <div className="space-y-1 bg-emerald-950/20 border border-emerald-500/20 p-2 rounded-xl">
+                            <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                              <Banknote className="w-3.5 h-3.5" />
+                              <span>CASH RECEIVED</span>
                             </div>
-                          ) : (
-                            <div>
-                              <div className="font-bold text-[#3E8EDE] flex items-center gap-1">
-                                {p.bookingId}
+                            <div className="text-[10px] text-[#94A3B8] space-y-0.5">
+                              <div className="flex justify-between gap-2">
+                                <span>Cash Tendered:</span>
+                                <span className="text-white font-bold">
+                                  ₹{p.amountReceived != null ? p.amountReceived.toFixed(2) : p.amount.toFixed(2)}
+                                </span>
                               </div>
-                              <div className="text-[10px] text-[#00ABAB] font-semibold mt-0.5 flex items-center gap-1">
-                                <Ticket className="w-3 h-3" />
-                                <span>{p.ticketId || `tkt-${p.bookingId?.slice(-6) || ''}`}</span>
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* 3. Guest Details */}
-                        <td className="p-4">
-                          <p className="font-bold text-white text-xs">{p.customerName || 'Walk-in Guest'}</p>
-                          <p className="text-[10px] text-[#94A3B8] font-mono">{p.customerPhone || p.customer_id || 'Counter'}</p>
-                        </td>
-
-                        {/* 4. Activity / Food Items */}
-                        <td className="p-4 max-w-xs">
-                          {isFood ? (
-                            <div>
-                              <div className="text-white font-semibold text-xs flex items-center gap-1">
-                                <span>Food Street Order</span>
-                              </div>
-                              {matchingOrder && matchingOrder.items && matchingOrder.items.length > 0 ? (
-                                <div className="text-[10px] text-amber-300 font-mono mt-0.5 truncate" title={matchingOrder.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}>
-                                  {matchingOrder.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}
+                              {p.changeGiven != null && p.changeGiven > 0 ? (
+                                <div className="flex justify-between gap-2 text-amber-400 font-bold">
+                                  <span>Change Given:</span>
+                                  <span>₹{p.changeGiven.toFixed(2)}</span>
                                 </div>
                               ) : (
-                                <div className="text-[10px] text-[#94A3B8] font-mono">Counter Dining Items</div>
+                                <div className="text-[9px] text-slate-500">Exact Cash (₹0 Change)</div>
                               )}
                             </div>
-                          ) : (
-                            <div>
-                              <div className="text-white font-semibold text-xs">{p.activityName || 'Adventure Sport'}</div>
-                              {p.packageName && (
-                                <div className="text-[10px] text-[#94A3B8] font-mono">{p.packageName}</div>
-                              )}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* 5. Gross Amount */}
-                        <td className="p-4 text-right font-mono font-extrabold text-white text-sm whitespace-nowrap">
-                          ₹{p.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-
-                        {/* 6. Payment Method & Settlement Breakdown */}
-                        <td className="p-4 font-mono text-xs">
-                          {p.method === 'cash' ? (
-                            <div className="space-y-1 bg-emerald-950/20 border border-emerald-500/20 p-2 rounded-xl">
-                              <div className="flex items-center gap-1.5 font-bold text-emerald-400">
-                                <Banknote className="w-3.5 h-3.5" />
-                                <span>CASH RECEIVED</span>
-                              </div>
-                              <div className="text-[10px] text-[#94A3B8] space-y-0.5">
-                                <div className="flex justify-between gap-2">
-                                  <span>Cash Tendered:</span>
-                                  <span className="text-white font-bold">
-                                    ₹{p.amountReceived != null ? p.amountReceived.toFixed(2) : p.amount.toFixed(2)}
-                                  </span>
-                                </div>
-                                {p.changeGiven != null && p.changeGiven > 0 ? (
-                                  <div className="flex justify-between gap-2 text-amber-400 font-bold">
-                                    <span>Change Given:</span>
-                                    <span>₹{p.changeGiven.toFixed(2)}</span>
-                                  </div>
-                                ) : (
-                                  <div className="text-[9px] text-slate-500">Exact Cash (₹0 Change)</div>
-                                )}
-                              </div>
-                            </div>
-                          ) : p.method === 'upi' || p.method === 'qrcode' ? (
-                            <div className="space-y-1 bg-violet-950/20 border border-violet-500/20 p-2 rounded-xl">
-                              <div className="flex items-center gap-1.5 font-bold text-violet-400">
-                                {p.method === 'qrcode' ? <QrCode className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
-                                <span>UPI {p.method === 'qrcode' ? 'QR SCAN' : 'COLLECT'}</span>
-                              </div>
-                              <div className="text-[10px] text-[#94A3B8] space-y-0.5">
-                                <div className="truncate max-w-[220px]" title={counterUpiId || 'deucepark@upi'}>
-                                  UPI VPA: <strong className="text-[#40E0D0] font-mono">{counterUpiId || 'deucepark@upi'}</strong>
-                                </div>
-                                <div className="text-[9px] text-slate-400 truncate max-w-[220px]" title={p.transactionId || p.referenceNumber || 'Approved'}>
-                                  Txn/UTR: <span className="text-white font-bold">{p.transactionId || p.referenceNumber || 'Counter Verified'}</span>
-                                </div>
-                              </div>
-                            </div>
-                          ) : p.method.startsWith('card') ? (
-                            <div className="space-y-1 bg-blue-950/20 border border-blue-500/20 p-2 rounded-xl">
-                              <div className="flex items-center gap-1.5 font-bold text-blue-400">
-                                <CreditCard className="w-3.5 h-3.5" />
-                                <span>CARD (POS TERMINAL)</span>
-                              </div>
-                              <div className="text-[10px] text-[#94A3B8] space-y-0.5">
-                                <div>Ref: <strong className="text-white">{p.referenceNumber || p.pos_transaction_id || 'Approved'}</strong></div>
-                                {p.terminal_id && <div>Term ID: {p.terminal_id}</div>}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-1 bg-slate-900/50 border border-white/10 p-2 rounded-xl">
-                              <div className="flex items-center gap-1.5 font-bold text-teal-300 capitalize">
-                                <CreditCard className="w-3.5 h-3.5" />
-                                <span>{p.method}</span>
-                              </div>
-                              <div className="text-[10px] text-slate-400">
-                                Gateway: {p.gateway || 'Online'}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* 7. Payment Status */}
-                        <td className="p-4 text-center whitespace-nowrap">
-                          <span className={`px-2.5 py-1 rounded-full text-[9px] font-black font-mono uppercase tracking-wider inline-block ${
-                            p.status === 'paid' || p.status === 'success' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
-                            p.status === 'refunded' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
-                            p.status === 'cancelled' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
-                            p.status === 'pending' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' :
-                            'bg-red-500/10 text-red-400'
-                          }`}>
-                            {p.status === 'refunded' ? '🛑 REFUNDED' : p.status === 'cancelled' ? '🛑 CANCELLED' : p.status}
-                          </span>
-                        </td>
-
-                        {/* 8. Action Buttons */}
-                        <td className="p-4 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => handlePrintReceipt(p)}
-                              className="p-2 bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black rounded-lg transition-all inline-flex items-center gap-1 cursor-pointer border border-[#1C1C1C] hover:border-[#00ABAB]"
-                              title={isFood ? 'Print Food Bill' : 'Print Activity Ticket'}
-                            >
-                              <Printer className="w-4 h-4" />
-                            </button>
-
-                            {p.status === 'refunded' || p.status === 'cancelled' ? (
-                              <span className="text-[10px] font-mono text-slate-500 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
-                                REFUNDED
-                              </span>
-                            ) : (
-                              <button
-                                onClick={() => handleInitiateRefund(p)}
-                                className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white rounded-lg font-mono text-[11px] font-bold uppercase transition-all flex items-center gap-1 border border-rose-500/30 cursor-pointer shadow-sm"
-                                title="Cancel Ticket / Order & Issue Refund"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5" />
-                                <span>REFUND</span>
-                              </button>
-                            )}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                        ) : (
+                          <div className="space-y-1 bg-violet-950/20 border border-violet-500/20 p-2 rounded-xl">
+                            <div className="flex items-center gap-1.5 font-bold text-violet-400">
+                              {p.method === 'qrcode' ? <QrCode className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
+                              <span>UPI {p.method === 'qrcode' ? 'QR SCAN' : 'COLLECT'}</span>
+                            </div>
+                            <div className="text-[10px] text-[#94A3B8] space-y-0.5">
+                              <div className="truncate max-w-[220px]" title={counterUpiId || 'deucepark@upi'}>
+                                UPI VPA: <strong className="text-[#40E0D0] font-mono">{counterUpiId || 'deucepark@upi'}</strong>
+                              </div>
+                              <div className="text-[9px] text-slate-400 truncate max-w-[220px]" title={p.transactionId || p.referenceNumber || 'Approved'}>
+                                Txn/UTR: <span className="text-white font-bold">{p.transactionId || p.referenceNumber || 'Counter Verified'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 7. Status */}
+                      <td className="p-4 text-center whitespace-nowrap">
+                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black font-mono uppercase tracking-wider inline-block ${
+                          p.status === 'paid' || p.status === 'success' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
+                          p.status === 'refunded' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
+                          p.status === 'cancelled' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
+                          'bg-red-500/10 text-red-400'
+                        }`}>
+                          {p.status === 'refunded' ? '🛑 REFUNDED' : p.status === 'cancelled' ? '🛑 CANCELLED' : 'PAID'}
+                        </span>
+                      </td>
+
+                      {/* 8. Action */}
+                      <td className="p-4 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handlePrintReceipt(p)}
+                            className="p-2 bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black rounded-lg transition-all inline-flex items-center gap-1 cursor-pointer border border-[#1C1C1C] hover:border-[#00ABAB]"
+                            title="Print Activity Ticket"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+
+                          {p.status === 'refunded' || p.status === 'cancelled' ? (
+                            <span className="text-[10px] font-mono text-slate-500 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
+                              REFUNDED
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleInitiateRefund(p)}
+                              className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white rounded-lg font-mono text-[11px] font-bold uppercase transition-all flex items-center gap-1 border border-rose-500/30 cursor-pointer shadow-sm"
+                              title="Cancel Ticket & Issue Refund"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>REFUND</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
