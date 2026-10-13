@@ -259,7 +259,38 @@ const TicketingDashboard: React.FC = () => {
 
   const allConsolidatedPayments = Array.from(allDeduplicatedPaymentsMap.values());
 
-  // ── 2. Current Day Ticketing Sales & Cash / UPI Breakdown Calculations ───
+  // ── 2. Current Day All Paid Transactions (Activities + Food Street Combined) ──
+  const todayPaidCounterList = allConsolidatedPayments.filter(p => {
+    const isPaid = p.status === 'paid' || p.status === 'success' || p.payment_status === 'PAID';
+    return isPaid && isDateToday(p.timestamp || p.created_at);
+  });
+
+  const todayActivityPaidList = todayPaidCounterList.filter(p => {
+    const isFood = Boolean(
+      p.orderId || 
+      p.activityName === 'Food Street Dining' || 
+      p.activityName?.toLowerCase().includes('food') || 
+      p.activityName?.toLowerCase().includes('cafe') || 
+      p.activityName?.toLowerCase().includes('dining')
+    );
+    return !isFood;
+  });
+
+  const todayFoodPaidList = todayPaidCounterList.filter(p => {
+    return Boolean(
+      p.orderId || 
+      p.activityName === 'Food Street Dining' || 
+      p.activityName?.toLowerCase().includes('food') || 
+      p.activityName?.toLowerCase().includes('cafe') || 
+      p.activityName?.toLowerCase().includes('dining')
+    );
+  });
+
+  const todayActivityRevenue = todayActivityPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayFoodRevenue = todayFoodPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayCombinedTotalRevenue = todayActivityRevenue + todayFoodRevenue;
+
+  // ── 3. Current Day Ticketing Sales & Cash / UPI Breakdown Calculations ───
   // Strictly filter for current day's ticketing transactions with Cash & UPI (excludes other days, food orders, and other transaction types)
   const todayTicketingPaymentsList = allConsolidatedPayments.filter(p => {
     const isToday = isDateToday(p.timestamp || p.created_at);
@@ -434,7 +465,7 @@ const TicketingDashboard: React.FC = () => {
                     Today's Total Sales Summary ({todayPaidCounterList.length} Transactions)
                   </h3>
                   <p className="text-[10px] text-[#94A3B8]">
-                    Combined Activities & Food Street Total: <strong className="text-[#40E0D0]">₹{todayTotalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    Combined Activities & Food Street Total: <strong className="text-[#40E0D0]">₹{todayCombinedTotalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                   </p>
                 </div>
               </div>
