@@ -19,6 +19,7 @@ import {
 import { useAppContext } from '../../context/AppContext';
 import { StaffManagementPanel } from './StaffManagementPanel';
 import { FoodStreetInventoryPanel } from './FoodStreetInventoryPanel';
+import { computeCafeInventoryValuation } from '../../lib/cafeFinanceSync';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -248,7 +249,8 @@ const StatCard: React.FC<{
 const AccountsFinancePanel: React.FC = () => {
   const { 
     bookings, orders, activities, currentUser, 
-    dayExpenses, updateExpenseWorkflowStatus, suppliers, purchaseItems 
+    dayExpenses, updateExpenseWorkflowStatus, suppliers, purchaseItems,
+    menuItems, foodStreetPurchases, stockMovements, vendors 
   } = useAppContext();
 
   // ── Persisted State ────────────────────────────────────────────────────────
@@ -467,7 +469,19 @@ const AccountsFinancePanel: React.FC = () => {
 
   // Revenue for overview
   const totalActivityRevenue = useMemo(() =>
-    Object.values(activityRevMap).reduce((s, v) => s + v, 0), [activityRevMap]);
+    Object.values(activityRevMap).reduce((s: number, v: any) => s + Number(v || 0), 0), [activityRevMap]);
+  // Cafe financial valuation and asset computation
+  const cafeValuation = useMemo(() => {
+    return computeCafeInventoryValuation({
+      menuItems,
+      orders,
+      foodStreetPurchases,
+      stockMovements,
+      vendors,
+      dateFilterType: reportPeriod === 'all' ? 'all' : reportPeriod === 'month' ? 'this_month' : 'all'
+    });
+  }, [menuItems, orders, foodStreetPurchases, stockMovements, vendors, reportPeriod]);
+
   const totalRevenue = totalActivityRevenue + totalFoodRevenue;
 
   // Profit/loss (revenue - direct operating expenses only, NOT inventory/assets)
@@ -630,7 +644,7 @@ const AccountsFinancePanel: React.FC = () => {
           <div className="grid grid-cols-3 gap-3">
             <StatCard label="Amount Paid" value={fmtINR(overallStats.paid)} color="text-emerald-400" />
             <StatCard label="Outstanding Balance" value={fmtINR(overallStats.outstanding)} color="text-rose-400" />
-            <StatCard label="Inventory / Assets" value={fmtINR(overallStats.inventoryVal + overallStats.assetVal)} sub="Not counted as expense" color="text-blue-400" />
+            <StatCard label="Inventory / Assets" value={fmtINR(overallStats.inventoryVal + overallStats.assetVal + cafeValuation.summary.totalClosingStockValue)} sub={`Cafe Asset: ₹${cafeValuation.summary.totalClosingStockValue.toLocaleString('en-IN')}`} color="text-blue-400" />
           </div>
 
           {/* Activity-Wise Revenue */}
@@ -655,13 +669,14 @@ const AccountsFinancePanel: React.FC = () => {
                   {(() => {
                     const cafeRev = totalFoodRevenue;
                     const cafeExp = deptStats['Cafe / Food Street'];
+                    const cafePurchasesTotal = (cafeExp?.totalPurchases || 0) + cafeValuation.summary.totalPurchaseAmount;
                     const cafeDirectExp = cafeExp?.directExpenses || 0;
                     const result = cafeRev - cafeDirectExp;
                     return (
                       <tr key="cafe" className="hover:bg-[#1C1C1C]/40 transition-colors">
                         <td className="py-2 px-3 font-medium text-white">Cafe / Food Street</td>
                         <td className="py-2 px-3 text-right text-emerald-400">{fmtINR(cafeRev)}</td>
-                        <td className="py-2 px-3 text-right text-amber-400">{fmtINR(cafeExp?.totalPurchases || 0)}</td>
+                        <td className="py-2 px-3 text-right text-amber-400">{fmtINR(cafePurchasesTotal)}</td>
                         <td className="py-2 px-3 text-right text-rose-400">{fmtINR(cafeDirectExp)}</td>
                         <td className="py-2 px-3 text-right text-violet-400">{fmtINR(cafeExp?.gstTotal || 0)}</td>
                         <td className={`py-2 px-3 text-right font-bold ${result >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -755,7 +770,7 @@ const AccountsFinancePanel: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1C1C1C]">
-                    {Object.entries(supplierStats).sort((a, b) => b[1].outstanding - a[1].outstanding).map(([sup, s]) => (
+                    {Object.entries(supplierStats as Record<string, any>).sort((a, b) => b[1].outstanding - a[1].outstanding).map(([sup, s]: [string, any]) => (
                       <tr key={sup} className="hover:bg-[#1C1C1C]/40 transition-colors">
                         <td className="py-2 px-3 font-medium text-white">{sup}</td>
                         <td className="py-2 px-3 text-right text-[#94A3B8]">{s.count}</td>
@@ -1232,7 +1247,7 @@ const AccountsFinancePanel: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1C1C1C]">
-                    {Object.entries(deptStats).sort((a, b) => b[1].totalPurchases - a[1].totalPurchases).map(([dept, s]) => (
+                    {Object.entries(deptStats as Record<string, any>).sort((a, b) => b[1].totalPurchases - a[1].totalPurchases).map(([dept, s]: [string, any]) => (
                       <tr key={dept} className="hover:bg-[#1C1C1C]/40 transition-colors">
                         <td className="py-2 px-3 font-medium text-white">{dept}</td>
                         <td className="py-2 px-3 text-right text-[#94A3B8]">{s.count}</td>
@@ -1288,7 +1303,7 @@ const AccountsFinancePanel: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1C1C1C]">
-                    {Object.entries(supplierStats).sort((a, b) => b[1].outstanding - a[1].outstanding).map(([sup, s]) => (
+                    {Object.entries(supplierStats as Record<string, any>).sort((a, b) => b[1].outstanding - a[1].outstanding).map(([sup, s]: [string, any]) => (
                       <tr key={sup} className="hover:bg-[#1C1C1C]/40 transition-colors">
                         <td className="py-2 px-3 font-medium text-white">{sup}</td>
                         <td className="py-2 px-3 text-right text-[#94A3B8]">{s.count}</td>
@@ -1311,7 +1326,7 @@ const AccountsFinancePanel: React.FC = () => {
               <Tag className="w-4 h-4 text-violet-400" /> Activity-Wise GST Input Summary
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Object.entries(deptStats).map(([dept, s]) => (
+              {Object.entries(deptStats as Record<string, any>).map(([dept, s]: [string, any]) => (
                 <div key={dept} className="bg-[#0A0A0A] p-3 rounded-xl border border-[#1C1C1C]">
                   <p className="text-[10px] text-[#94A3B8] font-mono truncate mb-1">{dept}</p>
                   <p className="text-sm font-black text-violet-400 font-mono">{fmtINR(s.gstTotal)}</p>

@@ -17,6 +17,7 @@ import {
   LeaveRequestRecord, StaffSalaryPayment, AttendanceStatusType 
 } from '../../types';
 import { StaffProfileModal } from './StaffProfileModal';
+import { PaySlipModal, PaySlipData } from './PaySlipModal';
 import { 
   Users, Calendar, Clock, DollarSign, FileText, CheckCircle, 
   XCircle, AlertCircle, Plus, Search, Filter, Download, 
@@ -108,6 +109,9 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
 
   // Payroll Calculation Month
   const [payrollMonth, setPayrollMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [selectedPaySlipData, setSelectedPaySlipData] = useState<PaySlipData | null>(null);
+  const [manualSalaries, setManualSalaries] = useState<Record<string, number>>({});
+  const [manualIncentives, setManualIncentives] = useState<Record<string, number>>({});
 
   // Eligible Staff List (Exclude pure online customers)
   const staffList = useMemo(() => {
@@ -239,23 +243,45 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
         if (a.overtimeHours) overtimeHours += Number(a.overtimeHours) || 0;
       });
 
-      // Payable Days = Present + Paid Leave + Weekly Off + (Half Day * 0.5)
-      const payableDays = presentDays + paidLeaveDays + weeklyOffDays + (halfDays * 0.5);
-      const baseSalary = staff.monthlySalary || 18000;
-      const dailyRate = staff.dailyRate || Math.round(baseSalary / 30);
-      const hourlyRate = staff.hourlyRate || Math.round(dailyRate / 8);
-
-      const calculatedSalary = Math.round(payableDays * dailyRate);
-      const overtimePay = Math.round(overtimeHours * hourlyRate * 1.5); // 1.5x standard OT
-      const netPayable = calculatedSalary + overtimePay;
-
+      // Existing recorded payment (if any)
       const existingPayment = staffSalaryPayments.find(p => p.staffId === staff.id && p.month === payrollMonth);
+
+      // 1. Base Salary (Manual Entry)
+      const baseSalary = manualSalaries[staff.id] !== undefined
+        ? manualSalaries[staff.id]
+        : (existingPayment?.baseSalary || staff.monthlySalary || 18000);
+
+      // 2. Incentives (Manual Entry)
+      const incentives = manualIncentives[staff.id] !== undefined
+        ? manualIncentives[staff.id]
+        : (existingPayment?.bonusAmount || 0);
+
+      // 3. Standard 30 Days Month Calculation
+      const daysInMonth = 30;
+      const perDaySalary = Math.round((baseSalary / 30) * 100) / 100;
+      const hourlyRate = Math.round((perDaySalary / 8) * 100) / 100;
+
+      // 4. Overtime (OT) pay from attendance
+      const otPay = Math.round(overtimeHours * hourlyRate * 1.5 * 100) / 100;
+
+      // 5. Total Gross Salary = Base Salary + Incentives + OT Pay
+      const totalGross = Math.round((baseSalary + incentives + otPay) * 100) / 100;
+
+      // 6. Leave Days & Deduction (Salary divided by 30 days multiplied by leave days)
+      const leaveDays = absentDays + unpaidLeaveDays + (halfDays * 0.5);
+      const leaveDeduction = Math.round(leaveDays * perDaySalary * 100) / 100;
+      const payableDays = Math.max(0, 30 - leaveDays);
+
+      // 7. Net Payable = Total Gross - Leave Deduction
+      const netPayable = Math.max(0, Math.round((totalGross - leaveDeduction) * 100) / 100);
 
       return {
         staff,
         month: payrollMonth,
         baseSalary,
-        dailyRate,
+        incentives,
+        dailyRate: perDaySalary,
+        perDaySalary,
         hourlyRate,
         daysInMonth,
         presentDays,
@@ -263,10 +289,15 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
         absentDays,
         paidLeaveDays,
         unpaidLeaveDays,
+        weeklyOffDays,
+        leaveDays,
+        leaveDeduction,
         payableDays,
         overtimeHours,
-        overtimePay,
-        calculatedSalary,
+        otPay,
+        overtimePay: otPay,
+        totalGross,
+        calculatedSalary: Math.max(0, baseSalary - leaveDeduction),
         netPayable,
         isSaved: Boolean(existingPayment),
         paymentStatus: existingPayment ? existingPayment.paymentStatus : 'Pending',
@@ -274,7 +305,7 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
         paymentId: existingPayment?.id
       };
     });
-  }, [staffList, staffAttendance, staffSalaryPayments, payrollMonth]);
+  }, [staffList, staffAttendance, staffSalaryPayments, payrollMonth, manualSalaries, manualIncentives]);
 
   // Export Daily Attendance CSV
   const handleExportAttendanceCSV = () => {
@@ -433,7 +464,7 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
               : 'border-transparent text-[#94A3B8] hover:text-white'
           }`}
         >
-          <DollarSign className="w-4 h-4" /> Attendance-Linked Payroll ({payrollMonth})
+          <DollarSign className="w-4 h-4 text-[#14F1D9]" /> 💵 Payroll & Pay Slips ({payrollMonth})
         </button>
 
         <button
@@ -1032,143 +1063,377 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
       )}
 
       {/* ───────────────────────────────────────────────────────────── */}
-      {/* 5. ATTENDANCE-LINKED PAYROLL SECTION                           */}
+      {/* 5. ATTENDANCE-LINKED PAYROLL & PAY SLIP SECTION               */}
       {/* ───────────────────────────────────────────────────────────── */}
       {activeTab === 'payroll' && (
-        <div className="space-y-4">
-          <div className="glass-panel p-4 rounded-2xl border border-[#1C1C1C] flex flex-wrap items-center justify-between gap-4 text-xs">
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-[#94A3B8] font-bold">Salary Calculation Period (Month):</span>
-              <input
-                type="month"
-                value={payrollMonth}
-                onChange={e => setPayrollMonth(e.target.value)}
-                className="bg-[#141414] border border-[#00ABAB]/40 rounded-xl px-3 py-2 text-white font-mono font-bold outline-none cursor-pointer"
-              />
+        <div className="space-y-5 animate-fade-in">
+          
+          {/* Header & Formula Explanation Card */}
+          <div className="glass-panel p-5 rounded-3xl border border-[#00ABAB]/30 space-y-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/30 text-[#40E0D0]">
+                    <DollarSign className="w-4 h-4" />
+                  </span>
+                  <h3 className="font-bold text-base text-white font-sans">
+                    Staff Payroll &amp; Pay Slip Generation
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#00ABAB]/15 text-[#40E0D0] border border-[#00ABAB]/30">
+                    Standard 30-Day Pay Basis
+                  </span>
+                </div>
+                <p className="text-xs text-[#94A3B8] mt-1">
+                  Salary and Incentives are manually entered per employee. Present days, leave deductions, and Overtime (OT) are calculated 100% automatically from attendance.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs text-[#94A3B8] font-bold whitespace-nowrap">Pay Month:</span>
+                <input
+                  type="month"
+                  value={payrollMonth}
+                  onChange={e => setPayrollMonth(e.target.value)}
+                  className="bg-[#141414] border border-[#00ABAB]/40 focus:border-[#40E0D0] rounded-xl px-3 py-1.5 text-white font-mono text-xs font-bold outline-none cursor-pointer"
+                />
+              </div>
             </div>
 
-            <div className="text-[11px] font-mono text-[#94A3B8]">
-              Automated formula: <strong>Net Pay = (Payable Days × Daily Rate) + Approved Overtime</strong>
+            {/* Accounting Formula Banner */}
+            <div className="p-3.5 bg-[#0A0A0A] rounded-2xl border border-[#1C1C1C] grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-[#888] uppercase block">1. Total Gross Salary</span>
+                <span className="text-emerald-400 font-bold block">
+                  Gross = Salary (Manual) + Incentives + OT Pay
+                </span>
+                <span className="text-[10px] text-[#666]">OT Rate = (Salary ÷ 30 ÷ 8) × 1.5</span>
+              </div>
+
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-[#888] uppercase block">2. Leave Salary Deduction</span>
+                <span className="text-rose-400 font-bold block">
+                  Deduction = Leave Days × (Salary ÷ 30)
+                </span>
+                <span className="text-[10px] text-[#666]">Days on Leave = Absent + Unpaid + (Half Day × 0.5)</span>
+              </div>
+
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-[#888] uppercase block">3. Net Payable Disbursal</span>
+                <span className="text-[#40E0D0] font-bold block">
+                  Net Pay = Total Gross − Leave Deduction
+                </span>
+                <span className="text-[10px] text-[#666]">Official Pay Slip generated with 1 click</span>
+              </div>
             </div>
           </div>
 
+          {/* Payroll KPI Summary Ribbon */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
+            <div className="p-4 bg-[#0A0A0A] border border-[#00ABAB]/30 rounded-2xl space-y-1">
+              <span className="text-[10px] text-[#40E0D0] font-bold uppercase tracking-wider block">Total Gross Payroll</span>
+              <div className="text-xl font-black text-white">
+                ₹{payrollSummaries.reduce((s, p) => s + p.totalGross, 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[9px] text-[#888]">Across {payrollSummaries.length} staff members</span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-rose-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider block">Leave Deductions</span>
+              <div className="text-xl font-black text-rose-400">
+                −₹{payrollSummaries.reduce((s, p) => s + p.leaveDeduction, 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[9px] text-rose-300/60">
+                {payrollSummaries.reduce((s, p) => s + p.leaveDays, 0)} total leave days docked
+              </span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-purple-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">Overtime (OT) Pay</span>
+              <div className="text-xl font-black text-purple-400">
+                +₹{payrollSummaries.reduce((s, p) => s + p.otPay, 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[9px] text-purple-300/60">
+                {payrollSummaries.reduce((s, p) => s + p.overtimeHours, 0)} hrs logged in shifts
+              </span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-emerald-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">Net Disbursable Salary</span>
+              <div className="text-xl font-black text-emerald-400">
+                ₹{payrollSummaries.reduce((s, p) => s + p.netPayable, 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[9px] text-emerald-300/60">Final payout for {payrollMonth}</span>
+            </div>
+          </div>
+
+          {/* Main Payroll & Pay Slip Register Table */}
           <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs font-mono">
                 <thead>
-                  <tr className="bg-[#0A0A0A] text-[#94A3B8] font-mono font-bold border-b border-[#00ABAB]/30">
-                    <th className="p-3.5">Employee Name</th>
-                    <th className="p-3.5 text-right">Salary Amount (Super Admin)</th>
-                    <th className="p-3.5 text-center">Present</th>
-                    <th className="p-3.5 text-center">Paid Leave</th>
-                    <th className="p-3.5 text-center">Absent</th>
-                    <th className="p-3.5 text-center">Payable Days</th>
-                    <th className="p-3.5 text-right">OT Pay</th>
-                    <th className="p-3.5 text-right">Calculated Net Pay</th>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5 text-right">Action</th>
+                  <tr className="bg-[#0A0A0A] text-[#94A3B8] text-[10px] uppercase font-bold border-b border-[#00ABAB]/30">
+                    <th className="p-3.5">Employee Name &amp; Dept</th>
+                    <th className="p-3.5 text-right min-w-[140px]">Base Salary (Manual)</th>
+                    <th className="p-3.5 text-center">Attendance (Log)</th>
+                    <th className="p-3.5 text-center">Leave Days</th>
+                    <th className="p-3.5 text-right text-rose-400">Leave Deduction (÷30)</th>
+                    <th className="p-3.5 text-right min-w-[120px]">Incentives (Manual)</th>
+                    <th className="p-3.5 text-right text-purple-300">OT (Hours / Pay)</th>
+                    <th className="p-3.5 text-right text-white">Total Gross</th>
+                    <th className="p-3.5 text-right text-emerald-400 font-black">Net Pay</th>
+                    <th className="p-3.5 text-center">Status</th>
+                    <th className="p-3.5 text-right">Pay Slip &amp; Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1C1C1C]">
-                  {payrollSummaries.map(p => (
-                    <tr key={p.staff.id} className="hover:bg-white/5 transition-colors font-mono">
-                      <td className="p-3.5">
-                        <div className="font-bold text-white font-sans">{p.staff.name}</div>
-                        <div className="text-[10px] text-[#666]">
-                          A/C: {p.staff.accountNumber || 'N/A'} • {p.staff.ifscCode || 'N/A'}
-                        </div>
-                      </td>
-
-                      <td className="p-3.5 text-right text-white">
-                        ₹{p.baseSalary.toLocaleString('en-IN')}
-                      </td>
-
-                      <td className="p-3.5 text-center text-emerald-400 font-bold">
-                        {p.presentDays}
-                      </td>
-
-                      <td className="p-3.5 text-center text-teal-300">
-                        {p.paidLeaveDays}
-                      </td>
-
-                      <td className="p-3.5 text-center text-rose-400">
-                        {p.absentDays}
-                      </td>
-
-                      <td className="p-3.5 text-center font-black text-white">
-                        {p.payableDays} / {p.daysInMonth}
-                      </td>
-
-                      <td className="p-3.5 text-right text-teal-300">
-                        ₹{p.overtimePay.toLocaleString('en-IN')}
-                        <span className="text-[9px] text-[#666] block font-normal">({p.overtimeHours}h OT)</span>
-                      </td>
-
-                      <td className="p-3.5 text-right font-black text-sm text-emerald-400">
-                        ₹{p.netPayable.toLocaleString('en-IN')}
-                      </td>
-
-                      <td className="p-3.5">
-                        <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
-                          p.paymentStatus === 'Paid'
-                            ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
-                            : 'bg-amber-950/60 text-amber-300 border-amber-800/60'
-                        }`}>
-                          {p.paymentStatus}
-                        </span>
-                      </td>
-
-                      <td className="p-3.5 text-right">
-                        {p.paymentStatus !== 'Paid' ? (
-                          <button
-                            onClick={() => {
-                              saveSalaryPayment({
-                                staffId: p.staff.id,
-                                staffName: p.staff.name,
-                                month: p.month,
-                                baseSalary: p.baseSalary,
-                                dailyRate: p.dailyRate,
-                                totalDaysInMonth: p.daysInMonth,
-                                presentDays: p.presentDays,
-                                halfDays: p.halfDays,
-                                absentDays: p.absentDays,
-                                payableDays: p.payableDays,
-                                calculatedSalary: p.calculatedSalary,
-                                bonusAmount: 0,
-                                deductionAmount: 0,
-                                netPayable: p.netPayable,
-                                paymentMethod: 'Bank Transfer',
-                                paymentStatus: 'Pending',
-                                bankName: p.staff.bankName,
-                                accountNumber: p.staff.accountNumber,
-                                ifscCode: p.staff.ifscCode
-                              });
-                              alert(`Submitted salary calculations for ${p.staff.name} to Super Admin for approval!`);
-                            }}
-                            className="px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-[10px] font-bold cursor-pointer"
-                          >
-                            Submit to Super Admin
-                          </button>
-                        ) : (
-                          <span className="text-[10px] text-[#666]">
-                            Disbursed & Logged
-                          </span>
-                        )}
-
-                        {isSuperAdmin && p.paymentId && !p.isApproved && (
-                          <button
-                            onClick={() => {
-                              approveSalaryPayment(p.paymentId!);
-                              alert(`Super Admin approved salary payment for ${p.staff.name}! Posted to financial ledger.`);
-                            }}
-                            className="ml-2 px-3 py-1.5 rounded-lg bg-emerald-500 text-black text-[10px] font-black cursor-pointer shadow-md"
-                          >
-                            Approve Disbursal
-                          </button>
-                        )}
+                  {payrollSummaries.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} className="p-10 text-center text-[#94A3B8]">
+                        No staff employees found. Add staff in Staff Master to compute payroll.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    payrollSummaries.map(p => {
+                      return (
+                        <tr key={p.staff.id} className="hover:bg-white/5 transition-colors">
+                          <td className="p-3.5 font-sans">
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                              {p.staff.name}
+                              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-white/5 border border-white/10 text-teal-300">
+                                {p.staff.employeeId || p.staff.id.slice(-6).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-[#666] font-mono">
+                              {p.staff.department || 'Operations'} • {p.staff.designation || p.staff.role}
+                            </div>
+                            <div className="text-[9px] text-[#555] font-mono mt-0.5">
+                              A/C: {p.staff.accountNumber ? `${p.staff.bankName || 'Bank'} (${p.staff.accountNumber})` : 'Direct Cash/Transfer'}
+                            </div>
+                          </td>
+
+                          {/* Base Salary Manual Input */}
+                          <td className="p-3.5 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <span className="text-[#888]">₹</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="500"
+                                value={p.baseSalary}
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  setManualSalaries(prev => ({ ...prev, [p.staff.id]: val }));
+                                }}
+                                onBlur={() => {
+                                  updateUser({ ...p.staff, monthlySalary: p.baseSalary });
+                                }}
+                                className="w-24 bg-[#141414] border border-[#262626] focus:border-[#00ABAB] rounded-lg px-2 py-1 text-right text-white font-bold text-xs outline-none"
+                                title="Manually edit monthly salary for this employee"
+                              />
+                            </div>
+                            <span className="text-[9px] text-[#666] block font-mono">
+                              ₹{p.perDaySalary.toFixed(0)}/day
+                            </span>
+                          </td>
+
+                          {/* Attendance Breakdown (From Attendance) */}
+                          <td className="p-3.5 text-center">
+                            <div className="inline-flex items-center gap-1 text-[11px]">
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/40" title="Present Days">
+                                {p.presentDays}P
+                              </span>
+                              {p.halfDays > 0 && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/40" title="Half Days">
+                                  {p.halfDays}HD
+                                </span>
+                              )}
+                              <span className="px-1.5 py-0.5 rounded bg-teal-950/60 text-teal-300 border border-teal-800/40" title="Paid Leaves">
+                                {p.paidLeaveDays}PL
+                              </span>
+                            </div>
+                            <span className="text-[9px] text-[#666] block mt-0.5">
+                              {p.payableDays}/30 Payable
+                            </span>
+                          </td>
+
+                          {/* Leave Days Subject to Deduction */}
+                          <td className="p-3.5 text-center">
+                            {p.leaveDays > 0 ? (
+                              <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                                {p.leaveDays} Days
+                              </span>
+                            ) : (
+                              <span className="text-emerald-400 text-[11px] font-bold">
+                                0 Days
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Leave Salary Deduction */}
+                          <td className="p-3.5 text-right font-bold text-rose-400">
+                            {p.leaveDeduction > 0 ? (
+                              <>
+                                −₹{p.leaveDeduction.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                <span className="text-[9px] text-[#666] block font-normal">
+                                  ({p.leaveDays}d × ₹{p.perDaySalary.toFixed(0)})
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-[#666] font-normal">₹0.00</span>
+                            )}
+                          </td>
+
+                          {/* Incentives Manual Input */}
+                          <td className="p-3.5 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <span className="text-[#888]">₹</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="100"
+                                value={p.incentives}
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  setManualIncentives(prev => ({ ...prev, [p.staff.id]: val }));
+                                }}
+                                className="w-20 bg-[#141414] border border-[#262626] focus:border-teal-400 rounded-lg px-2 py-1 text-right text-teal-300 font-bold text-xs outline-none"
+                                title="Manually enter bonus/performance incentives"
+                              />
+                            </div>
+                            <span className="text-[9px] text-[#666] block">Bonus / Tip</span>
+                          </td>
+
+                          {/* Overtime (OT) From Attendance */}
+                          <td className="p-3.5 text-right text-purple-300">
+                            <div className="font-bold">
+                              ₹{p.otPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </div>
+                            <span className="text-[9px] text-purple-300/70 block">
+                              {p.overtimeHours} hrs @ 1.5x
+                            </span>
+                          </td>
+
+                          {/* Total Gross Salary */}
+                          <td className="p-3.5 text-right font-bold text-white">
+                            ₹{p.totalGross.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+
+                          {/* Net Payable Disbursal */}
+                          <td className="p-3.5 text-right font-black text-sm text-emerald-400">
+                            ₹{p.netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+
+                          {/* Status */}
+                          <td className="p-3.5 text-center">
+                            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                              p.paymentStatus === 'Paid'
+                                ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60'
+                                : 'bg-amber-950/60 text-amber-300 border-amber-800/60'
+                            }`}>
+                              {p.paymentStatus}
+                            </span>
+                          </td>
+
+                          {/* Actions: Pay Slip & Disbursal */}
+                          <td className="p-3.5 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* 📄 Pay Slip Button */}
+                              <button
+                                onClick={() => {
+                                  setSelectedPaySlipData({
+                                    staff: p.staff,
+                                    month: p.month,
+                                    baseSalary: p.baseSalary,
+                                    incentives: p.incentives,
+                                    otHours: p.overtimeHours,
+                                    otPay: p.otPay,
+                                    totalGross: p.totalGross,
+                                    daysInMonth: p.daysInMonth,
+                                    perDaySalary: p.perDaySalary,
+                                    hourlyRate: p.hourlyRate,
+                                    presentDays: p.presentDays,
+                                    halfDays: p.halfDays,
+                                    absentDays: p.absentDays,
+                                    paidLeaveDays: p.paidLeaveDays,
+                                    unpaidLeaveDays: p.unpaidLeaveDays,
+                                    weeklyOffDays: p.weeklyOffDays,
+                                    leaveDays: p.leaveDays,
+                                    leaveDeduction: p.leaveDeduction,
+                                    netPayable: p.netPayable,
+                                    paymentStatus: p.paymentStatus as any,
+                                    paymentMethod: p.staff.accountNumber ? 'Bank Transfer' : 'Cash',
+                                    transactionRef: p.paymentId
+                                  });
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-[#40E0D0] border border-teal-500/40 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                                title="Open & Print Official Pay Slip"
+                              >
+                                <FileText className="w-3.5 h-3.5" /> Pay Slip
+                              </button>
+
+                              {/* Save / Disburse Button */}
+                              {p.paymentStatus !== 'Paid' ? (
+                                <button
+                                  onClick={() => {
+                                    saveSalaryPayment({
+                                      staffId: p.staff.id,
+                                      staffName: p.staff.name,
+                                      month: p.month,
+                                      baseSalary: p.baseSalary,
+                                      dailyRate: p.dailyRate,
+                                      totalDaysInMonth: p.daysInMonth,
+                                      presentDays: p.presentDays,
+                                      halfDays: p.halfDays,
+                                      absentDays: p.absentDays,
+                                      paidLeaveDays: p.paidLeaveDays,
+                                      unpaidLeaveDays: p.unpaidLeaveDays,
+                                      payableDays: p.payableDays,
+                                      approvedOvertimeHours: p.overtimeHours,
+                                      overtimePay: p.otPay,
+                                      bonusAmount: p.incentives,
+                                      incentives: p.incentives,
+                                      deductionAmount: p.leaveDeduction,
+                                      leaveDeduction: p.leaveDeduction,
+                                      grossSalary: p.totalGross,
+                                      calculatedSalary: p.calculatedSalary,
+                                      netPayable: p.netPayable,
+                                      paymentMethod: 'Bank Transfer',
+                                      paymentStatus: 'Pending',
+                                      bankName: p.staff.bankName,
+                                      accountNumber: p.staff.accountNumber,
+                                      ifscCode: p.staff.ifscCode
+                                    });
+                                    alert(`Recorded salary calculations and pay slip for ${p.staff.name}!`);
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white border border-white/10 text-[10px] font-bold cursor-pointer"
+                                  title="Save / Submit to Super Admin"
+                                >
+                                  Save Record
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-emerald-400 font-bold">
+                                  ✓ Disbursed
+                                </span>
+                              )}
+
+                              {isSuperAdmin && p.paymentId && !p.isApproved && (
+                                <button
+                                  onClick={() => {
+                                    approveSalaryPayment(p.paymentId!);
+                                    alert(`Super Admin approved salary payment for ${p.staff.name}!`);
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black text-[10px] font-black cursor-pointer shadow-md"
+                                  title="Approve Disbursal"
+                                >
+                                  Approve
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1506,6 +1771,16 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* PAY SLIP PRINTABLE MODAL                                      */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {selectedPaySlipData && (
+        <PaySlipModal 
+          data={selectedPaySlipData} 
+          onClose={() => setSelectedPaySlipData(null)} 
+        />
       )}
 
     </div>

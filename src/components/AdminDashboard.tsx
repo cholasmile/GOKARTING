@@ -15,7 +15,7 @@ import {
   Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle,
   MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check,
   Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag, RotateCcw, Monitor, Gamepad2,
-  CalendarRange, Clock, ArrowUpRight, ChevronDown, CalendarDays, ShoppingBag, Sparkles
+  CalendarRange, Clock, ArrowUpRight, ChevronDown, CalendarDays, ShoppingBag, Sparkles, Package
 } from 'lucide-react';
 import ActivityManagementPanel from './admin/ActivityManagementPanel';
 import AccountsFinancePanel from './admin/AccountsFinancePanel';
@@ -143,7 +143,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Active Admin Tabs
   const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'payments' | 'pay_settings' | 'database' | 'accounts_finance'>('analytics');
-  const [cafeRetailSubTab, setCafeRetailSubTab] = useState<'sales_sync' | 'stock_inventory'>('sales_sync');
+  const [cafeRetailSubTab, setCafeRetailSubTab] = useState<'sales_sync' | 'stock_inventory' | 'financial_valuation'>('sales_sync');
   const [activeDbSubTab, setActiveDbSubTab] = useState<'schema' | 'rls' | 'hierarchy' | 'api_routes' | 'deploy'>('schema');
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
@@ -2008,9 +2008,22 @@ export const AdminDashboard: React.FC = () => {
               >
                 <Package className="w-4 h-4 text-amber-400" /> 📦 Food Street Purchases & Item-Wise Stock
               </button>
+
+              <button
+                onClick={() => setCafeRetailSubTab('financial_valuation')}
+                className={`px-4 py-2 border-b-2 flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+                  cafeRetailSubTab === 'financial_valuation'
+                    ? 'border-[#14F1D9] text-[#14F1D9] font-black bg-white/5 rounded-t-lg'
+                    : 'border-transparent text-[#94A3B8] hover:text-white'
+                }`}
+              >
+                <IndianRupee className="w-4 h-4 text-[#14F1D9]" /> 📊 Financial Valuation & Stock Ledger
+              </button>
             </div>
 
-            {cafeRetailSubTab === 'stock_inventory' ? (
+            {cafeRetailSubTab === 'financial_valuation' ? (
+              <FoodStreetInventoryPanel isSubAdminPortal={true} initialTab="valuation" />
+            ) : cafeRetailSubTab === 'stock_inventory' ? (
               <FoodStreetInventoryPanel isSubAdminPortal={true} />
             ) : (
               <>

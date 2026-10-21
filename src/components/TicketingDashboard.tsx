@@ -3,47 +3,40 @@ import {
   Ticket, Users, CreditCard, CheckCircle, Smartphone, Printer, Search, FileText, Banknote, 
   Utensils, Plus, Minus, ShoppingBag, Trash2, ArrowRight, XCircle, RotateCcw, AlertTriangle, 
   Check, X, QrCode, Calendar, TrendingUp, Clock, Coins, Receipt, Wallet, ArrowUpRight,
-  Flame, Store, Coffee, ChevronRight, Layers, Tag
+  Flame, Store, Coffee, ChevronRight, Layers, Tag, Edit, Eye, Filter, Package, Upload,
+  Sparkles, RefreshCw
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { Activity, Payment, FoodOrder } from '../types';
+import { Activity, Payment, FoodOrder, MenuItem } from '../types';
 import { UnifiedTicketingFlow } from './UnifiedTicketingFlow';
 import { printTicket } from '../lib/printTicket';
+import { BulkAddMenuModal } from './BulkAddMenuModal';
+import { FoodStreetInventoryPanel } from './admin/FoodStreetInventoryPanel';
+import { compressImageFile } from '../lib/imageUtils';
 
-const TicketingDashboard: React.FC = () => {
+export const TicketingDashboard: React.FC = () => {
   const { 
-    activities, currentUser, payments, orders, menuItems, vendors, 
+    activities, currentUser, payments, orders, menuItems, vendors, inventory,
     foodCart, addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder,
+    addMenuItem, updateMenuItem, deleteMenuItem, adjustMenuItemStock, updateMenuItemStock,
     cancelAndRefundTicket, counterUpiId
   } = useAppContext();
+
+  // Active top-level subtab
+  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'cafe_pos' | 'cafe_menu' | 'history'>('new_booking');
+  
+  // ── 1. Activity Booking State ───────────────────────────────────────────
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'food_street' | 'history'>('new_booking');
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  // Current Day Transaction Filters (Cash & UPI Breakdown Only)
-  const [methodFilter, setMethodFilter] = useState<'all' | 'cash' | 'upi'>('all');
 
-  // Cancel & Refund Modal States
-  const [selectedRefundPayment, setSelectedRefundPayment] = useState<Payment | null>(null);
-  const [refundReason, setRefundReason] = useState<string>('Customer Cancellation Request');
-  const [customRefundReason, setCustomRefundReason] = useState<string>('');
-  const [refundAmountInput, setRefundAmountInput] = useState<string>('');
-  const [refundMethodInput, setRefundMethodInput] = useState<'cash' | 'upi' | 'card' | 'original'>('cash');
-  const [isRefunding, setIsRefunding] = useState<boolean>(false);
-  const [refundNotice, setRefundNotice] = useState<string | null>(null);
-  const [refundSuccessReceipt, setRefundSuccessReceipt] = useState<any | null>(null);
-
-  // Food Street POS states
-  const [foodSearch, setFoodSearch] = useState('');
-  const [selectedVendorId, setSelectedVendorId] = useState<string>('all');
-  const [foodCustomerName, setFoodCustomerName] = useState('Walk-in Guest');
-  const [foodCustomerEmail, setFoodCustomerEmail] = useState('counter@deucepark.com');
-  const [foodPaymentMethod, setFoodPaymentMethod] = useState<'cash' | 'upi' | 'card'>('cash');
-  const [foodOrderSuccess, setFoodOrderSuccess] = useState<any>(null);
-
-  // Visible activities excluding any legacy gaming/arena
-  const visibleActivities = activities.filter(a => a.isActive !== false && !a.id.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('arena'));
+  // Visible activities excluding legacy gaming/arena
+  const visibleActivities = activities.filter(a => 
+    a.isActive !== false && 
+    !a.id.toLowerCase().includes('gaming') && 
+    !(a.type as string)?.toLowerCase().includes('gaming') && 
+    !a.name?.toLowerCase().includes('gaming') && 
+    !a.name?.toLowerCase().includes('arena')
+  );
 
   // Auto-sync selectedActivities whenever activities updates in AppContext
   React.useEffect(() => {
@@ -71,6 +64,57 @@ const TicketingDashboard: React.FC = () => {
     }
   };
 
+  // ── 2. Cafe POS State ───────────────────────────────────────────────────
+  const [foodSearch, setFoodSearch] = useState('');
+  const [selectedVendorId, setSelectedVendorId] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [foodCustomerName, setFoodCustomerName] = useState('Walk-in Guest');
+  const [foodCustomerPhone, setFoodCustomerPhone] = useState('');
+  const [foodPaymentMethod, setFoodPaymentMethod] = useState<'cash' | 'upi' | 'card'>('cash');
+  const [isSubmittingFood, setIsSubmittingFood] = useState(false);
+  const [generatedBillOrder, setGeneratedBillOrder] = useState<FoodOrder | null>(null);
+
+  // ── 3. Cafe Menu & Inventory State ──────────────────────────────────────
+  const [cafeMenuSubTab, setCafeMenuSubTab] = useState<'catalog' | 'inventory'>('catalog');
+  const [menuCatalogSearch, setMenuCatalogSearch] = useState('');
+  const [menuCatalogVendorFilter, setMenuCatalogVendorFilter] = useState('all');
+  const [menuCatalogCategoryFilter, setMenuCatalogCategoryFilter] = useState('all');
+  const [menuCatalogViewMode, setMenuCatalogViewMode] = useState<'table' | 'cards'>('table');
+  const [isBulkMenuModalOpen, setIsBulkMenuModalOpen] = useState(false);
+  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
+  const [editingMenuItem, setEditingMenuItem] = useState<MenuItem | null>(null);
+  const [menuForm, setMenuForm] = useState({
+    name: '',
+    description: '',
+    price: 50,
+    purchasePrice: 30,
+    category: 'Beverages',
+    vendorId: vendors[0]?.id || 'vendor-forest-cafe',
+    image: '',
+    stockQuantity: 50,
+    isAvailable: true
+  });
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  // ── 5. Sales History & Refund State ─────────────────────────────────────
+  const [searchTerm, setSearchTerm] = useState('');
+  const [methodFilter, setMethodFilter] = useState<'all' | 'cash' | 'upi'>('all');
+  const [selectedRefundPayment, setSelectedRefundPayment] = useState<Payment | null>(null);
+  const [refundReason, setRefundReason] = useState<string>('Customer Cancellation Request');
+  const [customRefundReason, setCustomRefundReason] = useState<string>('');
+  const [refundAmountInput, setRefundAmountInput] = useState<string>('');
+  const [refundMethodInput, setRefundMethodInput] = useState<'cash' | 'upi' | 'card' | 'original'>('cash');
+  const [isRefunding, setIsRefunding] = useState<boolean>(false);
+  const [refundNotice, setRefundNotice] = useState<string | null>(null);
+  const [refundSuccessReceipt, setRefundSuccessReceipt] = useState<any | null>(null);
+
+  // Available food categories from existing menu items
+  const availableCategories = Array.from(new Set(menuItems.map(m => m.category).filter(Boolean)));
+  const allCategoryOptions = availableCategories.length > 0 
+    ? availableCategories 
+    : ['Beverages', 'Wood-Fired Pizza', 'Smash Burgers', 'Starters & Sides', 'Desserts & Shakes', 'Snacks & Fast Food', 'Main Course', 'Combos & Offers'];
+
+  // Helper date checker
   const isDateToday = (timestampStr?: string | number) => {
     if (!timestampStr) return false;
     let d: Date;
@@ -95,6 +139,197 @@ const TicketingDashboard: React.FC = () => {
     return isSameLocalDate || itemIso === todayLocalIso || itemIso === todayIso;
   };
 
+  // ── Cafe POS Order Process ──────────────────────────────────────────────
+  const handleProcessFoodOrder = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (foodCart.length === 0 || isSubmittingFood) return;
+    setIsSubmittingFood(true);
+    try {
+      const order = submitFoodOrder({
+        customerName: foodCustomerName || 'Walk-in Guest',
+        customerEmail: 'counter@deucepark.com',
+        customerPhone: foodCustomerPhone || undefined,
+        paymentMethod: foodPaymentMethod
+      });
+
+      setGeneratedBillOrder(order);
+
+      // Auto-trigger print
+      printTicket({
+        receiptId: order.invoiceNumber || order.id,
+        tokenNumber: order.tokenNumber || order.id,
+        activityName: 'DEUCE CAFE & FOOD STREET',
+        packageName: 'Food Street Dining',
+        customerName: foodCustomerName || 'Walk-in Guest',
+        customerPhone: foodCustomerPhone || undefined,
+        date: new Date().toISOString().split('T')[0],
+        slot: 'FOOD COUNTER',
+        items: order.items.map(i => ({ label: `${i.quantity}x ${i.name}`, value: `₹${(i.price * i.quantity).toFixed(2)}` })),
+        subtotalAmount: order.subtotal,
+        totalAmount: order.totalAmount,
+        paymentStatus: 'paid',
+        quantity: order.items.reduce((s, i) => s + i.quantity, 0),
+        paymentMethod: foodPaymentMethod
+      });
+
+      clearFoodCart();
+      setFoodCustomerPhone('');
+      setFoodCustomerName('Walk-in Guest');
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit food order.');
+    } finally {
+      setIsSubmittingFood(false);
+    }
+  };
+
+  // ── Save or Update Menu Item Modal ──────────────────────────────────────
+  const handleSaveMenuItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!menuForm.name.trim()) return alert('Item name is required');
+
+    if (editingMenuItem) {
+      updateMenuItem({
+        ...editingMenuItem,
+        name: menuForm.name,
+        description: menuForm.description,
+        price: Number(menuForm.price),
+        purchasePrice: Number(menuForm.purchasePrice || 0),
+        category: menuForm.category,
+        vendorId: menuForm.vendorId,
+        image: menuForm.image || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=400&q=80',
+        stockQuantity: Number(menuForm.stockQuantity || 0),
+        isAvailable: menuForm.isAvailable
+      });
+    } else {
+      addMenuItem({
+        name: menuForm.name,
+        description: menuForm.description,
+        price: Number(menuForm.price),
+        purchasePrice: Number(menuForm.purchasePrice || 0),
+        category: menuForm.category,
+        vendorId: menuForm.vendorId,
+        image: menuForm.image || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=400&q=80',
+        stockQuantity: Number(menuForm.stockQuantity || 0),
+        isAvailable: menuForm.isAvailable
+      });
+    }
+
+    setIsMenuModalOpen(false);
+    setEditingMenuItem(null);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingImage(true);
+    try {
+      const compressed = await compressImageFile(file, 800, 800, 0.7);
+      setMenuForm(prev => ({ ...prev, image: compressed }));
+    } catch (err) {
+      console.error('Image compression failed:', err);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  // ── Unified Deduplicated Payments Base ──────────────────────────────────
+  const allDeduplicatedPaymentsMap = new Map<string, Payment>();
+  payments.forEach(p => {
+    const key = p.bookingId || p.orderId || p.id;
+    const existing = allDeduplicatedPaymentsMap.get(key);
+    if (!existing) {
+      allDeduplicatedPaymentsMap.set(key, p);
+    } else {
+      const isCurrPaid = p.status === 'paid' || p.status === 'success';
+      const isExistPaid = existing.status === 'paid' || existing.status === 'success';
+      if (isCurrPaid && !isExistPaid) {
+        allDeduplicatedPaymentsMap.set(key, p);
+      } else if ((isCurrPaid === isExistPaid) && new Date(p.timestamp || p.created_at || 0).getTime() > new Date(existing.timestamp || existing.created_at || 0).getTime()) {
+        allDeduplicatedPaymentsMap.set(key, p);
+      }
+    }
+  });
+
+  const allConsolidatedPayments = Array.from(allDeduplicatedPaymentsMap.values());
+
+  // Current Day All Paid Transactions (Activities + Cafe Combined)
+  const todayPaidCounterList = allConsolidatedPayments.filter(p => {
+    const isPaid = p.status === 'paid' || p.status === 'success' || p.payment_status === 'PAID';
+    return isPaid && isDateToday(p.timestamp || p.created_at);
+  });
+
+  const todayActivityPaidList = todayPaidCounterList.filter(p => {
+    const isFood = Boolean(
+      p.orderId || 
+      p.activityName === 'Food Street Dining' || 
+      p.activityName?.toLowerCase().includes('food') || 
+      p.activityName?.toLowerCase().includes('cafe') || 
+      p.activityName?.toLowerCase().includes('dining')
+    );
+    return !isFood;
+  });
+
+  const todayFoodPaidList = todayPaidCounterList.filter(p => {
+    return Boolean(
+      p.orderId || 
+      p.activityName === 'Food Street Dining' || 
+      p.activityName?.toLowerCase().includes('food') || 
+      p.activityName?.toLowerCase().includes('cafe') || 
+      p.activityName?.toLowerCase().includes('dining')
+    );
+  });
+
+  const todayActivityRevenue = todayActivityPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayFoodRevenue = todayFoodPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayCombinedTotalRevenue = todayActivityRevenue + todayFoodRevenue;
+
+  // Breakdown for Ticketing
+  const todayTicketingPaymentsList = allConsolidatedPayments.filter(p => {
+    const isToday = isDateToday(p.timestamp || p.created_at);
+    const isFood = Boolean(
+      p.orderId || 
+      p.activityName === 'Food Street Dining' || 
+      p.activityName?.toLowerCase().includes('food') || 
+      p.activityName?.toLowerCase().includes('cafe') || 
+      p.activityName?.toLowerCase().includes('dining')
+    );
+    const isCashOrUpi = p.method === 'cash' || p.method === 'upi' || p.method === 'qrcode';
+    return isToday && !isFood && isCashOrUpi;
+  });
+
+  const todayPaidTicketingList = todayTicketingPaymentsList.filter(
+    p => p.status === 'paid' || p.status === 'success' || p.payment_status === 'PAID'
+  );
+
+  const todayCashList = todayPaidTicketingList.filter(p => p.method === 'cash');
+  const todayUpiList = todayPaidTicketingList.filter(p => p.method === 'upi' || p.method === 'qrcode');
+
+  const todayCashRevenue = todayCashList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayCashCount = todayCashList.length;
+
+  const todayUpiRevenue = todayUpiList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayUpiCount = todayUpiList.length;
+
+  const todayTotalRevenue = todayCashRevenue + todayUpiRevenue;
+  const todayTotalCount = todayPaidTicketingList.length;
+
+  // Filtered transactions for the Current Day Table
+  const counterPayments = todayTicketingPaymentsList.filter(p => {
+    if (methodFilter === 'cash' && p.method !== 'cash') return false;
+    if (methodFilter === 'upi' && p.method !== 'upi' && p.method !== 'qrcode') return false;
+
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return p.customerName?.toLowerCase().includes(searchLower) ||
+           p.customer_id?.toLowerCase().includes(searchLower) ||
+           p.bookingId?.toLowerCase().includes(searchLower) ||
+           p.ticketId?.toLowerCase().includes(searchLower) ||
+           p.activityName?.toLowerCase().includes(searchLower) ||
+           p.transactionId?.toLowerCase().includes(searchLower) ||
+           p.referenceNumber?.toLowerCase().includes(searchLower);
+  }).sort((a, b) => new Date(b.timestamp || b.created_at || 0).getTime() - new Date(a.timestamp || a.created_at || 0).getTime());
+
+  // Print receipt router
   const handlePrintReceipt = (p: any) => {
     const isFood = p.orderId || p.activityName === 'Food Street Dining' || p.activityName?.toLowerCase().includes('food') || p.activityName?.toLowerCase().includes('cafe') || p.activityName?.toLowerCase().includes('dining');
     if (isFood) {
@@ -106,7 +341,7 @@ const TicketingDashboard: React.FC = () => {
       printTicket({
         receiptId: p.orderId || p.id,
         tokenNumber: p.orderId || p.id,
-        activityName: 'DEUCE FOOD & BEVERAGES',
+        activityName: 'DEUCE CAFE & FOOD STREET',
         packageName: 'Food Street Dining',
         customerName: p.customerName || 'Walk-in Guest',
         customerPhone: p.customerPhone,
@@ -159,185 +394,36 @@ const TicketingDashboard: React.FC = () => {
     }
 
     setIsRefunding(true);
-    const result = cancelAndRefundTicket({
-      ticketId: selectedRefundPayment.ticketId,
-      bookingId: selectedRefundPayment.bookingId || selectedRefundPayment.orderId || selectedRefundPayment.id,
-      reason: finalReason,
-      refundAmount: refAmt,
-      refundMethod: refundMethodInput,
-      staffName: currentUser?.name || 'Counter Staff'
-    });
+    setRefundNotice(null);
+
+    const result = cancelAndRefundTicket(
+      selectedRefundPayment.id,
+      finalReason,
+      refundMethodInput,
+      refAmt
+    );
 
     setIsRefunding(false);
+
     if (result.success) {
-      setRefundSuccessReceipt(result.refundReceipt);
-      setSelectedRefundPayment(null);
-
-      // Print Cancellation Credit Note / Refund Receipt
-      printTicket({
-        receiptId: `REF-${selectedRefundPayment.ticketId || selectedRefundPayment.bookingId || selectedRefundPayment.orderId}`,
-        activityName: `CANCELLED: ${selectedRefundPayment.activityName || 'Activity Ticket / Order'}`,
-        customerName: selectedRefundPayment.customerName || 'Guest',
-        date: new Date().toISOString().split('T')[0],
-        slot: 'REFUND RECEIPT',
-        items: [
-          { label: 'Original Charge', value: `₹${selectedRefundPayment.amount}` },
-          { label: `Refund (${refundMethodInput.toUpperCase()})`, value: `-₹${refAmt}` },
-          { label: 'Cancellation Reason', value: finalReason }
-        ],
-        totalAmount: 0,
-        paymentStatus: 'refunded',
-        quantity: 1,
-        paymentMethod: refundMethodInput
-      });
+      setRefundSuccessReceipt(result.receipt);
+      setRefundNotice(`Refund of ₹${refAmt} processed successfully via ${refundMethodInput.toUpperCase()}.`);
     } else {
-      alert(result.message || 'Failed to process refund.');
+      alert(result.message || 'Refund failed to process.');
     }
   };
 
-  const [isSubmittingFood, setIsSubmittingFood] = useState(false);
-
-  const handleProcessFoodOrder = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (foodCart.length === 0 || isSubmittingFood) return;
-    setIsSubmittingFood(true);
-    try {
-      const order = submitFoodOrder(foodCustomerName, foodCustomerEmail, foodPaymentMethod);
-      setFoodOrderSuccess(order);
-
-      // Print Receipt with 5% GST breakdown
-      printTicket({
-        receiptId: order.invoiceNumber || order.id,
-        tokenNumber: order.tokenNumber || order.id,
-        activityName: 'DEUCE FOOD & BEVERAGES',
-        packageName: 'Food Street Dining',
-        customerName: foodCustomerName,
-        customerPhone: order.customerPhone,
-        date: new Date().toISOString().split('T')[0],
-        slot: 'FOOD COUNTER',
-        items: order.items.map(i => ({ label: `${i.quantity}x ${i.name}`, value: `₹${(i.price * i.quantity).toFixed(2)}` })),
-        subtotalAmount: order.subtotal,
-        totalAmount: order.totalAmount,
-        paymentStatus: 'paid',
-        quantity: order.items.reduce((s, i) => s + i.quantity, 0),
-        paymentMethod: foodPaymentMethod
-      });
-
-      clearFoodCart();
-    } catch (err: any) {
-      alert(err.message || 'Failed to submit food order.');
-    } finally {
-      setIsSubmittingFood(false);
-    }
-  };
-
+  // Filtered menu items for POS
   const filteredMenuItems = menuItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(foodSearch.toLowerCase()) || 
                           item.category.toLowerCase().includes(foodSearch.toLowerCase());
     const matchesVendor = selectedVendorId === 'all' || item.vendorId === selectedVendorId;
-    return matchesSearch && matchesVendor && item.isAvailable;
+    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+    return matchesSearch && matchesVendor && matchesCategory && item.isAvailable;
   });
 
-  // ── 1. Unified Deduplicated Payments Base ─────────────────────────────
-  // Ensure all payments (tickets and food) link cleanly without loss
-  const allDeduplicatedPaymentsMap = new Map<string, Payment>();
-  payments.forEach(p => {
-    const key = p.bookingId || p.orderId || p.id;
-    const existing = allDeduplicatedPaymentsMap.get(key);
-    if (!existing) {
-      allDeduplicatedPaymentsMap.set(key, p);
-    } else {
-      const isCurrPaid = p.status === 'paid' || p.status === 'success';
-      const isExistPaid = existing.status === 'paid' || existing.status === 'success';
-      if (isCurrPaid && !isExistPaid) {
-        allDeduplicatedPaymentsMap.set(key, p);
-      } else if ((isCurrPaid === isExistPaid) && new Date(p.timestamp || p.created_at || 0).getTime() > new Date(existing.timestamp || existing.created_at || 0).getTime()) {
-        allDeduplicatedPaymentsMap.set(key, p);
-      }
-    }
-  });
 
-  const allConsolidatedPayments = Array.from(allDeduplicatedPaymentsMap.values());
-
-  // ── 2. Current Day All Paid Transactions (Activities + Food Street Combined) ──
-  const todayPaidCounterList = allConsolidatedPayments.filter(p => {
-    const isPaid = p.status === 'paid' || p.status === 'success' || p.payment_status === 'PAID';
-    return isPaid && isDateToday(p.timestamp || p.created_at);
-  });
-
-  const todayActivityPaidList = todayPaidCounterList.filter(p => {
-    const isFood = Boolean(
-      p.orderId || 
-      p.activityName === 'Food Street Dining' || 
-      p.activityName?.toLowerCase().includes('food') || 
-      p.activityName?.toLowerCase().includes('cafe') || 
-      p.activityName?.toLowerCase().includes('dining')
-    );
-    return !isFood;
-  });
-
-  const todayFoodPaidList = todayPaidCounterList.filter(p => {
-    return Boolean(
-      p.orderId || 
-      p.activityName === 'Food Street Dining' || 
-      p.activityName?.toLowerCase().includes('food') || 
-      p.activityName?.toLowerCase().includes('cafe') || 
-      p.activityName?.toLowerCase().includes('dining')
-    );
-  });
-
-  const todayActivityRevenue = todayActivityPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const todayFoodRevenue = todayFoodPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const todayCombinedTotalRevenue = todayActivityRevenue + todayFoodRevenue;
-
-  // ── 3. Current Day Ticketing Sales & Cash / UPI Breakdown Calculations ───
-  // Strictly filter for current day's ticketing transactions with Cash & UPI (excludes other days, food orders, and other transaction types)
-  const todayTicketingPaymentsList = allConsolidatedPayments.filter(p => {
-    const isToday = isDateToday(p.timestamp || p.created_at);
-    const isFood = Boolean(
-      p.orderId || 
-      p.activityName === 'Food Street Dining' || 
-      p.activityName?.toLowerCase().includes('food') || 
-      p.activityName?.toLowerCase().includes('cafe') || 
-      p.activityName?.toLowerCase().includes('dining')
-    );
-    const isCashOrUpi = p.method === 'cash' || p.method === 'upi' || p.method === 'qrcode';
-    return isToday && !isFood && isCashOrUpi;
-  });
-
-  // Current day paid ticketing transactions for revenue breakdown
-  const todayPaidTicketingList = todayTicketingPaymentsList.filter(
-    p => p.status === 'paid' || p.status === 'success' || p.payment_status === 'PAID'
-  );
-
-  const todayCashList = todayPaidTicketingList.filter(p => p.method === 'cash');
-  const todayUpiList = todayPaidTicketingList.filter(p => p.method === 'upi' || p.method === 'qrcode');
-
-  const todayCashRevenue = todayCashList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const todayCashCount = todayCashList.length;
-
-  const todayUpiRevenue = todayUpiList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const todayUpiCount = todayUpiList.length;
-
-  const todayTotalRevenue = todayCashRevenue + todayUpiRevenue;
-  const todayTotalCount = todayPaidTicketingList.length;
-
-  // Filtered transactions for the Current Day Table (Search & Cash/UPI toggle)
-  const counterPayments = todayTicketingPaymentsList.filter(p => {
-    if (methodFilter === 'cash' && p.method !== 'cash') return false;
-    if (methodFilter === 'upi' && p.method !== 'upi' && p.method !== 'qrcode') return false;
-
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return p.customerName?.toLowerCase().includes(searchLower) ||
-           p.customer_id?.toLowerCase().includes(searchLower) ||
-           p.bookingId?.toLowerCase().includes(searchLower) ||
-           p.ticketId?.toLowerCase().includes(searchLower) ||
-           p.activityName?.toLowerCase().includes(searchLower) ||
-           p.transactionId?.toLowerCase().includes(searchLower) ||
-           p.referenceNumber?.toLowerCase().includes(searchLower);
-  }).sort((a, b) => new Date(b.timestamp || b.created_at || 0).getTime() - new Date(a.timestamp || a.created_at || 0).getTime());
-
+  // ── RENDER CHECKOUT OVERLAY IF TICKETING CHECKOUT OPEN ──────────────────
   if (isCheckoutOpen && selectedActivities.length > 0) {
     const combinedName = selectedActivities.length === activities.length 
       ? 'All Activities Package' 
@@ -349,75 +435,127 @@ const TicketingDashboard: React.FC = () => {
           <h2 className="text-xl font-bold font-sans">Ticketing POS - {combinedName}</h2>
           <button 
             onClick={() => setIsCheckoutOpen(false)}
-            className="px-4 py-2 bg-rose-500/10 text-rose-400 rounded-lg font-bold hover:bg-rose-500/20 cursor-pointer"
+            className="px-4 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl font-bold text-xs cursor-pointer flex items-center gap-1.5"
           >
-            Cancel POS
+            <XCircle className="w-4 h-4" /> Close & Return
           </button>
         </div>
-        <div className="overflow-y-auto flex-1 p-4 md:p-6">
-          <UnifiedTicketingFlow activities={selectedActivities.map(s => activities.find(a => a.id === s.id) || s)} onCancel={() => setIsCheckoutOpen(false)} />
+        <div className="flex-1 overflow-y-auto">
+          <UnifiedTicketingFlow 
+            activities={selectedActivities} 
+            onCancel={() => setIsCheckoutOpen(false)} 
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 text-white w-full m-0 p-0">
-      <div className="flex justify-between items-center bg-[#1C1C1C] p-6 rounded-2xl border border-[#00ABAB]/30 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-[#3E8EDE]/5 rounded-full blur-3xl pointer-events-none"></div>
-        <div>
-          <h1 className="text-3xl font-black uppercase tracking-tight flex items-center gap-3">
-            <Ticket className="w-8 h-8 text-[#3E8EDE]" />
-            Central <span className="text-[#00ABAB]">Ticketing & Food Street POS</span>
-          </h1>
-          <p className="text-[#94A3B8] font-mono text-sm mt-1 uppercase tracking-widest">
-            Welcome, {currentUser?.name || 'Staff'} • Unified Counter Terminal
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6">
 
-      {/* Sub-tab selector */}
-      <div className="flex border-b border-[#1C1C1C] gap-2 overflow-x-auto">
+      {/* Top Main Navigation Tabs */}
+      <div className="flex border-b border-[#1C1C1C] gap-2 overflow-x-auto pb-1">
         <button 
           onClick={() => setActiveSubTab('new_booking')}
-          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 whitespace-nowrap ${activeSubTab === 'new_booking' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
+          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeSubTab === 'new_booking' 
+              ? 'border-[#00ABAB] text-[#00ABAB] bg-white/5 rounded-t-xl' 
+              : 'border-transparent text-[#94A3B8] hover:text-white'
+          }`}
         >
-          New Walk-in Booking
+          <Ticket className="w-4 h-4" /> Activity Ticketing POS
         </button>
+
         <button 
-          onClick={() => setActiveSubTab('food_street')}
-          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeSubTab === 'food_street' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
+          onClick={() => setActiveSubTab('cafe_pos')}
+          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeSubTab === 'cafe_pos' 
+              ? 'border-[#00ABAB] text-[#00ABAB] bg-white/5 rounded-t-xl' 
+              : 'border-transparent text-[#94A3B8] hover:text-white'
+          }`}
         >
-          <Utensils className="w-4 h-4" /> Food Street Counter POS
+          <Coffee className="w-4 h-4 text-[#14F1D9]" /> Cafe & Food Street POS
+          {foodCart.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-[#14F1D9] text-[#0A0A0A] text-xs font-black">
+              {foodCart.reduce((s, i) => s + i.quantity, 0)}
+            </span>
+          )}
         </button>
+
+
+        <button 
+          onClick={() => setActiveSubTab('cafe_menu')}
+          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeSubTab === 'cafe_menu' 
+              ? 'border-[#00ABAB] text-[#00ABAB] bg-white/5 rounded-t-xl' 
+              : 'border-transparent text-[#94A3B8] hover:text-white'
+          }`}
+        >
+          <Store className="w-4 h-4 text-emerald-400" /> Cafe Menu & Inventory
+        </button>
+
         <button 
           onClick={() => setActiveSubTab('history')}
-          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeSubTab === 'history' ? 'border-[#00ABAB] text-[#00ABAB]' : 'border-transparent text-[#94A3B8] hover:text-white'}`}
+          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeSubTab === 'history' 
+              ? 'border-[#00ABAB] text-[#00ABAB] bg-white/5 rounded-t-xl' 
+              : 'border-transparent text-[#94A3B8] hover:text-white'
+          }`}
         >
           <Clock className="w-4 h-4" /> Today's Sales ({todayTotalCount})
         </button>
       </div>
 
-      {activeSubTab === 'new_booking' ? (
-        <div className="glass-panel rounded-2xl p-6 border border-[#00ABAB]/30 animate-fade-in">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold">Select Activities to Book</h2>
-            <div className="flex gap-4">
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 1. ACTIVITY TICKETING POS SUBTAB                                   */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeSubTab === 'new_booking' && (
+        <div className="glass-panel rounded-2xl p-6 border border-[#00ABAB]/30 animate-fade-in space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 className="text-xl font-black text-white flex items-center gap-2">
+                <Ticket className="w-6 h-6 text-[#00ABAB]" /> Select Park Activities to Book
+              </h2>
+              <p className="text-xs text-[#94A3B8] mt-0.5">
+                Multi-select one or multiple activities to generate synchronized passes or bundle passes.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
               <button 
                 onClick={selectAll}
-                className="px-4 py-2 border border-[#00ABAB] text-[#00ABAB] rounded-xl font-bold hover:bg-[#00ABAB]/10 transition-colors cursor-pointer"
+                className="flex-1 sm:flex-none px-4 py-2 border border-[#00ABAB] text-[#00ABAB] rounded-xl font-bold text-xs hover:bg-[#00ABAB]/10 transition-colors cursor-pointer"
               >
                 {selectedActivities.length === visibleActivities.length ? 'Deselect All' : 'Select All Package'}
               </button>
               <button 
                 onClick={() => setIsCheckoutOpen(true)}
                 disabled={selectedActivities.length === 0}
-                className="px-6 py-2 bg-[#00ABAB] text-black rounded-xl font-bold hover:bg-[#00ABAB]/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="flex-1 sm:flex-none px-6 py-2.5 bg-[#00ABAB] text-black rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#00ABAB]/80 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-[0_0_20px_rgba(0,171,171,0.3)]"
               >
-                Checkout ({selectedActivities.length})
+                Proceed to Checkout ({selectedActivities.length})
               </button>
             </div>
           </div>
+
+          {/* Quick link banner to Cafe POS */}
+          <div className="p-3.5 bg-gradient-to-r from-teal-950/40 via-[#0A0A0A] to-amber-950/20 border border-[#00ABAB]/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="p-2 rounded-xl bg-amber-400/10 text-amber-300 border border-amber-400/30">
+                <Coffee className="w-5 h-5" />
+              </span>
+              <div>
+                <p className="text-xs font-bold text-white">Guest wants snacks, beverages, or meals?</p>
+                <p className="text-[10px] text-[#94A3B8]">Food & Cafe POS is integrated right into your counter terminal.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('cafe_pos')}
+              className="px-4 py-1.5 bg-[#14F1D9] text-[#0A0A0A] rounded-xl font-black text-xs uppercase tracking-wider hover:bg-white transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Utensils className="w-3.5 h-3.5" /> Open Cafe POS Terminal <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {visibleActivities.map(act => {
               const isSelected = selectedActivities.some(a => a.id === act.id);
@@ -425,19 +563,22 @@ const TicketingDashboard: React.FC = () => {
                 <div 
                   key={act.id} 
                   onClick={() => toggleActivity(act)}
-                  className={`bg-[#0A0A0A] p-6 rounded-2xl border transition-all cursor-pointer group relative ${isSelected ? 'border-[#00ABAB] ring-1 ring-[#00ABAB]' : 'border-[#1C1C1C] hover:border-[#00ABAB]/50'}`}
+                  className={`bg-[#0A0A0A] p-6 rounded-2xl border transition-all cursor-pointer group relative ${
+                    isSelected ? 'border-[#00ABAB] ring-2 ring-[#00ABAB]/40 shadow-[0_0_25px_rgba(0,171,171,0.2)]' : 'border-[#1C1C1C] hover:border-[#00ABAB]/50'
+                  }`}
                 >
                   {isSelected && (
-                    <div className="absolute top-4 right-4 bg-[#00ABAB] text-black rounded-full p-1 z-10">
+                    <div className="absolute top-4 right-4 bg-[#00ABAB] text-black rounded-full p-1 z-10 shadow-lg">
                       <CheckCircle className="w-5 h-5" />
                     </div>
                   )}
-                  <div className="h-32 rounded-xl overflow-hidden mb-4 border border-[#1C1C1C] relative">
+                  <div className="h-36 rounded-xl overflow-hidden mb-4 border border-[#1C1C1C] relative">
                     <img src={act.image} alt={act.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     {isSelected && <div className="absolute inset-0 bg-[#00ABAB]/20" />}
                   </div>
                   <h3 className="text-lg font-bold text-white group-hover:text-[#40E0D0] transition-colors">{act.name}</h3>
-                  <div className="text-sm mt-2 font-mono">
+                  <p className="text-xs text-[#94A3B8] line-clamp-2 mt-1">{act.description}</p>
+                  <div className="text-sm mt-3 font-mono pt-3 border-t border-[#1C1C1C]">
                     {act.packages && act.packages.length > 0 ? (
                       <span className="text-[#00ABAB] font-bold">
                         Packages from ₹{Math.min(...act.packages.map(p => p.price))} ({act.packages.length} Options)
@@ -453,7 +594,7 @@ const TicketingDashboard: React.FC = () => {
             })}
           </div>
 
-          {/* Today's Combined Counter Quick Summary */}
+          {/* Today's Combined Counter Summary */}
           <div className="mt-8 pt-6 border-t border-[#1C1C1C] space-y-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
@@ -471,9 +612,7 @@ const TicketingDashboard: React.FC = () => {
               </div>
 
               <button
-                onClick={() => {
-                  setActiveSubTab('history');
-                }}
+                onClick={() => setActiveSubTab('history')}
                 className="text-xs font-mono text-[#40E0D0] hover:underline flex items-center gap-1 cursor-pointer font-bold"
               >
                 Open Full Sales Dashboard <ArrowRight className="w-3.5 h-3.5" />
@@ -495,7 +634,7 @@ const TicketingDashboard: React.FC = () => {
               <div className="p-3 bg-[#0A0A0A] border border-amber-500/20 rounded-xl flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Utensils className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs text-[#94A3B8]">Food Street Sales:</span>
+                  <span className="text-xs text-[#94A3B8]">Cafe & Food Sales:</span>
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-bold font-mono text-amber-400">₹{todayFoodRevenue.toLocaleString('en-IN')}</span>
@@ -521,23 +660,31 @@ const TicketingDashboard: React.FC = () => {
             </div>
           </div>
         </div>
-      ) : activeSubTab === 'food_street' ? (
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 2. CAFE & FOOD STREET POS TERMINAL                                  */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeSubTab === 'cafe_pos' && (
         <div className="glass-panel rounded-2xl p-6 border border-[#00ABAB]/30 space-y-6 animate-fade-in">
           <div className="flex flex-col lg:flex-row gap-6">
             
             {/* LEFT COLUMN: FOOD ITEMS CATALOG */}
             <div className="flex-1 space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Utensils className="w-5 h-5 text-[#00ABAB]" /> Food Street Stalls Catalog
-                </h2>
+                <div>
+                  <h2 className="text-xl font-black text-white flex items-center gap-2">
+                    <Coffee className="w-5 h-5 text-[#14F1D9]" /> Cafe & Food Street POS Counter
+                  </h2>
+                  <p className="text-xs text-[#94A3B8]">Select items to bill, track live inventory, and generate receipts with 5% GST.</p>
+                </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                   <div className="relative flex-1 sm:w-48 min-w-[140px]">
                     <Search className="w-4 h-4 text-[#94A3B8] absolute left-3 top-2.5" />
                     <input
                       type="text"
-                      placeholder="Search dish..."
+                      placeholder="Search dish or drink..."
                       value={foodSearch}
                       onChange={e => setFoodSearch(e.target.value)}
                       className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-[#94A3B8] focus:border-[#00ABAB] focus:outline-none"
@@ -547,9 +694,9 @@ const TicketingDashboard: React.FC = () => {
                   <select
                     value={selectedVendorId}
                     onChange={e => setSelectedVendorId(e.target.value)}
-                    className="bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl py-2 px-3 text-xs text-white focus:border-[#00ABAB] focus:outline-none font-mono"
+                    className="bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl py-2 px-3 text-xs text-white focus:border-[#00ABAB] focus:outline-none font-mono cursor-pointer"
                   >
-                    <option value="all">All Stalls</option>
+                    <option value="all">All Food Outlets</option>
                     {vendors.map(v => (
                       <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
@@ -557,53 +704,166 @@ const TicketingDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Items Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                {filteredMenuItems.map(item => {
-                  const vendor = vendors.find(v => v.id === item.vendorId);
-                  const stockQty = item.stockQuantity ?? 50;
-                  const isOutOfStock = stockQty <= 0 || !item.isAvailable;
-
+              {/* Category Filter Chips */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+                <button
+                  onClick={() => setSelectedCategory('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    selectedCategory === 'all'
+                      ? 'bg-[#14F1D9] text-[#0A0A0A]'
+                      : 'bg-[#0A0A0A] text-[#94A3B8] border border-[#1C1C1C] hover:text-white'
+                  }`}
+                >
+                  All Categories ({menuItems.length})
+                </button>
+                {allCategoryOptions.map(cat => {
+                  const count = menuItems.filter(m => m.category === cat).length;
                   return (
-                    <div 
-                      key={item.id} 
-                      className="p-3 bg-[#0A0A0A] border border-[#1C1C1C] hover:border-[#00ABAB]/50 rounded-xl flex gap-3 transition-all group"
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                        selectedCategory === cat
+                          ? 'bg-[#14F1D9] text-[#0A0A0A]'
+                          : 'bg-[#0A0A0A] text-[#94A3B8] border border-[#1C1C1C] hover:text-white'
+                      }`}
                     >
-                      <img src={item.image} alt={item.name} className="w-20 h-20 rounded-lg object-cover border border-[#1C1C1C]" />
-                      <div className="flex-1 flex flex-col justify-between min-w-0">
-                        <div>
-                          <div className="flex justify-between items-start">
-                            <span className="text-[9px] uppercase font-mono font-bold text-[#00ABAB] bg-[#1C1C1C] px-1.5 py-0.5 rounded truncate mr-1">
-                              {vendor?.name || 'Stall'}
-                            </span>
-                            <span className="font-mono text-xs font-black text-white">₹{item.price.toFixed(2)}</span>
-                          </div>
-                          <h4 className="font-bold text-xs text-white truncate mt-1">{item.name}</h4>
-                          <p className="text-[10px] text-[#94A3B8] line-clamp-1 mt-0.5">{item.description}</p>
-                          <div className="mt-1">
-                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded inline-block ${
-                              stockQty > 10 
-                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
-                                : stockQty > 0 
-                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' 
-                                : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                            }`}>
-                              {stockQty > 0 ? `📦 Stock: ${stockQty}` : '🔴 Out of Stock'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => addToFoodCart(item, 1)}
-                          disabled={isOutOfStock}
-                          className="mt-2 self-end px-3 py-1 rounded bg-[#00ABAB]/10 hover:bg-[#00ABAB] text-[#00ABAB] hover:text-black font-bold text-[10px] uppercase tracking-widest flex items-center gap-1 transition-all border border-[#00ABAB]/30 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <Plus className="h-3 w-3" /> {isOutOfStock ? 'Sold Out' : 'Add to Cart'}
-                        </button>
-                      </div>
-                    </div>
+                      {cat} {count > 0 && `(${count})`}
+                    </button>
                   );
                 })}
+              </div>
+
+              {/* Items Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[560px] overflow-y-auto pr-2 custom-scrollbar">
+                {filteredMenuItems.length === 0 ? (
+                  <div className="col-span-2 py-16 text-center text-[#94A3B8] bg-[#0A0A0A]/60 rounded-2xl border border-dashed border-[#1C1C1C] space-y-3">
+                    <Coffee className="w-10 h-10 mx-auto text-[#1C1C1C]" />
+                    <p className="text-xs">No menu items match your search or filter.</p>
+                    <button
+                      onClick={() => {
+                        setEditingMenuItem(null);
+                        setMenuForm({
+                          name: '',
+                          description: '',
+                          price: 50,
+                          purchasePrice: 30,
+                          category: 'Beverages',
+                          vendorId: vendors[0]?.id || 'vendor-forest-cafe',
+                          image: '',
+                          stockQuantity: 50,
+                          isAvailable: true
+                        });
+                        setIsMenuModalOpen(true);
+                      }}
+                      className="px-4 py-2 bg-[#00ABAB] text-black font-bold text-xs rounded-xl hover:bg-white transition-all cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" /> Add New Item to Menu
+                    </button>
+                  </div>
+                ) : (
+                  filteredMenuItems.map(item => {
+                    const vendor = vendors.find(v => v.id === item.vendorId);
+                    const stockQty = item.stockQuantity ?? 50;
+                    const isOutOfStock = stockQty <= 0 || !item.isAvailable;
+                    const inCartItem = foodCart.find(c => c.menuItemId === item.id);
+
+                    return (
+                      <div 
+                        key={item.id} 
+                        className={`p-3 bg-[#0A0A0A] border rounded-xl flex gap-3 transition-all group ${
+                          inCartItem ? 'border-[#14F1D9]/60 shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'border-[#1C1C1C] hover:border-[#00ABAB]/50'
+                        }`}
+                      >
+                        <img 
+                          src={item.image || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=400&q=80'} 
+                          alt={item.name} 
+                          className="w-20 h-20 rounded-lg object-cover border border-[#1C1C1C]" 
+                        />
+                        <div className="flex-1 flex flex-col justify-between min-w-0">
+                          <div>
+                            <div className="flex justify-between items-start">
+                              <span className="text-[9px] uppercase font-mono font-bold text-[#00ABAB] bg-[#1C1C1C] px-1.5 py-0.5 rounded truncate mr-1">
+                                {vendor?.name || 'Cafe Stall'}
+                              </span>
+                              <span className="font-mono text-sm font-black text-white">₹{item.price.toFixed(2)}</span>
+                            </div>
+                            <h4 className="font-bold text-xs text-white truncate mt-1">{item.name}</h4>
+                            <p className="text-[10px] text-[#94A3B8] line-clamp-1 mt-0.5">{item.description}</p>
+                            
+                            {/* Stock Indicator and Quick Adjust */}
+                            <div className="mt-1 flex items-center justify-between">
+                              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded inline-block ${
+                                stockQty > 10 
+                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
+                                  : stockQty > 0 
+                                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' 
+                                  : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                              }`}>
+                                {stockQty > 0 ? `📦 Stock: ${stockQty}` : '🔴 Out of Stock'}
+                              </span>
+
+                              {/* Direct stock adjuster */}
+                              <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    adjustMenuItemStock(item.id, -1);
+                                  }}
+                                  className="w-5 h-5 rounded bg-white/5 hover:bg-rose-500/20 text-[#94A3B8] hover:text-rose-400 text-[10px] font-bold flex items-center justify-center cursor-pointer"
+                                  title="Reduce stock by 1"
+                                >
+                                  -
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    adjustMenuItemStock(item.id, 1);
+                                  }}
+                                  className="w-5 h-5 rounded bg-white/5 hover:bg-emerald-500/20 text-[#94A3B8] hover:text-emerald-400 text-[10px] font-bold flex items-center justify-center cursor-pointer"
+                                  title="Add 1 to stock"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-2 flex items-center justify-end gap-2">
+                            {inCartItem ? (
+                              <div className="flex items-center gap-1.5 bg-[#14F1D9]/15 border border-[#14F1D9]/40 rounded-lg px-2 py-0.5">
+                                <button
+                                  onClick={() => removeFromFoodCart(item.id)}
+                                  className="text-[#14F1D9] hover:text-rose-400 p-0.5"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <span className="font-mono text-xs font-black text-white px-1">{inCartItem.quantity}</span>
+                                <button
+                                  onClick={() => addToFoodCart(item, 1)}
+                                  disabled={isOutOfStock}
+                                  className="text-[#14F1D9] hover:text-white p-0.5"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => addToFoodCart(item, 1)}
+                                disabled={isOutOfStock}
+                                className="px-3 py-1 rounded-lg bg-[#00ABAB]/10 hover:bg-[#00ABAB] text-[#00ABAB] hover:text-black font-bold text-[10px] uppercase tracking-wider flex items-center gap-1 transition-all border border-[#00ABAB]/30 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                <Plus className="h-3 w-3" /> {isOutOfStock ? 'Sold Out' : 'Add to Bill'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -619,7 +879,7 @@ const TicketingDashboard: React.FC = () => {
                       onClick={clearFoodCart}
                       className="text-[10px] font-mono text-red-400 hover:underline cursor-pointer uppercase font-bold"
                     >
-                      Clear
+                      Clear Cart
                     </button>
                   )}
                 </div>
@@ -627,7 +887,7 @@ const TicketingDashboard: React.FC = () => {
                 {foodCart.length === 0 ? (
                   <div className="py-12 text-center text-[#94A3B8] text-xs space-y-2">
                     <ShoppingBag className="w-8 h-8 mx-auto text-[#1C1C1C]" />
-                    <p>No food items added to counter bill.</p>
+                    <p>No food or drink items added to bill.</p>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
@@ -638,14 +898,23 @@ const TicketingDashboard: React.FC = () => {
                           <div className="text-[9px] text-[#94A3B8] font-mono truncate">{cartItem.vendorName}</div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[#00ABAB] font-bold">{cartItem.quantity}x</span>
-                          <span className="font-mono font-bold text-white">₹{(cartItem.price * cartItem.quantity).toFixed(2)}</span>
                           <button
                             onClick={() => removeFromFoodCart(cartItem.menuItemId)}
-                            className="text-white/40 hover:text-red-400 p-1 rounded cursor-pointer"
+                            className="text-[#94A3B8] hover:text-white p-0.5 rounded bg-white/5"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Minus className="h-3 w-3" />
                           </button>
+                          <span className="font-mono text-[#00ABAB] font-bold px-1">{cartItem.quantity}</span>
+                          <button
+                            onClick={() => {
+                              const itm = menuItems.find(m => m.id === cartItem.menuItemId);
+                              if (itm) addToFoodCart(itm, 1);
+                            }}
+                            className="text-[#94A3B8] hover:text-white p-0.5 rounded bg-white/5"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                          <span className="font-mono font-bold text-white ml-1">₹{(cartItem.price * cartItem.quantity).toFixed(2)}</span>
                         </div>
                       </div>
                     ))}
@@ -653,8 +922,31 @@ const TicketingDashboard: React.FC = () => {
                 )}
               </div>
 
-              {/* Form & Settlement (Token generated automatically, no customer details required) */}
+              {/* Form & Settlement */}
               <form onSubmit={handleProcessFoodOrder} className="space-y-3 pt-3 border-t border-[#1C1C1C]">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Guest Name</label>
+                    <input
+                      type="text"
+                      value={foodCustomerName}
+                      onChange={e => setFoodCustomerName(e.target.value)}
+                      placeholder="Walk-in Guest"
+                      className="w-full bg-[#1C1C1C] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#00ABAB]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Mobile No (Optional)</label>
+                    <input
+                      type="tel"
+                      value={foodCustomerPhone}
+                      onChange={e => setFoodCustomerPhone(e.target.value)}
+                      placeholder="9876543210"
+                      className="w-full bg-[#1C1C1C] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#00ABAB] font-mono"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Payment Method</label>
                   <div className="grid grid-cols-3 gap-2">
@@ -702,22 +994,352 @@ const TicketingDashboard: React.FC = () => {
                 <button
                   type="submit"
                   disabled={foodCart.length === 0 || isSubmittingFood}
-                  className="w-full py-3 rounded-xl bg-[#00ABAB] hover:bg-[#00ABAB]/80 text-black font-black text-xs uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="w-full py-3 rounded-xl bg-[#00ABAB] hover:bg-[#00ABAB]/80 text-black font-black text-xs uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-[0_0_20px_rgba(0,171,171,0.25)] flex items-center justify-center gap-2"
                 >
-                  {isSubmittingFood ? 'Processing...' : 'Process & Print Receipt'}
+                  <Printer className="w-4 h-4" />
+                  {isSubmittingFood ? 'Processing Bill...' : 'Charge & Print Thermal Receipt'}
                 </button>
               </form>
             </div>
 
           </div>
         </div>
-      ) : (
-        /* ═══════════════════════════════════════════════════════════════════
-            TRANSACTIONS & SALES DASHBOARD (TICKETS + FOOD STREET INTEGRATED)
-           ═══════════════════════════════════════════════════════════════════ */
+      )}
+
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 4. CAFE MENU & INVENTORY MANAGEMENT SUBTAB                          */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeSubTab === 'cafe_menu' && (
+        <div className="glass-panel rounded-2xl p-6 border border-[#00ABAB]/30 space-y-6 animate-fade-in">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 className="text-xl font-black text-white flex items-center gap-2">
+                <Store className="w-6 h-6 text-emerald-400" /> Cafe Menu Catalog & Inventory Management
+              </h2>
+              <p className="text-xs text-[#94A3B8]">
+                Add dishes, adjust live stock counters, configure prices, and review raw materials.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setIsBulkMenuModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black rounded-xl transition-all cursor-pointer shadow-lg"
+              >
+                <Plus className="h-4 w-4" /> ⚡ Bulk Add Menu Items
+              </button>
+              <button
+                onClick={() => {
+                  setEditingMenuItem(null);
+                  setMenuForm({
+                    name: '',
+                    description: '',
+                    price: 50,
+                    purchasePrice: 30,
+                    category: 'Beverages',
+                    vendorId: vendors[0]?.id || 'vendor-forest-cafe',
+                    image: '',
+                    stockQuantity: 50,
+                    isAvailable: true
+                  });
+                  setIsMenuModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#00ABAB] hover:bg-[#00ABAB]/80 text-black rounded-xl transition-all cursor-pointer shadow-lg"
+              >
+                <Plus className="h-4 w-4" /> + Add Dish
+              </button>
+            </div>
+          </div>
+
+          {/* Sub-tabs for Catalog vs Raw Inventory */}
+          <div className="flex border-b border-[#1C1C1C] gap-4">
+            <button
+              onClick={() => setCafeMenuSubTab('catalog')}
+              className={`pb-2.5 font-bold text-xs transition-all border-b-2 flex items-center gap-1.5 cursor-pointer ${
+                cafeMenuSubTab === 'catalog' ? 'border-[#14F1D9] text-[#14F1D9]' : 'border-transparent text-[#94A3B8] hover:text-white'
+              }`}
+            >
+              <Utensils className="w-3.5 h-3.5" /> Dish & Beverage Catalog ({menuItems.length})
+            </button>
+            <button
+              onClick={() => setCafeMenuSubTab('inventory')}
+              className={`pb-2.5 font-bold text-xs transition-all border-b-2 flex items-center gap-1.5 cursor-pointer ${
+                cafeMenuSubTab === 'inventory' ? 'border-[#14F1D9] text-[#14F1D9]' : 'border-transparent text-[#94A3B8] hover:text-white'
+              }`}
+            >
+              <Package className="w-3.5 h-3.5" /> Raw Materials & Stock Management
+            </button>
+          </div>
+
+          {cafeMenuSubTab === 'catalog' ? (
+            <div className="space-y-4">
+              {/* Search and Filters */}
+              <div className="glass-panel border border-[#00ABAB]/30 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                  <Search className="h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search menu items..."
+                    value={menuCatalogSearch}
+                    onChange={e => setMenuCatalogSearch(e.target.value)}
+                    className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-[#14F1D9]"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select
+                    value={menuCatalogVendorFilter}
+                    onChange={e => setMenuCatalogVendorFilter(e.target.value)}
+                    className="bg-[#0A0A0A] border border-[#1C1C1C] rounded-lg px-2.5 py-1.5 text-white focus:outline-none font-mono cursor-pointer"
+                  >
+                    <option value="all">All Outlets</option>
+                    {vendors.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={menuCatalogCategoryFilter}
+                    onChange={e => setMenuCatalogCategoryFilter(e.target.value)}
+                    className="bg-[#0A0A0A] border border-[#1C1C1C] rounded-lg px-2.5 py-1.5 text-white focus:outline-none font-mono cursor-pointer"
+                  >
+                    <option value="all">All Categories</option>
+                    {allCategoryOptions.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+
+                  <div className="flex border border-[#1C1C1C] rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setMenuCatalogViewMode('table')}
+                      className={`px-3 py-1 text-xs font-bold cursor-pointer ${
+                        menuCatalogViewMode === 'table' ? 'bg-[#00ABAB] text-black' : 'bg-[#0A0A0A] text-white'
+                      }`}
+                    >
+                      Table
+                    </button>
+                    <button
+                      onClick={() => setMenuCatalogViewMode('cards')}
+                      className={`px-3 py-1 text-xs font-bold cursor-pointer ${
+                        menuCatalogViewMode === 'cards' ? 'bg-[#00ABAB] text-black' : 'bg-[#0A0A0A] text-white'
+                      }`}
+                    >
+                      Cards
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Display */}
+              {(() => {
+                const catalogItems = menuItems.filter(item => {
+                  const matchesSearch = item.name.toLowerCase().includes(menuCatalogSearch.toLowerCase()) ||
+                                        item.category.toLowerCase().includes(menuCatalogSearch.toLowerCase()) ||
+                                        item.description.toLowerCase().includes(menuCatalogSearch.toLowerCase());
+                  const matchesVendor = menuCatalogVendorFilter === 'all' || item.vendorId === menuCatalogVendorFilter;
+                  const matchesCat = menuCatalogCategoryFilter === 'all' || item.category === menuCatalogCategoryFilter;
+                  return matchesSearch && matchesVendor && matchesCat;
+                });
+
+                if (menuCatalogViewMode === 'table') {
+                  return (
+                    <div className="border border-[#1C1C1C] rounded-2xl overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="bg-[#0A0A0A] border-b border-[#1C1C1C] text-[#94A3B8] font-mono font-bold">
+                              <th className="p-3">Dish / Item</th>
+                              <th className="p-3">Stall / Outlet</th>
+                              <th className="p-3">Category</th>
+                              <th className="p-3">Selling Price</th>
+                              <th className="p-3">Stock Counter</th>
+                              <th className="p-3">Status</th>
+                              <th className="p-3 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#1C1C1C] bg-[#0A0A0A]/50">
+                            {catalogItems.map(item => {
+                              const vendor = vendors.find(v => v.id === item.vendorId);
+                              const stockQty = item.stockQuantity ?? 50;
+
+                              return (
+                                <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                  <td className="p-3 flex items-center gap-3">
+                                    <img 
+                                      src={item.image || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=400&q=80'} 
+                                      alt={item.name} 
+                                      className="w-10 h-10 rounded-lg object-cover border border-[#1C1C1C]" 
+                                    />
+                                    <div>
+                                      <p className="font-bold text-white">{item.name}</p>
+                                      <p className="text-[10px] text-[#94A3B8] line-clamp-1">{item.description}</p>
+                                    </div>
+                                  </td>
+                                  <td className="p-3 font-mono text-[#94A3B8]">{vendor?.name || 'Stall'}</td>
+                                  <td className="p-3 font-mono text-[#14F1D9]">{item.category}</td>
+                                  <td className="p-3 font-mono font-black text-white">₹{item.price.toFixed(2)}</td>
+                                  <td className="p-3">
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => adjustMenuItemStock(item.id, -1)}
+                                        className="w-6 h-6 rounded bg-white/5 hover:bg-rose-500/20 text-[#94A3B8] hover:text-rose-400 font-bold flex items-center justify-center cursor-pointer"
+                                      >
+                                        -
+                                      </button>
+                                      <span className={`font-mono font-bold text-xs px-2 py-0.5 rounded ${
+                                        stockQty > 10 ? 'text-emerald-400 bg-emerald-500/10' :
+                                        stockQty > 0 ? 'text-amber-400 bg-amber-500/10' :
+                                        'text-rose-400 bg-rose-500/10'
+                                      }`}>
+                                        {stockQty}
+                                      </span>
+                                      <button
+                                        onClick={() => adjustMenuItemStock(item.id, 1)}
+                                        className="w-6 h-6 rounded bg-white/5 hover:bg-emerald-500/20 text-[#94A3B8] hover:text-emerald-400 font-bold flex items-center justify-center cursor-pointer"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td className="p-3">
+                                    <button
+                                      onClick={() => updateMenuItem({ ...item, isAvailable: !item.isAvailable })}
+                                      className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold cursor-pointer transition-all ${
+                                        item.isAvailable 
+                                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' 
+                                          : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                                      }`}
+                                    >
+                                      {item.isAvailable ? '✓ Available' : '✕ Disabled'}
+                                    </button>
+                                  </td>
+                                  <td className="p-3 text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <button
+                                        onClick={() => {
+                                          setEditingMenuItem(item);
+                                          setMenuForm({
+                                            name: item.name,
+                                            description: item.description,
+                                            price: item.price,
+                                            purchasePrice: item.purchasePrice || Math.round(item.price * 0.6),
+                                            category: item.category,
+                                            vendorId: item.vendorId,
+                                            image: item.image,
+                                            stockQuantity: item.stockQuantity || 50,
+                                            isAvailable: item.isAvailable
+                                          });
+                                          setIsMenuModalOpen(true);
+                                        }}
+                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-[#14F1D9]/20 text-[#94A3B8] hover:text-[#14F1D9] transition-colors cursor-pointer"
+                                        title="Edit Item"
+                                      >
+                                        <Edit className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          if (confirm(`Are you sure you want to delete ${item.name}?`)) {
+                                            deleteMenuItem(item.id);
+                                          }
+                                        }}
+                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 text-[#94A3B8] hover:text-rose-400 transition-colors cursor-pointer"
+                                        title="Delete Item"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {catalogItems.map(item => (
+                      <div key={item.id} className="bg-[#0A0A0A] border border-[#1C1C1C] rounded-2xl p-4 flex flex-col justify-between space-y-3 group hover:border-[#14F1D9]/40 transition-all">
+                        <div className="h-32 rounded-xl overflow-hidden border border-[#1C1C1C] relative">
+                          <img 
+                            src={item.image || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=400&q=80'} 
+                            alt={item.name} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                          />
+                          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-black/80 text-white border border-white/10">
+                            {item.category}
+                          </span>
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm text-white truncate">{item.name}</h4>
+                          <p className="text-[10px] text-[#94A3B8] line-clamp-1 mt-0.5">{item.description}</p>
+                          <div className="flex justify-between items-center mt-2">
+                            <span className="font-mono font-black text-base text-[#14F1D9]">₹{item.price.toFixed(2)}</span>
+                            <span className="font-mono text-xs text-[#94A3B8]">Stock: {item.stockQuantity ?? 50}</span>
+                          </div>
+                        </div>
+                        <div className="pt-2 border-t border-[#1C1C1C] flex justify-between items-center">
+                          <button
+                            onClick={() => updateMenuItem({ ...item, isAvailable: !item.isAvailable })}
+                            className={`text-[10px] font-mono font-bold cursor-pointer ${
+                              item.isAvailable ? 'text-emerald-400' : 'text-rose-400'
+                            }`}
+                          >
+                            {item.isAvailable ? '✓ Available' : '✕ Disabled'}
+                          </button>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => {
+                                setEditingMenuItem(item);
+                                setMenuForm({
+                                  name: item.name,
+                                  description: item.description,
+                                  price: item.price,
+                                  purchasePrice: item.purchasePrice || Math.round(item.price * 0.6),
+                                  category: item.category,
+                                  vendorId: item.vendorId,
+                                  image: item.image,
+                                  stockQuantity: item.stockQuantity || 50,
+                                  isAvailable: item.isAvailable
+                                });
+                                setIsMenuModalOpen(true);
+                              }}
+                              className="p-1 rounded bg-white/5 hover:bg-[#14F1D9]/20 text-[#94A3B8] hover:text-[#14F1D9]"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm(`Delete ${item.name}?`)) deleteMenuItem(item.id);
+                              }}
+                              className="p-1 rounded bg-white/5 hover:bg-rose-500/20 text-[#94A3B8] hover:text-rose-400"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <FoodStreetInventoryPanel isSubAdminPortal={true} />
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 5. CURRENT DAY TRANSACTIONS & SALES DASHBOARD                       */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeSubTab === 'history' && (
         <div className="glass-panel rounded-2xl p-6 border border-[#00ABAB]/30 space-y-6 animate-fade-in">
           
-          {/* ── 1. HEADER & TODAY BADGE ── */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#1C1C1C] pb-5">
             <div>
               <div className="flex items-center gap-2">
@@ -731,485 +1353,587 @@ const TicketingDashboard: React.FC = () => {
                       <Clock className="w-3 h-3" /> Today Only
                     </span>
                   </h2>
-                  <p className="text-xs text-[#94A3B8]">
-                    Real-time single-day counter sales with Cash and UPI breakdown
+                  <p className="text-xs text-[#94A3B8] mt-0.5">
+                    Live settlement ledger for counter receipts, Cash vs UPI breakdown, thermal reprints, and cancellation audits.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Date Indicator Badge */}
-              <div className="flex items-center gap-2 bg-[#0A0A0A] px-3.5 py-2 rounded-xl border border-[#00ABAB]/30 text-[#40E0D0] text-xs font-bold font-mono">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>{new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                <span className="bg-[#00ABAB]/20 px-2 py-0.5 rounded-md text-[10px] text-white">
-                  {counterPayments.length} Tickets Today
-                </span>
-              </div>
-
-              {/* Search Bar */}
-              <div className="relative w-full sm:w-64">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#94A3B8]">
-                  <Search className="w-4 h-4" />
-                </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 sm:w-64 min-w-[200px]">
+                <Search className="w-4 h-4 text-[#94A3B8] absolute left-3 top-2.5" />
                 <input
                   type="text"
+                  placeholder="Search receipt, phone, name..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  placeholder="Search ticket / guest..."
-                  className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl py-2 pl-9 pr-4 text-xs text-white placeholder-[#94A3B8] focus:outline-none focus:border-[#00ABAB] transition-all font-mono"
+                  className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-[#94A3B8] focus:border-[#00ABAB] focus:outline-none font-mono"
                 />
               </div>
-            </div>
-          </div>
 
-          {/* ── 2. EXECUTIVE KPI CARDS: ONE DAY CURRENT SALES (CASH & UPI BREAKDOWN) ── */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            
-            {/* 1. Current Day Total Sales */}
-            <div className="p-5 bg-[#0A0A0A] border border-[#00ABAB]/40 rounded-2xl space-y-2 relative overflow-hidden shadow-[0_0_25px_rgba(0,171,171,0.08)]">
-              <div className="absolute top-0 right-0 w-28 h-28 bg-[#00ABAB]/10 rounded-full blur-2xl pointer-events-none"></div>
-              <div className="flex items-center justify-between text-[#94A3B8]">
-                <span className="text-xs uppercase tracking-wider font-extrabold font-sans flex items-center gap-2 text-[#40E0D0]">
-                  <TrendingUp className="w-4 h-4" /> Current Day Total Sales
-                </span>
-                <span className="p-1 bg-[#1C1C1C] text-[#40E0D0] border border-[#00ABAB]/30 rounded-md text-[11px] font-mono font-bold px-2">
-                  {todayTotalCount} Paid
-                </span>
-              </div>
-              <div className="text-3xl font-black text-[#40E0D0] font-mono tracking-tight">
-                ₹{todayTotalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-[11px] text-[#94A3B8] font-mono">
-                Combined Cash + UPI ticketing collection today
-              </p>
-            </div>
-
-            {/* 2. Cash Breakdown */}
-            <div className="p-5 bg-[#0A0A0A] border border-emerald-500/30 rounded-2xl space-y-2 relative overflow-hidden shadow-[0_0_25px_rgba(16,185,129,0.06)]">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
-              <div className="flex items-center justify-between text-[#94A3B8]">
-                <span className="text-xs uppercase tracking-wider font-extrabold font-sans flex items-center gap-2 text-emerald-400">
-                  <Banknote className="w-4 h-4" /> Cash Sales Breakdown
-                </span>
-                <span className="p-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md text-[11px] font-mono font-bold px-2">
-                  {todayCashCount} Txns
-                </span>
-              </div>
-              <div className="text-3xl font-black text-white font-mono tracking-tight">
-                ₹{todayCashRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-[11px] text-[#94A3B8] font-mono">
-                Total physical cash received at counter today
-              </p>
-            </div>
-
-            {/* 3. UPI Breakdown */}
-            <div className="p-5 bg-[#0A0A0A] border border-violet-500/30 rounded-2xl space-y-2 relative overflow-hidden shadow-[0_0_25px_rgba(139,92,246,0.06)]">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/10 rounded-full blur-2xl pointer-events-none"></div>
-              <div className="flex items-center justify-between text-[#94A3B8]">
-                <span className="text-xs uppercase tracking-wider font-extrabold font-sans flex items-center gap-2 text-violet-400">
-                  <Smartphone className="w-4 h-4" /> UPI Sales Breakdown
-                </span>
-                <span className="p-1 bg-violet-500/10 text-violet-400 border border-violet-500/20 rounded-md text-[11px] font-mono font-bold px-2">
-                  {todayUpiCount} Txns
-                </span>
-              </div>
-              <div className="text-3xl font-black text-white font-mono tracking-tight">
-                ₹{todayUpiRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-[11px] text-[#94A3B8] font-mono">
-                Total UPI QR & collect payments today
-              </p>
-            </div>
-
-          </div>
-
-          {/* ── 3. CASH & UPI METHOD FILTER ── */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#94A3B8] font-mono uppercase font-bold">Showing:</span>
-              <span className="text-xs text-white font-bold font-mono">Current Day Ticketing Transactions ({counterPayments.length})</span>
-            </div>
-
-            <div className="flex items-center gap-1.5 text-xs font-mono">
-              <span className="text-[#94A3B8] text-[11px] uppercase mr-1">Filter Method:</span>
-              {(['all', 'cash', 'upi'] as const).map(m => (
+              <div className="flex bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl p-1 gap-1">
                 <button
-                  key={m}
-                  onClick={() => setMethodFilter(m)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer border ${
-                    methodFilter === m
-                      ? 'bg-[#00ABAB] text-black border-[#00ABAB] shadow-sm'
-                      : 'bg-[#0A0A0A] border-[#1C1C1C] text-[#94A3B8] hover:text-white'
+                  onClick={() => setMethodFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono uppercase transition-all cursor-pointer ${
+                    methodFilter === 'all' ? 'bg-[#00ABAB] text-black' : 'text-[#94A3B8] hover:text-white'
                   }`}
                 >
-                  {m === 'all' ? `All Today (${todayTicketingPaymentsList.length})` : m === 'cash' ? `Cash (${todayCashCount})` : `UPI (${todayUpiCount})`}
+                  All ({todayTotalCount})
                 </button>
-              ))}
+                <button
+                  onClick={() => setMethodFilter('cash')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                    methodFilter === 'cash' ? 'bg-emerald-500 text-black' : 'text-emerald-400 hover:text-white'
+                  }`}
+                >
+                  <Banknote className="w-3.5 h-3.5" /> Cash ({todayCashCount})
+                </button>
+                <button
+                  onClick={() => setMethodFilter('upi')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                    methodFilter === 'upi' ? 'bg-violet-500 text-white' : 'text-violet-400 hover:text-white'
+                  }`}
+                >
+                  <Smartphone className="w-3.5 h-3.5" /> UPI ({todayUpiCount})
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* ── 4. CURRENT DAY TRANSACTION LEDGER TABLE ── */}
-          <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#0A0A0A] border-b border-[#1C1C1C] text-[#94A3B8] font-mono uppercase tracking-wider">
-                  <th className="p-4 font-bold">Time</th>
-                  <th className="p-4 font-bold">Booking / Ticket ID</th>
-                  <th className="p-4 font-bold">Guest Info</th>
-                  <th className="p-4 font-bold">Activity / Package</th>
-                  <th className="p-4 font-bold text-right">Amount (₹)</th>
-                  <th className="p-4 font-bold">Payment Method & Settlement</th>
-                  <th className="p-4 font-bold text-center">Status</th>
-                  <th className="p-4 font-bold text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1C1C1C]">
-                {counterPayments.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="p-12 text-center text-[#94A3B8] font-mono space-y-2">
-                      <Receipt className="w-8 h-8 mx-auto text-[#1C1C1C]" />
-                      <p className="font-bold text-sm text-white">No Ticketing Transactions Found Today</p>
-                      <p className="text-xs text-[#94A3B8]">
-                        Only current day Cash and UPI ticketing sales are displayed here.
-                      </p>
-                    </td>
+          {/* Revenue Breakdown Ribbon */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0A0A0A] to-emerald-950/20 border border-emerald-500/30 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-emerald-400 font-bold block">Today's Cash Collection</span>
+                <span className="text-2xl font-black font-mono text-emerald-400">₹{todayCashRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <div className="text-[10px] text-[#94A3B8] font-mono mt-0.5">{todayCashCount} physical cash bills</div>
+              </div>
+              <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-400">
+                <Banknote className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0A0A0A] to-violet-950/20 border border-violet-500/30 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-violet-400 font-bold block">Today's UPI Dynamic QR</span>
+                <span className="text-2xl font-black font-mono text-violet-400">₹{todayUpiRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <div className="text-[10px] text-[#94A3B8] font-mono mt-0.5">{todayUpiCount} bank app transactions</div>
+              </div>
+              <div className="p-3 bg-violet-500/10 rounded-2xl text-violet-400">
+                <Smartphone className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0A0A0A] to-teal-950/20 border border-[#00ABAB]/40 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-[#40E0D0] font-bold block">Total Today's Ticketing</span>
+                <span className="text-2xl font-black font-mono text-[#00ABAB]">₹{todayTotalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <div className="text-[10px] text-[#94A3B8] font-mono mt-0.5">{todayTotalCount} total settled orders</div>
+              </div>
+              <div className="p-3 bg-[#00ABAB]/10 rounded-2xl text-[#00ABAB]">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+            </div>
+          </div>
+
+          {/* Transactions Table */}
+          <div className="border border-[#1C1C1C] rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-[#0A0A0A] border-b border-[#1C1C1C] text-[#94A3B8] font-mono font-bold">
+                    <th className="p-3">Time</th>
+                    <th className="p-3">Receipt / Ticket #</th>
+                    <th className="p-3">Guest Details</th>
+                    <th className="p-3">Activity / Details</th>
+                    <th className="p-3">Method</th>
+                    <th className="p-3">Amount</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right">Actions</th>
                   </tr>
-                ) : (
-                  counterPayments.map(p => (
-                    <tr key={p.id} className="hover:bg-[#1C1C1C]/40 transition-colors">
-                      {/* 1. Time */}
-                      <td className="p-4 text-[#94A3B8] font-mono whitespace-nowrap">
-                        <div className="text-white font-bold">
-                          {new Date(p.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                        <div className="text-[10px] text-[#94A3B8] flex items-center gap-1 mt-0.5">
-                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-bold">Today</span>
-                        </div>
-                      </td>
-
-                      {/* 2. Booking / Ticket ID */}
-                      <td className="p-4 font-mono">
-                        <div>
-                          <div className="font-bold text-[#3E8EDE] flex items-center gap-1">
-                            {p.bookingId}
-                          </div>
-                          <div className="text-[10px] text-[#00ABAB] font-semibold mt-0.5 flex items-center gap-1">
-                            <Ticket className="w-3 h-3" />
-                            <span>{p.ticketId || `tkt-${p.bookingId?.slice(-6) || ''}`}</span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* 3. Guest Info */}
-                      <td className="p-4">
-                        <p className="font-bold text-white text-xs">{p.customerName || 'Walk-in Guest'}</p>
-                        <p className="text-[10px] text-[#94A3B8] font-mono">{p.customerPhone || p.customer_id || 'Counter'}</p>
-                      </td>
-
-                      {/* 4. Activity & Package */}
-                      <td className="p-4 max-w-xs">
-                        <div className="text-white font-semibold text-xs">{p.activityName || 'Adventure Sport'}</div>
-                        {p.packageName && (
-                          <div className="text-[10px] text-[#94A3B8] font-mono">{p.packageName}</div>
-                        )}
-                      </td>
-
-                      {/* 5. Amount */}
-                      <td className="p-4 text-right font-mono font-extrabold text-white text-sm whitespace-nowrap">
-                        ₹{p.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-
-                      {/* 6. Payment Method & Settlement */}
-                      <td className="p-4 font-mono text-xs">
-                        {p.method === 'cash' ? (
-                          <div className="space-y-1 bg-emerald-950/20 border border-emerald-500/20 p-2 rounded-xl">
-                            <div className="flex items-center gap-1.5 font-bold text-emerald-400">
-                              <Banknote className="w-3.5 h-3.5" />
-                              <span>CASH RECEIVED</span>
-                            </div>
-                            <div className="text-[10px] text-[#94A3B8] space-y-0.5">
-                              <div className="flex justify-between gap-2">
-                                <span>Cash Tendered:</span>
-                                <span className="text-white font-bold">
-                                  ₹{p.amountReceived != null ? p.amountReceived.toFixed(2) : p.amount.toFixed(2)}
-                                </span>
-                              </div>
-                              {p.changeGiven != null && p.changeGiven > 0 ? (
-                                <div className="flex justify-between gap-2 text-amber-400 font-bold">
-                                  <span>Change Given:</span>
-                                  <span>₹{p.changeGiven.toFixed(2)}</span>
-                                </div>
-                              ) : (
-                                <div className="text-[9px] text-slate-500">Exact Cash (₹0 Change)</div>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-1 bg-violet-950/20 border border-violet-500/20 p-2 rounded-xl">
-                            <div className="flex items-center gap-1.5 font-bold text-violet-400">
-                              {p.method === 'qrcode' ? <QrCode className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
-                              <span>UPI {p.method === 'qrcode' ? 'QR SCAN' : 'COLLECT'}</span>
-                            </div>
-                            <div className="text-[10px] text-[#94A3B8] space-y-0.5">
-                              <div className="truncate max-w-[220px]" title={counterUpiId || 'deucepark@upi'}>
-                                UPI VPA: <strong className="text-[#40E0D0] font-mono">{counterUpiId || 'deucepark@upi'}</strong>
-                              </div>
-                              <div className="text-[9px] text-slate-400 truncate max-w-[220px]" title={p.transactionId || p.referenceNumber || 'Approved'}>
-                                Txn/UTR: <span className="text-white font-bold">{p.transactionId || p.referenceNumber || 'Counter Verified'}</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* 7. Status */}
-                      <td className="p-4 text-center whitespace-nowrap">
-                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black font-mono uppercase tracking-wider inline-block ${
-                          p.status === 'paid' || p.status === 'success' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
-                          p.status === 'refunded' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
-                          p.status === 'cancelled' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
-                          'bg-red-500/10 text-red-400'
-                        }`}>
-                          {p.status === 'refunded' ? '🛑 REFUNDED' : p.status === 'cancelled' ? '🛑 CANCELLED' : 'PAID'}
-                        </span>
-                      </td>
-
-                      {/* 8. Action */}
-                      <td className="p-4 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => handlePrintReceipt(p)}
-                            className="p-2 bg-[#1C1C1C] hover:bg-[#00ABAB] hover:text-black rounded-lg transition-all inline-flex items-center gap-1 cursor-pointer border border-[#1C1C1C] hover:border-[#00ABAB]"
-                            title="Print Activity Ticket"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </button>
-
-                          {p.status === 'refunded' || p.status === 'cancelled' ? (
-                            <span className="text-[10px] font-mono text-slate-500 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
-                              REFUNDED
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleInitiateRefund(p)}
-                              className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white rounded-lg font-mono text-[11px] font-bold uppercase transition-all flex items-center gap-1 border border-rose-500/30 cursor-pointer shadow-sm"
-                              title="Cancel Ticket & Issue Refund"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                              <span>REFUND</span>
-                            </button>
-                          )}
-                        </div>
+                </thead>
+                <tbody className="divide-y divide-[#1C1C1C] bg-[#0A0A0A]/40 font-mono">
+                  {counterPayments.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-12 text-center text-[#94A3B8]">
+                        No ticketing transactions recorded for today matching the active filter.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    counterPayments.map(p => {
+                      const isCash = p.method === 'cash';
+                      const isRefunded = p.status === 'refunded' || p.status === 'cancelled';
+
+                      return (
+                        <tr key={p.id} className="hover:bg-white/5 transition-colors">
+                          <td className="p-3 text-[#94A3B8] whitespace-nowrap">
+                            {p.timestamp ? new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                          <td className="p-3 font-bold text-white">
+                            {p.ticketId || p.bookingId || p.id.slice(0, 8)}
+                          </td>
+                          <td className="p-3 font-sans">
+                            <div className="font-bold text-white">{p.customerName || 'Walk-in Guest'}</div>
+                            <div className="text-[10px] text-[#94A3B8] font-mono">{p.customerPhone || '—'}</div>
+                          </td>
+                          <td className="p-3 font-sans">
+                            <span className="text-[#14F1D9] font-bold">{p.activityName || 'Adventure Pass'}</span>
+                            {p.packageName && <span className="text-[10px] text-[#94A3B8] block">{p.packageName}</span>}
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              isCash ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-violet-500/20 text-violet-400 border border-violet-500/30'
+                            }`}>
+                              {p.method}
+                            </span>
+                          </td>
+                          <td className="p-3 font-black text-white text-sm">
+                            ₹{Number(p.amount).toFixed(2)}
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              isRefunded ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-teal-500/20 text-[#14F1D9] border border-teal-500/30'
+                            }`}>
+                              {isRefunded ? 'Refunded' : 'Paid'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handlePrintReceipt(p)}
+                                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors cursor-pointer"
+                                title="Print Receipt"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                              </button>
+                              {!isRefunded && (
+                                <button
+                                  onClick={() => handleInitiateRefund(p)}
+                                  className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
+                                  title="Cancel & Refund"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-
-      {/* ═══════════════════════════════════════════════════════════════════════
-          CANCEL & REFUND MODAL
-      ═══════════════════════════════════════════════════════════════════════ */}
-      {selectedRefundPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
-          <div className="w-full max-w-lg bg-[#090E20] border-2 border-rose-500/50 rounded-3xl p-6 text-white space-y-5 shadow-[0_0_50px_rgba(244,63,94,0.25)]">
-            
-            {/* Modal Header */}
-            <div className="flex justify-between items-center pb-3 border-b border-white/10">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                  <XCircle className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black uppercase text-white font-sans">
-                    CANCEL & REFUND
-                  </h3>
-                  <p className="text-[10px] font-mono text-rose-400">
-                    Ref: {selectedRefundPayment.bookingId || selectedRefundPayment.orderId} · ID: {selectedRefundPayment.ticketId || selectedRefundPayment.id}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedRefundPayment(null)}
-                className="p-1 text-slate-400 hover:text-white cursor-pointer"
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: ADD / EDIT MENU ITEM                                         */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {isMenuModalOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={handleSaveMenuItem} className="glass-panel border border-[#00ABAB]/40 p-6 rounded-3xl max-w-lg w-full space-y-4 bg-[#0A0A0A]">
+            <div className="flex justify-between items-center border-b border-[#1C1C1C] pb-3">
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <Store className="w-5 h-5 text-[#14F1D9]" />
+                {editingMenuItem ? 'Edit Menu Dish' : 'Add New Cafe Dish'}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setIsMenuModalOpen(false)}
+                className="text-[#94A3B8] hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Ticket Info Card */}
-            <div className="p-4 rounded-2xl bg-[#050816] border border-white/10 space-y-2 text-xs font-mono">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Guest:</span>
-                <span className="text-white font-bold">{selectedRefundPayment.customerName || 'Walk-in Guest'}</span>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Item / Dish Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={menuForm.name}
+                  onChange={e => setMenuForm({ ...menuForm, name: e.target.value })}
+                  placeholder="e.g. Hazelnut Cold Brew, Crispy Veg Burger"
+                  className="w-full bg-[#1C1C1C] border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#14F1D9]"
+                />
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Item:</span>
-                <span className="text-[#14F1D9] font-bold">{selectedRefundPayment.activityName || 'Adventure Pass / Order'}</span>
+
+              <div>
+                <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Short Description</label>
+                <textarea
+                  rows={2}
+                  value={menuForm.description}
+                  onChange={e => setMenuForm({ ...menuForm, description: e.target.value })}
+                  placeholder="Ingredients, flavors, portion size..."
+                  className="w-full bg-[#1C1C1C] border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#14F1D9]"
+                />
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Original Amount Paid:</span>
-                <span className="text-white font-bold text-sm">₹{selectedRefundPayment.amount}</span>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Selling Price (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    step="0.01"
+                    value={menuForm.price}
+                    onChange={e => setMenuForm({ ...menuForm, price: parseFloat(e.target.value) || 0 })}
+                    className="w-full bg-[#1C1C1C] border border-white/10 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-[#14F1D9]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Initial Stock Position</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={menuForm.stockQuantity}
+                    onChange={e => setMenuForm({ ...menuForm, stockQuantity: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-[#1C1C1C] border border-white/10 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-[#14F1D9]"
+                  />
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Original Payment Mode:</span>
-                <span className="text-purple-400 font-bold uppercase">{selectedRefundPayment.method}</span>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Category</label>
+                  <select
+                    value={menuForm.category}
+                    onChange={e => setMenuForm({ ...menuForm, category: e.target.value })}
+                    className="w-full bg-[#1C1C1C] border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none font-mono cursor-pointer"
+                  >
+                    {allCategoryOptions.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Stall / Outlet</label>
+                  <select
+                    value={menuForm.vendorId}
+                    onChange={e => setMenuForm({ ...menuForm, vendorId: e.target.value })}
+                    className="w-full bg-[#1C1C1C] border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none font-mono cursor-pointer"
+                  >
+                    {vendors.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Dish Image URL or Upload</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={menuForm.image}
+                    onChange={e => setMenuForm({ ...menuForm, image: e.target.value })}
+                    placeholder="https://images.unsplash.com/..."
+                    className="flex-1 bg-[#1C1C1C] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-[#14F1D9]"
+                  />
+                  <label className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1 border border-white/10">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{isUploadingImage ? '...' : 'Upload'}</span>
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="menu-available-chk"
+                  checked={menuForm.isAvailable}
+                  onChange={e => setMenuForm({ ...menuForm, isAvailable: e.target.checked })}
+                  className="rounded text-[#00ABAB] focus:ring-[#00ABAB] cursor-pointer"
+                />
+                <label htmlFor="menu-available-chk" className="text-white font-bold cursor-pointer">
+                  Immediately available for billing at POS
+                </label>
               </div>
             </div>
 
-            {/* Refund Options */}
-            <div className="space-y-4">
-              {/* Cancellation Reason */}
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold">
-                  Reason for Cancellation *
-                </label>
-                <select
-                  value={refundReason}
-                  onChange={e => setRefundReason(e.target.value)}
-                  className="w-full bg-[#050816] border border-white/15 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-rose-400 focus:outline-none"
+            <div className="flex justify-end gap-2 pt-3 border-t border-[#1C1C1C]">
+              <button
+                type="button"
+                onClick={() => setIsMenuModalOpen(false)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-[#00ABAB] hover:bg-[#00ABAB]/80 text-black font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer"
+              >
+                {editingMenuItem ? 'Save Changes' : 'Create Item'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: GENERATED BILL RECEIPT                                       */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {generatedBillOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="glass-panel w-full max-w-sm p-6 rounded-3xl border border-[#14F1D9]/40 relative bg-[#050816] text-center font-sans shadow-[0_0_40px_rgba(20,241,217,0.2)]">
+            <CheckCircle className="w-12 h-12 text-[#14F1D9] mx-auto mb-2" />
+            <h3 className="text-xl font-black text-white uppercase tracking-tight">Food Bill Processed!</h3>
+            <p className="text-xs text-[#94A3B8]">
+              Token No: <span className="font-mono text-[#14F1D9] font-black text-base">#{generatedBillOrder.tokenNumber || generatedBillOrder.id.slice(-4)}</span>
+            </p>
+
+            <div className="my-4 p-4 bg-[#0B1120] border border-white/10 rounded-2xl text-left text-xs font-mono space-y-1.5">
+              <div className="flex justify-between text-[#94A3B8]">
+                <span>Invoice #:</span> 
+                <span className="text-white font-bold">{generatedBillOrder.invoiceNumber || generatedBillOrder.id}</span>
+              </div>
+              <div className="flex justify-between text-[#94A3B8]">
+                <span>Time:</span> 
+                <span className="text-white">{new Date(generatedBillOrder.createdAt).toLocaleTimeString()}</span>
+              </div>
+              <div className="flex justify-between text-[#94A3B8]">
+                <span>Guest:</span> 
+                <span className="text-white">{generatedBillOrder.customerName}</span>
+              </div>
+              <div className="border-t border-white/10 my-2 pt-2 space-y-1">
+                {generatedBillOrder.items.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-white">
+                    <span>{item.quantity}x {item.name}</span>
+                    <span>₹{(item.price * item.quantity).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-white/10 pt-2 space-y-1 text-xs">
+                <div className="flex justify-between text-[#94A3B8]">
+                  <span>Subtotal:</span>
+                  <span className="text-white">₹{(generatedBillOrder.subtotal != null ? generatedBillOrder.subtotal : (generatedBillOrder.totalAmount / 1.05)).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[#94A3B8]">
+                  <span>GST (5%):</span>
+                  <span className="text-[#14F1D9]">+₹{(generatedBillOrder.taxAmount != null ? generatedBillOrder.taxAmount : (generatedBillOrder.totalAmount - (generatedBillOrder.totalAmount / 1.05))).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-black text-sm text-[#14F1D9] pt-1 border-t border-white/10">
+                  <span>TOTAL PAID:</span>
+                  <span>₹{generatedBillOrder.totalAmount.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  printTicket({
+                    receiptId: generatedBillOrder.invoiceNumber || generatedBillOrder.id,
+                    tokenNumber: generatedBillOrder.tokenNumber || generatedBillOrder.id,
+                    activityName: 'DEUCE CAFE & FOOD STREET',
+                    packageName: 'Food Street Dining',
+                    customerName: generatedBillOrder.customerName,
+                    customerPhone: generatedBillOrder.customerPhone,
+                    date: new Date(generatedBillOrder.createdAt).toISOString(),
+                    slot: 'FOOD COUNTER',
+                    items: generatedBillOrder.items.map(i => ({ label: `${i.quantity}x ${i.name}`, value: `₹${(i.price * i.quantity).toFixed(2)}` })),
+                    subtotalAmount: generatedBillOrder.subtotal != null ? generatedBillOrder.subtotal : Math.round((generatedBillOrder.totalAmount / 1.05) * 100) / 100,
+                    totalAmount: generatedBillOrder.totalAmount,
+                    paymentStatus: 'paid',
+                    quantity: generatedBillOrder.items.reduce((sum, item) => sum + item.quantity, 0),
+                    paymentMethod: (generatedBillOrder.paymentMethod || 'CASH').toUpperCase()
+                  });
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-[#14F1D9] text-[#050816] font-bold text-xs uppercase tracking-wider hover:bg-[#00B4FF] transition-all cursor-pointer shadow-[0_0_15px_rgba(20,241,217,0.3)] flex items-center justify-center gap-1.5"
+              >
+                <Printer className="w-4 h-4" /> Thermal Print
+              </button>
+              <button
+                type="button"
+                onClick={() => setGeneratedBillOrder(null)}
+                className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer border border-white/10"
+              >
+                Next Bill
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: BULK ADD MENU ITEMS                                          */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <BulkAddMenuModal
+        isOpen={isBulkMenuModalOpen}
+        onClose={() => setIsBulkMenuModalOpen(false)}
+        defaultVendorId={selectedVendorId !== 'all' ? selectedVendorId : vendors[0]?.id}
+      />
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: REFUND CONFIRMATION                                          */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {selectedRefundPayment && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="glass-panel border border-rose-500/30 p-6 rounded-3xl max-w-md w-full space-y-4 bg-[#0A0A0A]">
+            <div className="flex justify-between items-center border-b border-[#1C1C1C] pb-3">
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <RotateCcw className="w-5 h-5 text-rose-400" /> Cancel & Refund Ticket
+              </h3>
+              <button 
+                onClick={() => {
+                  setSelectedRefundPayment(null);
+                  setRefundNotice(null);
+                  setRefundSuccessReceipt(null);
+                }}
+                className="text-[#94A3B8] hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {refundNotice ? (
+              <div className="space-y-4 text-center py-4">
+                <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto" />
+                <p className="text-sm font-bold text-emerald-400">{refundNotice}</p>
+                {refundSuccessReceipt && (
+                  <button
+                    onClick={() => {
+                      printTicket({
+                        receiptId: refundSuccessReceipt.receiptId,
+                        tokenNumber: refundSuccessReceipt.receiptId,
+                        activityName: selectedRefundPayment.activityName || 'Cancelled Activity',
+                        packageName: 'REFUND VOUCHER',
+                        customerName: selectedRefundPayment.customerName || 'Walk-in Guest',
+                        customerPhone: selectedRefundPayment.customerPhone,
+                        date: new Date().toISOString().split('T')[0],
+                        slot: 'CANCELLATION DESK',
+                        items: [{ label: 'Refund Amount Disbursed', value: `₹${refundSuccessReceipt.refundAmount}` }],
+                        totalAmount: refundSuccessReceipt.refundAmount,
+                        paymentStatus: 'refunded',
+                        quantity: 1,
+                        paymentMethod: refundSuccessReceipt.refundMethod
+                      });
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" /> Print Cancellation Voucher
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setSelectedRefundPayment(null);
+                    setRefundNotice(null);
+                    setRefundSuccessReceipt(null);
+                  }}
+                  className="w-full py-2 bg-[#00ABAB] text-black font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer"
                 >
-                  <option value="Customer Cancellation Request">Customer Cancellation Request</option>
-                  <option value="Inclement Weather / Rain">Inclement Weather / Rain Condition</option>
-                  <option value="Track Maintenance / Technical Delay">Track Maintenance / Technical Delay</option>
-                  <option value="Duplicate Booking / Billing Error">Duplicate Booking / Billing Error</option>
-                  <option value="Food Order Cancelled">Food Order Cancelled / Modified</option>
-                  <option value="Medical / Emergency Reason">Medical / Emergency Reason</option>
-                  <option value="Group Size Changed">Group Size Changed</option>
-                  <option value="Other / Custom">Other / Custom Reason</option>
-                </select>
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 text-xs font-sans">
+                <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-1 font-mono">
+                  <div className="flex justify-between text-[#94A3B8]">
+                    <span>Transaction / Ticket ID:</span>
+                    <span className="text-white font-bold">{selectedRefundPayment.ticketId || selectedRefundPayment.id}</span>
+                  </div>
+                  <div className="flex justify-between text-[#94A3B8]">
+                    <span>Guest:</span>
+                    <span className="text-white">{selectedRefundPayment.customerName || 'Walk-in Guest'}</span>
+                  </div>
+                  <div className="flex justify-between text-[#94A3B8]">
+                    <span>Original Tender:</span>
+                    <span className="text-white uppercase font-bold">{selectedRefundPayment.method}</span>
+                  </div>
+                  <div className="flex justify-between text-[#94A3B8] pt-1 border-t border-white/10">
+                    <span>Original Amount Paid:</span>
+                    <span className="text-emerald-400 font-black text-sm">₹{selectedRefundPayment.amount}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Refund Amount (₹)</label>
+                  <input
+                    type="number"
+                    value={refundAmountInput}
+                    onChange={e => setRefundAmountInput(e.target.value)}
+                    max={selectedRefundPayment.amount}
+                    min={1}
+                    className="w-full bg-[#1C1C1C] border border-white/10 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-rose-400 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Disbursement Method</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['cash', 'upi', 'card'] as const).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setRefundMethodInput(m)}
+                        className={`py-2 rounded-xl text-xs font-bold uppercase font-mono border transition-all cursor-pointer ${
+                          refundMethodInput === m
+                            ? 'bg-rose-500 text-white border-rose-500'
+                            : 'bg-[#1C1C1C] text-[#94A3B8] border-[#1C1C1C] hover:text-white'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Reason for Cancellation</label>
+                  <select
+                    value={refundReason}
+                    onChange={e => setRefundReason(e.target.value)}
+                    className="w-full bg-[#1C1C1C] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="Customer Cancellation Request">Customer Cancellation Request</option>
+                    <option value="Double Billing / Incorrect Amount">Double Billing / Incorrect Amount</option>
+                    <option value="Weather / Rain Interruption">Weather / Rain Interruption</option>
+                    <option value="Mechanical / Safety Stoppage">Mechanical / Safety Stoppage</option>
+                    <option value="Other / Custom">Other / Custom</option>
+                  </select>
+                </div>
 
                 {refundReason === 'Other / Custom' && (
                   <input
                     type="text"
-                    placeholder="Enter specific cancellation reason..."
+                    placeholder="Enter custom cancellation notes..."
                     value={customRefundReason}
                     onChange={e => setCustomRefundReason(e.target.value)}
-                    className="w-full bg-[#050816] border border-white/15 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-rose-400 focus:outline-none mt-2"
+                    className="w-full bg-[#1C1C1C] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-rose-400"
                   />
                 )}
-              </div>
 
-              {/* Refund Amount & Channel */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold">
-                    Refund Amount (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max={selectedRefundPayment.amount}
-                    value={refundAmountInput}
-                    onChange={e => setRefundAmountInput(e.target.value)}
-                    className="w-full bg-[#050816] border border-white/15 rounded-xl px-3 py-2 text-xs font-black text-rose-400 font-mono focus:border-rose-400 focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold">
-                    Refund Method
-                  </label>
-                  <select
-                    value={refundMethodInput}
-                    onChange={e => setRefundMethodInput(e.target.value as any)}
-                    className="w-full bg-[#050816] border border-white/15 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-rose-400 focus:outline-none"
+                <div className="flex justify-end gap-2 pt-3 border-t border-[#1C1C1C]">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRefundPayment(null)}
+                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold text-xs cursor-pointer"
                   >
-                    <option value="cash">Instant Cash Handover</option>
-                    <option value="upi">Original UPI Account</option>
-                    <option value="card">Card Reversal</option>
-                    <option value="original">Original Payment Mode</option>
-                  </select>
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isRefunding}
+                    onClick={handleConfirmRefund}
+                    className="px-5 py-2 bg-rose-500 hover:bg-rose-600 text-white font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer disabled:opacity-50"
+                  >
+                    {isRefunding ? 'Processing...' : 'Confirm Refund & Disburse'}
+                  </button>
                 </div>
               </div>
-            </div>
-
-            {/* Warning Alert */}
-            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2.5 text-xs text-rose-300 font-mono">
-              <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-              <span>This ticket/order will be permanently marked cancelled and cannot be scanned at check-in.</span>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex justify-end gap-2.5 pt-3 border-t border-white/10">
-              <button
-                type="button"
-                onClick={() => setSelectedRefundPayment(null)}
-                className="px-4 py-2.5 rounded-xl bg-white/10 text-slate-300 hover:text-white font-bold text-xs uppercase font-mono cursor-pointer"
-              >
-                BACK
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmRefund}
-                disabled={isRefunding}
-                className="px-5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black text-xs uppercase font-mono transition-all flex items-center gap-1.5 cursor-pointer shadow-[0_0_20px_rgba(244,63,94,0.4)] disabled:opacity-50"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>{isRefunding ? 'PROCESSING...' : 'CONFIRM CANCEL & REFUND'}</span>
-              </button>
-            </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          REFUND SUCCESS CREDIT NOTE RECEIPT MODAL
-      ═══════════════════════════════════════════════════════════════════════ */}
-      {refundSuccessReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
-          <div className="w-full max-w-md bg-[#090E20] border-2 border-emerald-500/50 rounded-3xl p-6 text-white space-y-4 shadow-[0_0_50px_rgba(16,185,129,0.25)] text-center">
-            <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
-              <Check className="w-6 h-6" />
-            </div>
-
-            <h3 className="text-lg font-black uppercase text-white font-sans">
-              REFUND PROCESSED SUCCESSFULLY
-            </h3>
-
-            <div className="p-4 rounded-2xl bg-[#050816] border border-white/10 text-left text-xs font-mono space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Refund Amount:</span>
-                <span className="text-emerald-400 font-bold text-base">₹{refundSuccessReceipt.refundAmount}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Refund Channel:</span>
-                <span className="text-white uppercase font-bold">{refundSuccessReceipt.refundMethod}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Guest:</span>
-                <span className="text-white">{refundSuccessReceipt.customerName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Reason:</span>
-                <span className="text-slate-300 truncate max-w-[180px]">{refundSuccessReceipt.reason}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Staff Officer:</span>
-                <span className="text-[#14F1D9]">{refundSuccessReceipt.staffName}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-center gap-2 pt-2">
-              <button
-                onClick={() => setRefundSuccessReceipt(null)}
-                className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase text-xs font-mono cursor-pointer transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-              >
-                DONE
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
-
 export default TicketingDashboard;

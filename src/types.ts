@@ -135,6 +135,10 @@ export interface StaffSalaryPayment {
   calculatedSalary: number;
   bonusAmount: number;
   deductionAmount: number;
+  incentives?: number;
+  leaveDeduction?: number;
+  grossSalary?: number;
+  leaveDays?: number;
   netPayable: number;
   paymentMethod: 'Bank Transfer' | 'Cash' | 'UPI' | 'Cheque';
   paymentStatus: 'Paid' | 'Pending';
@@ -291,6 +295,15 @@ export interface MenuItem {
   isAvailable: boolean;
   image: string;
   stockQuantity?: number;
+  unit?: string; // Unit of measurement (e.g. 'pcs', 'plates', 'cups', 'bottles')
+  openingStock?: number; // Opening stock quantity
+  purchaseDate?: string; // Last purchase date
+  supplierName?: string; // Supplier / vendor name
+  purchaseQuantity?: number; // Total / recent purchase quantity
+  quantitySold?: number; // Total quantity sold
+  salesAmount?: number; // Total sales amount
+  wastageQuantity?: number; // Wastage quantity
+  stockAdjustment?: number; // Stock adjustment quantity
   organizationId?: string;
   updatedAt?: string;
 }

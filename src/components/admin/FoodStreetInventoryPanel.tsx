@@ -14,32 +14,38 @@ import {
   MenuItemRecipe, StockMovementType 
 } from '../../types';
 import { FoodStreetPurchaseModal } from './FoodStreetPurchaseModal';
+import { computeCafeInventoryValuation, CafeDateFilterType } from '../../lib/cafeFinanceSync';
 import { 
   Package, ShoppingCart, Plus, Edit, Trash2, CheckCircle, 
   AlertTriangle, ArrowUpRight, ArrowDownRight, RefreshCw, 
   FileText, Search, Filter, Download, Layers, ShieldAlert,
-  Calendar, Check, X, Tag, Truck, History
+  Calendar, Check, X, Tag, Truck, History, IndianRupee, TrendingUp, DollarSign
 } from 'lucide-react';
 
 interface FoodStreetInventoryPanelProps {
   vendorIdFilter?: string; // Optional filter if vendor is selected
   isSubAdminPortal?: boolean;
+  initialTab?: 'items' | 'purchases' | 'movements' | 'reports' | 'valuation';
 }
 
 export const FoodStreetInventoryPanel: React.FC<FoodStreetInventoryPanelProps> = ({
   vendorIdFilter,
-  isSubAdminPortal = false
+  isSubAdminPortal = false,
+  initialTab = 'items'
 }) => {
   const { 
     vendors, inventory, foodStreetPurchases, stockMovements, menuItemRecipes,
     addInventoryItem, updateInventoryItem, deleteInventoryItem,
     recordStockMovement, acceptPurchaseIntoStock, setMenuItemRecipe,
-    menuItems, currentUser 
+    menuItems, currentUser, orders
   } = useAppContext();
 
   // Active view tab inside inventory panel
-  type ViewTab = 'items' | 'purchases' | 'movements' | 'reports';
-  const [activeTab, setActiveTab] = useState<ViewTab>('items');
+  type ViewTab = 'items' | 'purchases' | 'movements' | 'reports' | 'valuation';
+  const [valuationDateFilter, setValuationDateFilter] = useState<CafeDateFilterType>('all');
+  const [customValuationStart, setCustomValuationStart] = useState(() => new Date().toISOString().split('T')[0]);
+  const [customValuationEnd, setCustomValuationEnd] = useState(() => new Date().toISOString().split('T')[0]);
+  const [activeTab, setActiveTab] = useState<ViewTab>(initialTab);
 
   // Purchase modal
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
@@ -246,6 +252,66 @@ export const FoodStreetInventoryPanel: React.FC<FoodStreetInventoryPanelProps> =
     document.body.removeChild(link);
   };
 
+  // Financial valuation & stock ledger data computation
+  const valuationData = useMemo(() => {
+    return computeCafeInventoryValuation({
+      menuItems,
+      orders,
+      foodStreetPurchases,
+      stockMovements,
+      vendors,
+      dateFilterType: valuationDateFilter,
+      customStartDate: customValuationStart,
+      customEndDate: customValuationEnd,
+      categoryFilter,
+      itemSearch: searchQuery
+    });
+  }, [
+    menuItems, orders, foodStreetPurchases, stockMovements, vendors,
+    valuationDateFilter, customValuationStart, customValuationEnd,
+    categoryFilter, searchQuery
+  ]);
+
+  const handleExportValuationCSV = () => {
+    const headers = [
+      "Date", "Item Name", "Category", "Unit", "Opening Stock", "Opening Stock Value",
+      "Purchased Qty", "Purchase Rate (Wtd Avg)", "Purchase Amount",
+      "Sold Qty", "Selling Rate", "Sales Amount", "COGS", "Gross Profit",
+      "Balance Qty", "Balance Stock Amount", "Supplier", "Last Purchase Date"
+    ];
+
+    const rows = valuationData.items.map(item => [
+      `"${item.lastPurchaseDate || new Date().toISOString().split('T')[0]}"`,
+      `"${item.name.replace(/"/g, '""')}"`,
+      `"${item.category}"`,
+      `"${item.unit}"`,
+      item.openingStock,
+      item.openingStockValue.toFixed(2),
+      item.purchasedQty,
+      item.purchaseRate.toFixed(2),
+      item.purchaseAmount.toFixed(2),
+      item.soldQty,
+      item.sellingRate.toFixed(2),
+      item.salesAmount.toFixed(2),
+      item.cogs.toFixed(2),
+      item.grossProfit.toFixed(2),
+      item.balanceQty,
+      item.balanceStockAmount.toFixed(2),
+      `"${item.supplierName || 'N/A'}"`,
+      `"${item.lastPurchaseDate || 'N/A'}"`
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `cafe_inventory_financial_valuation_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in text-white">
       
@@ -291,7 +357,7 @@ export const FoodStreetInventoryPanel: React.FC<FoodStreetInventoryPanelProps> =
             <Plus className="w-4 h-4 text-teal-400" /> New Inventory Item
           </button>
           <button
-            onClick={handleExportStockCSV}
+            onClick={activeTab === 'valuation' ? handleExportValuationCSV : handleExportStockCSV}
             className="px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:border-teal-400 text-xs font-bold text-white flex items-center gap-1.5 transition-all cursor-pointer"
             title="Export CSV Stock Report"
           >
@@ -381,6 +447,17 @@ export const FoodStreetInventoryPanel: React.FC<FoodStreetInventoryPanelProps> =
         >
           <FileText className="w-4 h-4" /> Reorder & Inventory Reports
         </button>
+
+        <button
+          onClick={() => setActiveTab('valuation')}
+          className={`px-5 py-3 border-b-2 flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+            activeTab === 'valuation'
+              ? 'border-[#00ABAB] text-[#00ABAB]'
+              : 'border-transparent text-[#94A3B8] hover:text-white'
+          }`}
+        >
+          <IndianRupee className="w-4 h-4 text-[#14F1D9]" /> Financial Valuation & Stock Ledger
+        </button>
       </div>
 
       {/* Control Bar: Search & Filters */}
@@ -441,6 +518,7 @@ export const FoodStreetInventoryPanel: React.FC<FoodStreetInventoryPanelProps> =
           {activeTab === 'items' && `${filteredInventory.length} items listed`}
           {activeTab === 'purchases' && `${filteredPurchases.length} purchases`}
           {activeTab === 'movements' && `${filteredMovements.length} audit movements`}
+          {activeTab === 'valuation' && `${valuationData.items.length} valuation items audited`}
         </div>
       </div>
 
@@ -893,6 +971,248 @@ export const FoodStreetInventoryPanel: React.FC<FoodStreetInventoryPanelProps> =
       )}
 
       {/* ───────────────────────────────────────────────────────────── */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* VIEW 5: FINANCIAL VALUATION & STOCK LEDGER                    */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'valuation' && (
+        <div className="space-y-6">
+          {/* Date Filter & Control Bar */}
+          <div className="glass-panel p-4 rounded-2xl border border-[#00ABAB]/30 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-mono text-[#94A3B8] font-bold uppercase tracking-wider flex items-center gap-1.5 mr-2">
+                <Calendar className="w-3.5 h-3.5 text-[#00ABAB]" /> Valuation Period:
+              </span>
+              {[
+                { key: 'all', label: 'All Time' },
+                { key: 'today', label: 'Today' },
+                { key: 'yesterday', label: 'Yesterday' },
+                { key: 'this_week', label: 'This Week' },
+                { key: 'this_month', label: 'This Month' },
+                { key: 'custom', label: 'Custom Range' },
+              ].map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setValuationDateFilter(f.key as CafeDateFilterType)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
+                    valuationDateFilter === f.key
+                      ? 'bg-gradient-to-r from-[#00ABAB] to-[#40E0D0] text-black shadow-[0_0_12px_rgba(0,171,171,0.4)]'
+                      : 'bg-white/5 border border-white/10 text-[#94A3B8] hover:text-white'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+
+              {valuationDateFilter === 'custom' && (
+                <div className="flex items-center gap-2 ml-2">
+                  <input
+                    type="date"
+                    value={customValuationStart}
+                    onChange={e => setCustomValuationStart(e.target.value)}
+                    className="bg-[#141414] border border-[#262626] rounded-xl px-2.5 py-1 text-xs text-white font-mono focus:border-[#00ABAB] outline-none"
+                  />
+                  <span className="text-xs text-[#666]">to</span>
+                  <input
+                    type="date"
+                    value={customValuationEnd}
+                    onChange={e => setCustomValuationEnd(e.target.value)}
+                    className="bg-[#141414] border border-[#262626] rounded-xl px-2.5 py-1 text-xs text-white font-mono focus:border-[#00ABAB] outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 text-xs font-mono text-[#94A3B8]">
+              <span className="px-2.5 py-1 rounded-lg bg-teal-500/10 border border-teal-500/30 text-[#40E0D0]">
+                Method: Weighted-Average Cost
+              </span>
+              <span>As of Date: <strong className="text-white">{valuationData.asOfDate}</strong></span>
+            </div>
+          </div>
+
+          {/* Financial KPI Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 font-mono">
+            <div className="p-4 bg-[#0A0A0A] border border-[#00ABAB]/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-[#40E0D0] font-bold uppercase tracking-wider block">Balance Stock Value</span>
+              <div className="text-xl font-black text-[#40E0D0]">₹{valuationData.summary.totalClosingStockValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-[#888] font-normal">{valuationData.summary.totalClosingBalanceQty} total units asset</span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-blue-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-blue-400 font-bold uppercase tracking-wider block">Potential Retail</span>
+              <div className="text-xl font-black text-blue-400">₹{valuationData.summary.totalPotentialRetailValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-blue-300/60 font-normal">At selling price</span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-emerald-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">Net Sales</span>
+              <div className="text-xl font-black text-emerald-400">₹{valuationData.summary.totalNetSales.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-emerald-300/60 font-normal">{valuationData.summary.totalSoldQty} units sold</span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-amber-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block">COGS</span>
+              <div className="text-xl font-black text-amber-400">₹{valuationData.summary.totalCogs.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-amber-300/60 font-normal">Cost of goods sold</span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-teal-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-teal-300 font-bold uppercase tracking-wider block">Gross Profit</span>
+              <div className="text-xl font-black text-teal-300">₹{valuationData.summary.totalGrossProfit.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-teal-300/60 font-normal">Margin: {valuationData.summary.overallGrossMarginPercent}%</span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-purple-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">Total Purchases</span>
+              <div className="text-xl font-black text-purple-400">₹{valuationData.summary.totalPurchaseAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-purple-300/60 font-normal">Unpaid: ₹{valuationData.summary.totalOutstandingPurchases.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+            </div>
+          </div>
+
+          {/* Item-Wise Financial Valuation & Stock Ledger Table */}
+          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden">
+            <div className="p-4 bg-[#0A0A0A] border-b border-[#1C1C1C] flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                  <IndianRupee className="w-4 h-4 text-[#14F1D9]" /> Cafe Menu Item Inventory & Financial Valuation Ledger
+                </h3>
+                <p className="text-[11px] text-[#94A3B8]">
+                  Date | Item Name | Opening Stock | Purchased Qty | Purchase Rate | Purchase Amount | Sold Qty | Selling Rate | Sales Amount | Balance Qty | Balance Stock Amount
+                </p>
+              </div>
+              <button
+                onClick={handleExportValuationCSV}
+                className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-teal-400 text-xs font-bold text-white flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-[#40E0D0]" /> Export Valuation CSV
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono">
+                <thead>
+                  <tr className="bg-[#0D0D0D] text-[#94A3B8] text-[10px] uppercase font-bold border-b border-[#1C1C1C]">
+                    <th className="p-3">Date</th>
+                    <th className="p-3">Item Name</th>
+                    <th className="p-3 text-right">Opening Stock</th>
+                    <th className="p-3 text-right">Purchased Qty</th>
+                    <th className="p-3 text-right">Purchase Rate</th>
+                    <th className="p-3 text-right">Purchase Amount</th>
+                    <th className="p-3 text-right">Sold Qty</th>
+                    <th className="p-3 text-right">Selling Rate</th>
+                    <th className="p-3 text-right">Sales Amount</th>
+                    <th className="p-3 text-right text-[#14F1D9]">Balance Qty</th>
+                    <th className="p-3 text-right text-[#40E0D0]">Balance Stock Amount</th>
+                    <th className="p-3 text-right text-emerald-400">Gross Profit</th>
+                    <th className="p-3">Supplier</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1C1C1C]">
+                  {valuationData.items.length === 0 ? (
+                    <tr>
+                      <td colSpan={13} className="p-12 text-center text-[#94A3B8]">
+                        No cafe menu inventory records found matching your filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    valuationData.items.map(item => {
+                      return (
+                        <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                          <td className="p-3 text-[11px] text-[#94A3B8] whitespace-nowrap">
+                            {item.lastPurchaseDate || valuationData.asOfDate}
+                          </td>
+                          <td className="p-3 font-sans">
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                              {item.name}
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-teal-300">
+                                {item.unit}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-[#666] font-mono">
+                              Cat: {item.category}
+                            </div>
+                          </td>
+                          <td className="p-3 text-right text-white">
+                            {item.openingStock}
+                          </td>
+                          <td className="p-3 text-right text-purple-300 font-bold">
+                            {item.purchasedQty}
+                          </td>
+                          <td className="p-3 text-right text-white">
+                            ₹{item.purchaseRate.toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right text-purple-300">
+                            ₹{item.purchaseAmount.toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right text-amber-400 font-bold">
+                            {item.soldQty}
+                          </td>
+                          <td className="p-3 text-right text-white">
+                            ₹{item.sellingRate.toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right text-amber-400">
+                            ₹{item.salesAmount.toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right font-black text-sm text-[#14F1D9]">
+                            {item.balanceQty} {item.unit}
+                          </td>
+                          <td className="p-3 text-right font-black text-[#40E0D0]">
+                            ₹{item.balanceStockAmount.toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right font-bold text-emerald-400">
+                            ₹{item.grossProfit.toFixed(2)}
+                            <span className="block text-[9px] text-emerald-300/70">
+                              ({item.grossMarginPercent}%)
+                            </span>
+                          </td>
+                          <td className="p-3 text-[11px] text-[#94A3B8] font-sans">
+                            {item.supplierName}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+                <tfoot className="border-t-2 border-[#00ABAB]/40 bg-[#0A0A0A] font-bold">
+                  <tr className="text-white text-xs">
+                    <td className="p-3" colSpan={2}>CONSOLIDATED TOTAL</td>
+                    <td className="p-3 text-right">
+                      {valuationData.items.reduce((s, i) => s + i.openingStock, 0)}
+                    </td>
+                    <td className="p-3 text-right text-purple-300">
+                      {valuationData.summary.totalPurchasedQty}
+                    </td>
+                    <td className="p-3 text-right text-[#888]">—</td>
+                    <td className="p-3 text-right text-purple-300">
+                      ₹{valuationData.summary.totalPurchaseAmount.toFixed(2)}
+                    </td>
+                    <td className="p-3 text-right text-amber-400">
+                      {valuationData.summary.totalSoldQty}
+                    </td>
+                    <td className="p-3 text-right text-[#888]">—</td>
+                    <td className="p-3 text-right text-amber-400">
+                      ₹{valuationData.summary.totalNetSales.toFixed(2)}
+                    </td>
+                    <td className="p-3 text-right text-[#14F1D9] font-black">
+                      {valuationData.summary.totalClosingBalanceQty}
+                    </td>
+                    <td className="p-3 text-right text-[#40E0D0] font-black">
+                      ₹{valuationData.summary.totalClosingStockValue.toFixed(2)}
+                    </td>
+                    <td className="p-3 text-right text-emerald-400 font-black">
+                      ₹{valuationData.summary.totalGrossProfit.toFixed(2)}
+                    </td>
+                    <td className="p-3 text-[#94A3B8] text-[10px]">
+                      {valuationData.items.length} items
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: RECORD STOCK MOVEMENT (ISSUE / WASTAGE / ADJUSTMENT)   */}
       {/* ───────────────────────────────────────────────────────────── */}
       {movementModalItem && (

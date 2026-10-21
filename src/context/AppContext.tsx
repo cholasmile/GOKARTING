@@ -3555,6 +3555,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return updated;
     });
 
+    // 6. Automatically sync matching Cafe Menu Items
+    setMenuItems(prev => {
+      let anyMatched = false;
+      const updatedMenu = prev.map(m => {
+        const isMatch = (purchase.itemId && m.id === purchase.itemId) ||
+                        m.name.trim().toLowerCase() === purchase.itemName.trim().toLowerCase();
+        if (isMatch) {
+          anyMatched = true;
+          const currentQty = m.stockQuantity !== undefined ? m.stockQuantity : (m.openingStock || 0);
+          const nextQty = currentQty + acceptedQty;
+          const updatedItem: MenuItem = {
+            ...m,
+            stockQuantity: nextQty,
+            purchasePrice: purchase.ratePerUnit,
+            supplierName: purchase.supplierName,
+            purchaseDate: purchase.purchaseDate,
+            purchaseQuantity: (m.purchaseQuantity || 0) + acceptedQty,
+            unit: purchase.unit || m.unit || 'pcs',
+            isAvailable: true,
+            updatedAt: now
+          };
+          writeToLocalAndSync('menuItems', 'update', updatedItem);
+          return updatedItem;
+        }
+        return m;
+      });
+
+      if (anyMatched) {
+        try {
+          localStorage.setItem('ap_menu_items', JSON.stringify(updatedMenu));
+          db.menuItems.bulkPut(updatedMenu);
+        } catch {}
+      }
+      return updatedMenu;
+    });
+
     writeToLocalAndSync('inventory', 'update', targetInventoryItem);
     writeToLocalAndSync('stockMovements', 'insert', movement);
     writeToLocalAndSync('foodStreetPurchases', 'update', updatedPurchase);
@@ -3739,6 +3775,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const updated = {
             ...m,
             stockQuantity: newQty,
+            quantitySold: (m.quantitySold || 0) + cartItem.quantity,
+            salesAmount: (m.salesAmount || 0) + (cartItem.price * cartItem.quantity),
             isAvailable: newQty > 0 ? m.isAvailable : false,
             updatedAt: timestamp
           };

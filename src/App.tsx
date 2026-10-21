@@ -8,7 +8,6 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, Link } from 'react
 import { AppProvider, useAppContext } from './context/AppContext';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ActivityStaffDashboard } from './components/ActivityStaffDashboard';
-import { FoodVendorDashboard } from './components/FoodVendorDashboard';
 import { CustomerDashboard } from './components/CustomerDashboard';
 import { NotificationToast } from './components/NotificationToast';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -80,8 +79,7 @@ function LoginPage() {
         else if (matchedUser.role === 'go_karting_manager' || matchedUser.role === 'go_karting_staff') navigate('/staff/karting');
         else if (matchedUser.role === 'horse_riding_staff') navigate('/staff/horse-riding');
         else if (matchedUser.role === 'shooting_staff') navigate('/staff/shooting');
-        else if (matchedUser.role === 'food_vendor' || matchedUser.role === 'cafe_staff') navigate('/staff/cafe');
-        else if (matchedUser.role === 'ticket_counter_staff') navigate('/staff/ticketing');
+        else if (matchedUser.role === 'food_vendor' || matchedUser.role === 'cafe_staff' || matchedUser.role === 'ticket_counter_staff') navigate('/staff/ticketing');
         else navigate('/staff');
       } else {
         setError('Incorrect password. Access denied.');
@@ -252,8 +250,7 @@ function LoginPage() {
                     else if (authUser.role === 'go_karting_manager' || authUser.role === 'go_karting_staff') navigate('/staff/karting');
                     else if (authUser.role === 'horse_riding_staff') navigate('/staff/horse-riding');
                     else if (authUser.role === 'shooting_staff') navigate('/staff/shooting');
-                    else if (authUser.role === 'food_vendor' || authUser.role === 'cafe_staff') navigate('/staff/cafe');
-                    else if (authUser.role === 'ticket_counter_staff') navigate('/staff/ticketing');
+                    else if (authUser.role === 'food_vendor' || authUser.role === 'cafe_staff' || authUser.role === 'ticket_counter_staff') navigate('/staff/ticketing');
                     else if (authUser.role === 'activity_staff') navigate('/staff');
                     else navigate('/');
                   } catch (err: any) {
@@ -418,23 +415,15 @@ export default function App() {
                 />
               </ProtectedRoute>
             } />
-            <Route path="/vendor/*" element={
-              <ProtectedRoute allowedRoles={['food_vendor', 'cafe_staff', 'super_admin']}>
-                <FoodVendorDashboard />
-              </ProtectedRoute>
-            } />
-            <Route path="/staff/cafe/*" element={
-              <ProtectedRoute allowedRoles={['food_vendor', 'cafe_staff', 'super_admin']}>
-                <FoodVendorDashboard />
-              </ProtectedRoute>
-            } />
+            <Route path="/vendor/*" element={<Navigate to="/staff/ticketing" replace />} />
+            <Route path="/staff/cafe/*" element={<Navigate to="/staff/ticketing" replace />} />
             <Route path="/staff/karting/*" element={
               <ProtectedRoute allowedRoles={['go_karting_manager', 'go_karting_staff', 'super_admin']}>
                 <GoKartingOpsDashboard />
               </ProtectedRoute>
             } />
             <Route path="/staff/ticketing/*" element={
-              <ProtectedRoute allowedRoles={['ticket_counter_staff', 'super_admin']}>
+              <ProtectedRoute allowedRoles={['ticket_counter_staff', 'food_vendor', 'cafe_staff', 'super_admin']}>
                 <TicketingDashboard />
               </ProtectedRoute>
             } />

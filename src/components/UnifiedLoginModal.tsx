@@ -60,8 +60,6 @@ export const UnifiedLoginModal: React.FC<UnifiedLoginModalProps> = ({
         break;
       case 'food_vendor':
       case 'cafe_staff':
-        navigate('/staff/cafe');
-        break;
       case 'ticket_counter_staff':
         navigate('/staff/ticketing');
         break;
