@@ -246,11 +246,19 @@ const StatCard: React.FC<{
 // MAIN PANEL COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-const AccountsFinancePanel: React.FC = () => {
+export interface AccountsFinancePanelProps {
+  readOnly?: boolean;
+  initialSubTab?: 'overview' | 'profit_loss' | 'entry' | 'register' | 'cafe_purchases' | 'reports' | 'staff_payroll' | 'subadmin_submissions' | 'settings';
+}
+
+export const AccountsFinancePanel: React.FC<AccountsFinancePanelProps> = ({
+  readOnly = false,
+  initialSubTab
+}) => {
   const { 
     bookings, orders, activities, currentUser, 
     dayExpenses, updateExpenseWorkflowStatus, suppliers, purchaseItems,
-    menuItems, foodStreetPurchases, stockMovements, vendors 
+    menuItems, foodStreetPurchases, stockMovements, vendors, staffSalaryPayments 
   } = useAppContext();
 
   // ── Persisted State ────────────────────────────────────────────────────────
@@ -273,8 +281,8 @@ const AccountsFinancePanel: React.FC = () => {
   useEffect(() => { saveToLS(LS_KEY_CUSTOM_CATS, customCats); }, [customCats]);
 
   // ── UI State ──────────────────────────────────────────────────────────────
-  type FinanceSubTab = 'overview' | 'entry' | 'register' | 'cafe_purchases' | 'reports' | 'staff_payroll' | 'subadmin_submissions' | 'settings';
-  const [subTab, setSubTab] = useState<FinanceSubTab>('overview');
+  type FinanceSubTab = 'overview' | 'profit_loss' | 'entry' | 'register' | 'cafe_purchases' | 'reports' | 'staff_payroll' | 'subadmin_submissions' | 'settings';
+  const [subTab, setSubTab] = useState<FinanceSubTab>(initialSubTab || 'overview');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState(blankForm());
@@ -397,19 +405,53 @@ const AccountsFinancePanel: React.FC = () => {
     });
   }, [activePurchases, reportPeriod, reportMonth, reportYear]);
 
-  // Revenue from bookings + orders (activity-wise)
+  // Unified period date checker helper
+  const isDateInPeriod = (dStr?: string) => {
+    if (!dStr) return false;
+    const d = dStr.slice(0, 10);
+    if (reportPeriod === 'all') return true;
+    if (reportPeriod === 'month') return d.startsWith(reportMonth);
+    if (reportPeriod === 'year') return d.startsWith(reportYear);
+    return true;
+  };
+
+  // Filtered bookings for selected period (Only successful/paid bookings)
+  const periodBookings = useMemo(() => {
+    return bookings.filter(b => isDateInPeriod(b.bookingDate || b.date));
+  }, [bookings, reportPeriod, reportMonth, reportYear]);
+
+  // Filtered orders for selected period (Only successful/paid orders)
+  const periodOrders = useMemo(() => {
+    return orders.filter(o => isDateInPeriod(o.createdAt));
+  }, [orders, reportPeriod, reportMonth, reportYear]);
+
+  // Revenue from bookings (activity-wise for selected period)
   const activityRevMap = useMemo(() => {
     const map: Record<string, number> = {};
-    bookings.forEach(b => {
-      if (b.paymentStatus === 'paid') {
+    periodBookings.forEach(b => {
+      if (b.paymentStatus === 'paid' || !b.paymentStatus) {
         map[b.activityName] = (map[b.activityName] || 0) + (b.totalAmount || 0);
       }
     });
     return map;
-  }, [bookings]);
+  }, [periodBookings]);
 
-  const totalFoodRevenue = useMemo(() =>
-    orders.reduce((s, o) => s + (o.totalAmount || 0), 0), [orders]);
+  // Food revenue for selected period
+  const totalFoodRevenue = useMemo(() => {
+    return periodOrders
+      .filter(o => o.paymentStatus === 'paid' || o.status === 'delivered')
+      .reduce((s, o) => s + (o.totalAmount || 0), 0);
+  }, [periodOrders]);
+
+  // Staff Payroll for selected period
+  const periodPayrollExpense = useMemo(() => {
+    return (staffSalaryPayments || []).filter(sp => {
+      if (reportPeriod === 'all') return true;
+      if (reportPeriod === 'month') return sp.month === reportMonth;
+      if (reportPeriod === 'year') return sp.month.startsWith(reportYear);
+      return true;
+    }).reduce((s, sp) => s + (sp.netPayable || sp.calculatedSalary || 0), 0);
+  }, [staffSalaryPayments, reportPeriod, reportMonth, reportYear]);
 
   // Activity-wise expense aggregation
   const deptStats = useMemo(() => {
@@ -484,8 +526,12 @@ const AccountsFinancePanel: React.FC = () => {
 
   const totalRevenue = totalActivityRevenue + totalFoodRevenue;
 
-  // Profit/loss (revenue - direct operating expenses only, NOT inventory/assets)
-  const operatingProfit = totalRevenue - overallStats.directExp;
+  // COGS, Gross Profit & Net Operating Profit (P&L Accounting)
+  const periodCogs = cafeValuation.summary.totalCogs || 0;
+  const periodGrossProfit = totalRevenue - periodCogs;
+  const periodGrossMarginPercent = totalRevenue > 0 ? Math.round((periodGrossProfit / totalRevenue) * 1000) / 10 : 0;
+  const operatingProfit = periodGrossProfit - overallStats.directExp - periodPayrollExpense;
+  const netMarginPercent = totalRevenue > 0 ? Math.round((operatingProfit / totalRevenue) * 1000) / 10 : 0;
 
   // ── Register Filter Logic ─────────────────────────────────────────────────
   const filteredRegister = useMemo(() => {
@@ -539,13 +585,16 @@ const AccountsFinancePanel: React.FC = () => {
 
   const subTabs: { key: FinanceSubTab; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: 'Overview', icon: <BarChart2 className="w-3.5 h-3.5" /> },
-    { key: 'entry', label: 'New Entry', icon: <Plus className="w-3.5 h-3.5" /> },
+    { key: 'profit_loss', label: 'Profit & Loss Statement (P&L)', icon: <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> },
+    ...(!readOnly ? [{ key: 'entry' as const, label: 'New Entry', icon: <Plus className="w-3.5 h-3.5" /> }] : []),
     { key: 'register', label: 'Purchase Register', icon: <FileText className="w-3.5 h-3.5" /> },
     { key: 'cafe_purchases', label: 'Cafe & Food Street Purchases', icon: <Coffee className="w-3.5 h-3.5 text-amber-400" /> },
     { key: 'reports', label: 'Reports', icon: <TrendingUp className="w-3.5 h-3.5" /> },
     { key: 'staff_payroll', label: 'Staff Attendance & Payroll', icon: <Users className="w-3.5 h-3.5" /> },
-    { key: 'subadmin_submissions', label: 'Sub-Admin Entries & Approvals', icon: <Clock className="w-3.5 h-3.5" /> },
-    { key: 'settings', label: 'Categories', icon: <Settings className="w-3.5 h-3.5" /> },
+    ...(!readOnly ? [
+      { key: 'subadmin_submissions' as const, label: 'Sub-Admin Entries & Approvals', icon: <Clock className="w-3.5 h-3.5" /> },
+      { key: 'settings' as const, label: 'Categories', icon: <Settings className="w-3.5 h-3.5" /> }
+    ] : [])
   ];
 
   return (
@@ -563,17 +612,25 @@ const AccountsFinancePanel: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {saveConfirm && (
-            <span className="flex items-center gap-1 text-emerald-400 text-xs font-bold animate-pulse">
-              <CheckCircle className="w-4 h-4" /> Saved
+          {readOnly ? (
+            <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30 text-xs font-bold font-mono flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Read-Only Mode (Audited)
             </span>
+          ) : (
+            <>
+              {saveConfirm && (
+                <span className="flex items-center gap-1 text-emerald-400 text-xs font-bold animate-pulse">
+                  <CheckCircle className="w-4 h-4" /> Saved
+                </span>
+              )}
+              <button
+                onClick={openNewForm}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#00ABAB] text-black rounded-xl text-xs font-black hover:bg-[#40E0D0] transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Purchase / Expense
+              </button>
+            </>
           )}
-          <button
-            onClick={openNewForm}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#00ABAB] text-black rounded-xl text-xs font-black hover:bg-[#40E0D0] transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add Purchase / Expense
-          </button>
         </div>
       </div>
 
@@ -595,6 +652,288 @@ const AccountsFinancePanel: React.FC = () => {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* PROFIT & LOSS STATEMENT (P&L) TAB                                      */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {subTab === 'profit_loss' && (
+        <div className="space-y-6 animate-fade-in font-mono">
+          
+          {/* Period Selector Banner */}
+          <div className="glass-panel p-4 rounded-2xl border border-[#00ABAB]/30 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[#94A3B8] font-bold uppercase tracking-wider flex items-center gap-1.5 mr-2">
+                <Calendar className="w-3.5 h-3.5 text-[#00ABAB]" /> Statement Period:
+              </span>
+              {(['month', 'year', 'all'] as const).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setReportPeriod(p)}
+                  className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                    reportPeriod === p
+                      ? 'bg-gradient-to-r from-[#00ABAB] to-[#40E0D0] text-black shadow-[0_0_12px_rgba(0,171,171,0.4)]'
+                      : 'bg-white/5 border border-white/10 text-[#94A3B8] hover:text-white'
+                  }`}
+                >
+                  {p === 'month' ? 'This Month' : p === 'year' ? 'This Year' : 'All Time'}
+                </button>
+              ))}
+
+              {reportPeriod === 'month' && (
+                <input
+                  type="month"
+                  value={reportMonth}
+                  onChange={e => setReportMonth(e.target.value)}
+                  className="bg-[#141414] border border-[#262626] rounded-xl px-2.5 py-1 text-xs text-white focus:border-[#00ABAB] outline-none ml-2"
+                />
+              )}
+              {reportPeriod === 'year' && (
+                <input
+                  type="number"
+                  min="2020"
+                  max="2099"
+                  value={reportYear}
+                  onChange={e => setReportYear(e.target.value)}
+                  className="bg-[#141414] border border-[#262626] rounded-xl px-2.5 py-1 text-xs text-white w-20 focus:border-[#00ABAB] outline-none ml-2"
+                />
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const headers = ["Section", "Account Head / Department", "Amount (INR)", "% of Total Revenue"];
+                  const rows = [
+                    ["I. REVENUE", "Activity Ticket Collections", totalActivityRevenue.toFixed(2), totalRevenue > 0 ? ((totalActivityRevenue / totalRevenue) * 100).toFixed(1) + "%" : "0%"],
+                    ["I. REVENUE", "Cafe & Food Street Sales", totalFoodRevenue.toFixed(2), totalRevenue > 0 ? ((totalFoodRevenue / totalRevenue) * 100).toFixed(1) + "%" : "0%"],
+                    ["I. REVENUE", "TOTAL OPERATING REVENUE", totalRevenue.toFixed(2), "100.0%"],
+                    ["II. COGS", "Cafe Raw Materials & Consumed Goods", periodCogs.toFixed(2), totalRevenue > 0 ? ((periodCogs / totalRevenue) * 100).toFixed(1) + "%" : "0%"],
+                    ["GROSS PROFIT", "TOTAL GROSS PROFIT", periodGrossProfit.toFixed(2), periodGrossMarginPercent.toFixed(1) + "%"],
+                    ...(Object.entries(deptStats) as [string, any][]).map(([dept, s]) => [
+                      "III. OPEX", dept, s.directExpenses.toFixed(2), totalRevenue > 0 ? ((s.directExpenses / totalRevenue) * 100).toFixed(1) + "%" : "0%"
+                    ]),
+                    ["III. OPEX", "TOTAL DIRECT OPERATING EXPENSES", overallStats.directExp.toFixed(2), totalRevenue > 0 ? ((overallStats.directExp / totalRevenue) * 100).toFixed(1) + "%" : "0%"],
+                    ["IV. LABOUR", "Staff Salaries, Wages & Overtime", periodPayrollExpense.toFixed(2), totalRevenue > 0 ? ((periodPayrollExpense / totalRevenue) * 100).toFixed(1) + "%" : "0%"],
+                    ["NET RESULT", "NET OPERATING PROFIT / (LOSS)", operatingProfit.toFixed(2), netMarginPercent.toFixed(1) + "%"]
+                  ];
+                  const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `deuce_profit_loss_${reportPeriod}_${new Date().toISOString().slice(0, 10)}.csv`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-teal-400 text-xs font-bold text-white flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-[#40E0D0]" /> Export P&amp;L CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Executive P&L Metric Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-4 bg-[#0A0A0A] border border-[#00ABAB]/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-[#40E0D0] font-bold uppercase tracking-wider block">Total Revenue</span>
+              <div className="text-xl font-black text-[#40E0D0]">₹{totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-[#888]">Tickets + Cafe POS</span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-amber-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block">Cost of Goods (COGS)</span>
+              <div className="text-xl font-black text-amber-400">₹{periodCogs.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-amber-300/60">Ingredients &amp; food cost</span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-teal-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-teal-300 font-bold uppercase tracking-wider block">Gross Profit</span>
+              <div className="text-xl font-black text-teal-300">₹{periodGrossProfit.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-teal-300/60">Margin: {periodGrossMarginPercent}%</span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-rose-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider block">Direct OPEX</span>
+              <div className="text-xl font-black text-rose-400">₹{overallStats.directExp.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-rose-300/60">Park operating costs</span>
+            </div>
+
+            <div className="p-4 bg-[#0A0A0A] border border-purple-900/40 rounded-2xl space-y-1">
+              <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">Staff Payroll</span>
+              <div className="text-xl font-black text-purple-400">₹{periodPayrollExpense.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[9px] text-purple-300/60">Disbursed salaries</span>
+            </div>
+
+            <div className={`p-4 bg-[#0A0A0A] border rounded-2xl space-y-1 ${operatingProfit >= 0 ? 'border-emerald-500/40' : 'border-rose-500/40'}`}>
+              <span className={`text-[10px] font-bold uppercase tracking-wider block ${operatingProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                Net Operating Result
+              </span>
+              <div className={`text-xl font-black ${operatingProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {operatingProfit >= 0 ? '+' : ''}₹{operatingProfit.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[9px] text-[#888]">Net Margin: {netMarginPercent}%</span>
+            </div>
+          </div>
+
+          {/* Full GAAP P&L Statement Ledger Table */}
+          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden">
+            <div className="p-4 bg-[#0A0A0A] border-b border-[#1C1C1C] flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="font-bold text-sm text-white font-sans flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-[#00ABAB]" /> Official Statement of Profit &amp; Loss (P&amp;L)
+                </h4>
+                <p className="text-[11px] text-[#94A3B8]">
+                  Consolidated accounting format: Revenue − COGS = Gross Profit − Operating Expenses − Staff Payroll = Net Operating Result
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full text-[10px] font-mono bg-white/5 border border-white/10 text-teal-300">
+                Accrual Basis (Single Source of Truth)
+              </span>
+            </div>
+
+            <div className="overflow-x-auto text-xs">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-[#121212] text-[#94A3B8] text-[10px] uppercase font-bold border-b border-[#1C1C1C]">
+                    <th className="p-3.5">Particulars / Accounting Head</th>
+                    <th className="p-3.5">Classification</th>
+                    <th className="p-3.5 text-right">Amount (₹)</th>
+                    <th className="p-3.5 text-right">% of Revenue</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1C1C1C]">
+                  
+                  {/* I. OPERATING REVENUE */}
+                  <tr className="bg-[#161616]/70 font-bold text-teal-300">
+                    <td colSpan={4} className="p-2.5 uppercase tracking-wider text-[11px]">
+                      I. Operating Revenue (Sales Income)
+                    </td>
+                  </tr>
+
+                  {/* Activity rows */}
+                  {activities.filter(a => !a.name?.toLowerCase().includes('gaming')).map(act => {
+                    const rev = activityRevMap[act.name] || 0;
+                    const pct = totalRevenue > 0 ? ((rev / totalRevenue) * 100).toFixed(1) : '0.0';
+                    return (
+                      <tr key={act.id} className="hover:bg-white/5 transition-colors">
+                        <td className="p-3 pl-8 text-white font-sans flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
+                          {act.name} Ticket Sales
+                        </td>
+                        <td className="p-3 text-[#888]">Activity POS Collections</td>
+                        <td className="p-3 text-right text-emerald-400 font-bold">₹{rev.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-3 text-right text-[#94A3B8]">{pct}%</td>
+                      </tr>
+                    );
+                  })}
+
+                  {/* Cafe Sales */}
+                  <tr className="hover:bg-white/5 transition-colors">
+                    <td className="p-3 pl-8 text-white font-sans flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                      Cafe &amp; Food Street Dining Sales
+                    </td>
+                    <td className="p-3 text-[#888]">Food &amp; Beverage POS</td>
+                    <td className="p-3 text-right text-emerald-400 font-bold">₹{totalFoodRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-3 text-right text-[#94A3B8]">
+                      {totalRevenue > 0 ? ((totalFoodRevenue / totalRevenue) * 100).toFixed(1) : '0.0'}%
+                    </td>
+                  </tr>
+
+                  {/* Total Revenue Subtotal */}
+                  <tr className="bg-[#0D181A] font-black border-y border-[#00ABAB]/30 text-white">
+                    <td className="p-3 pl-6 text-[#40E0D0]">TOTAL REVENUE (A)</td>
+                    <td className="p-3 text-[#40E0D0]">Gross Inflows</td>
+                    <td className="p-3 text-right text-[#40E0D0] text-sm">₹{totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-3 text-right text-[#40E0D0]">100.0%</td>
+                  </tr>
+
+                  {/* II. COST OF GOODS SOLD */}
+                  <tr className="bg-[#161616]/70 font-bold text-amber-300">
+                    <td colSpan={4} className="p-2.5 uppercase tracking-wider text-[11px]">
+                      II. Cost of Goods Sold (COGS)
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-white/5 transition-colors">
+                    <td className="p-3 pl-8 text-white font-sans">Food Street Ingredient &amp; Raw Material Consumption</td>
+                    <td className="p-3 text-[#888]">Weighted-Average Cost</td>
+                    <td className="p-3 text-right text-amber-400">₹{periodCogs.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-3 text-right text-[#94A3B8]">
+                      {totalRevenue > 0 ? ((periodCogs / totalRevenue) * 100).toFixed(1) : '0.0'}%
+                    </td>
+                  </tr>
+
+                  {/* Gross Profit Subtotal */}
+                  <tr className="bg-[#0C1F16] font-black border-y border-emerald-500/40 text-emerald-400">
+                    <td className="p-3 pl-6">GROSS PROFIT (A − B)</td>
+                    <td className="p-3">Revenue less COGS</td>
+                    <td className="p-3 text-right text-sm">₹{periodGrossProfit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-3 text-right">{periodGrossMarginPercent}% Margin</td>
+                  </tr>
+
+                  {/* III. OPERATING EXPENSES */}
+                  <tr className="bg-[#161616]/70 font-bold text-rose-400">
+                    <td colSpan={4} className="p-2.5 uppercase tracking-wider text-[11px]">
+                      III. Direct Operating Expenses (OPEX)
+                    </td>
+                  </tr>
+
+                  {(Object.entries(deptStats) as [string, any][]).map(([dept, s]) => {
+                    if (s.directExpenses <= 0) return null;
+                    const pct = totalRevenue > 0 ? ((s.directExpenses / totalRevenue) * 100).toFixed(1) : '0.0';
+                    return (
+                      <tr key={dept} className="hover:bg-white/5 transition-colors">
+                        <td className="p-3 pl-8 text-white font-sans">{dept} Expenses</td>
+                        <td className="p-3 text-[#888]">Operational Maintenance</td>
+                        <td className="p-3 text-right text-rose-400">₹{s.directExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-3 text-right text-[#94A3B8]">{pct}%</td>
+                      </tr>
+                    );
+                  })}
+
+                  <tr className="bg-[#1B0F12] font-black border-y border-rose-500/30 text-rose-400">
+                    <td className="p-3 pl-6">TOTAL OPERATING EXPENSES (C)</td>
+                    <td className="p-3">Direct Park Running Costs</td>
+                    <td className="p-3 text-right text-sm">₹{overallStats.directExp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-3 text-right">
+                      {totalRevenue > 0 ? ((overallStats.directExp / totalRevenue) * 100).toFixed(1) : '0.0'}%
+                    </td>
+                  </tr>
+
+                  {/* IV. STAFF PAYROLL & LABOUR */}
+                  <tr className="bg-[#161616]/70 font-bold text-purple-300">
+                    <td colSpan={4} className="p-2.5 uppercase tracking-wider text-[11px]">
+                      IV. Staff Payroll &amp; Human Resources
+                    </td>
+                  </tr>
+
+                  <tr className="hover:bg-white/5 transition-colors">
+                    <td className="p-3 pl-8 text-white font-sans">Staff Monthly Salaries, Overtime &amp; Disbursals</td>
+                    <td className="p-3 text-[#888]">Attendance-Audited Payroll</td>
+                    <td className="p-3 text-right text-purple-400 font-bold">₹{periodPayrollExpense.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-3 text-right text-[#94A3B8]">
+                      {totalRevenue > 0 ? ((periodPayrollExpense / totalRevenue) * 100).toFixed(1) : '0.0'}%
+                    </td>
+                  </tr>
+
+                  {/* V. NET OPERATING PROFIT / (LOSS) */}
+                  <tr className={`font-black text-sm border-t-2 ${operatingProfit >= 0 ? 'bg-[#062417] text-emerald-400 border-emerald-400' : 'bg-[#29080E] text-rose-400 border-rose-400'}`}>
+                    <td className="p-4 pl-6">NET OPERATING PROFIT / (LOSS) (EBITDA)</td>
+                    <td className="p-4">Gross Profit − OPEX − Payroll</td>
+                    <td className="p-4 text-right text-base font-black">
+                      {operatingProfit >= 0 ? '+' : ''}₹{operatingProfit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-4 text-right text-base font-black">{netMarginPercent}% Net Margin</td>
+                  </tr>
+
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* OVERVIEW TAB                                                          */}
       {/* ══════════════════════════════════════════════════════════════════════ */}
       {subTab === 'overview' && (
@@ -1072,7 +1411,7 @@ const AccountsFinancePanel: React.FC = () => {
                   <th className="text-right px-3 py-3">Outstanding</th>
                   <th className="text-left px-3 py-3">Status</th>
                   <th className="text-left px-3 py-3">Type</th>
-                  <th className="text-left px-3 py-3">Actions</th>
+                  <th className="text-left px-3 py-3">{readOnly ? 'Audit' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1C1C1C]">
@@ -1113,20 +1452,26 @@ const AccountsFinancePanel: React.FC = () => {
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => openEditForm(p)}
-                          className="p-1 text-[#94A3B8] hover:text-[#00ABAB] transition-colors" title="Edit">
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => handleReverse(p.id)}
-                          className="p-1 text-[#94A3B8] hover:text-amber-400 transition-colors" title="Reverse/Void">
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => handleDelete(p.id)}
-                          className="p-1 text-[#94A3B8] hover:text-rose-400 transition-colors" title="Delete">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {readOnly ? (
+                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3 text-emerald-400" /> Locked
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => openEditForm(p)}
+                            className="p-1 text-[#94A3B8] hover:text-[#00ABAB] transition-colors" title="Edit">
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleReverse(p.id)}
+                            className="p-1 text-[#94A3B8] hover:text-amber-400 transition-colors" title="Reverse/Void">
+                            <RefreshCw className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(p.id)}
+                            className="p-1 text-[#94A3B8] hover:text-rose-400 transition-colors" title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

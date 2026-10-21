@@ -11,7 +11,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
 import {
-  TrendingUp, Users, Ticket, Utensils, Award, ShieldAlert,
+  TrendingUp, Users, Ticket, Utensils, Award, ShieldAlert, ShieldCheck,
   Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle,
   MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check,
   Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag, RotateCcw, Monitor, Gamepad2,
@@ -31,7 +31,8 @@ export const AdminDashboard: React.FC = () => {
     updateMenuItemStock, adjustMenuItemStock,
     addActivity, updateActivity, deleteActivity,
     addVendor, updateVendor, deleteVendor, addUser,
-    counterUpiId, setCounterUpiId
+    counterUpiId, setCounterUpiId,
+    staffSalaryPayments, foodStreetPurchases
   } = useAppContext();
 
   const activeActivities = activities.filter(a => !a.id.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('arena'));
@@ -143,6 +144,12 @@ export const AdminDashboard: React.FC = () => {
 
   // Active Admin Tabs
   const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'payments' | 'pay_settings' | 'database' | 'accounts_finance'>('analytics');
+  const [analyticsViewMode, setAnalyticsViewMode] = useState<
+    'abstract' | 'breakdown_activities' | 'breakdown_cafe' | 'breakdown_expenses' | 'breakdown_payroll' | 'breakdown_payments' | 'profit_loss'
+  >('abstract');
+  const [payDateFilter, setPayDateFilter] = useState<'all' | 'today' | 'yesterday' | '7days' | '30days' | 'this_month' | 'custom'>('all');
+  const [payCustomStart, setPayCustomStart] = useState('');
+  const [payCustomEnd, setPayCustomEnd] = useState('');
   const [cafeRetailSubTab, setCafeRetailSubTab] = useState<'sales_sync' | 'stock_inventory' | 'financial_valuation'>('sales_sync');
   const [activeDbSubTab, setActiveDbSubTab] = useState<'schema' | 'rls' | 'hierarchy' | 'api_routes' | 'deploy'>('schema');
   const [copiedText, setCopiedText] = useState<string | null>(null);
@@ -308,6 +315,18 @@ export const AdminDashboard: React.FC = () => {
     return true;
   };
 
+  const getStoredPurchases = (): any[] => {
+    try {
+      const raw = localStorage.getItem('dp_purchases_v1');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const isPaidBooking = (b: any) => b.paymentStatus === 'paid' || b.paymentStatus === 'success' || (!b.paymentStatus && b.status !== 'cancelled' && b.status !== 'failed');
+  const isPaidOrder = (o: any) => o.paymentStatus === 'paid' || o.paymentStatus === 'success' || (!o.paymentStatus && o.status !== 'cancelled' && o.status !== 'failed');
+
   const computePeriodSales = (
     filterType: 'all' | 'today' | 'yesterday' | '7days' | '30days' | 'this_month' | 'last_month' | 'custom',
     cStart?: string,
@@ -316,26 +335,82 @@ export const AdminDashboard: React.FC = () => {
     const periodBookings = bookings.filter(b => isDateInFilter(parseSafeDate(b.bookingDate || b.date), filterType, cStart, cEnd));
     const periodOrders = orders.filter(o => isDateInFilter(parseSafeDate(o.createdAt), filterType, cStart, cEnd));
     
-    const activityRev = periodBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-    const foodRev = periodOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    const paidBookings = periodBookings.filter(isPaidBooking);
+    const paidOrders = periodOrders.filter(isPaidOrder);
+
+    const pendingBookings = periodBookings.filter(b => b.paymentStatus === 'pending');
+    const pendingOrders = periodOrders.filter(o => o.paymentStatus === 'pending');
+
+    const refundedBookings = periodBookings.filter(b => b.paymentStatus === 'refunded' || b.status === 'cancelled');
+    const refundedOrders = periodOrders.filter(o => o.paymentStatus === 'refunded' || o.status === 'cancelled');
+
+    const activityRev = paidBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+    const foodRev = paidOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
     const totalRev = activityRev + foodRev;
-    const visitorsCount = periodBookings.reduce((sum, b) => sum + (b.quantity || 0), 0);
-    const bookingsCount = periodBookings.length;
-    const ordersCount = periodOrders.length;
+
+    const pendingRev = pendingBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0) + pendingOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    const refundedRev = refundedBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0) + refundedOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+    const visitorsCount = paidBookings.reduce((sum, b) => sum + (b.quantity || 0), 0);
+    const bookingsCount = paidBookings.length;
+    const ordersCount = paidOrders.length;
     const totalTransactions = bookingsCount + ordersCount;
     const avgTransactionValue = totalTransactions > 0 ? (totalRev / totalTransactions) : 0;
 
+    // Period Purchases / Operating Expenses
+    const allStoredPurchases = getStoredPurchases();
+    const periodPurchases = allStoredPurchases.filter(p => !p.isReversed && isDateInFilter(parseSafeDate(p.date), filterType, cStart, cEnd));
+    const totalPurchasesCost = periodPurchases.reduce((s, p) => s + (p.totalCost || 0), 0);
+    const totalPurchasesPaid = periodPurchases.reduce((s, p) => s + (p.amountPaid || 0), 0);
+    const totalPurchasesOutstanding = periodPurchases.reduce((s, p) => s + (p.outstandingBalance || 0), 0);
+
+    // Period Staff Payroll
+    const periodSalaries = (staffSalaryPayments || []).filter(s => isDateInFilter(parseSafeDate(s.paymentDate || s.createdAt || `${s.month}-01`), filterType, cStart, cEnd));
+    const totalPayrollPaid = periodSalaries.reduce((s, sal) => s + (sal.netPayable || sal.calculatedSalary || 0), 0);
+
+    // Payments in this period
+    const periodPayments = payments.filter(p => isDateInFilter(parseSafeDate(p.timestamp), filterType, cStart, cEnd));
+    const paidPayments = periodPayments.filter(p => p.status === 'paid' || p.status === 'success');
+    const cashCollections = paidPayments.filter(p => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
+    const upiCollections = paidPayments.filter(p => p.method === 'upi' || p.method === 'qrcode').reduce((s, p) => s + p.amount, 0);
+    const cardCollections = paidPayments.filter(p => p.method.startsWith('card')).reduce((s, p) => s + p.amount, 0);
+    const onlineCollections = paidPayments.filter(p => p.method === 'razorpay' || p.gateway === 'Razorpay' || (p.method === 'net_banking' && !p.staffId)).reduce((s, p) => s + p.amount, 0);
+
+    // Net operating profit / surplus
+    const netSurplus = totalRev - totalPurchasesCost - totalPayrollPaid;
+    const grossMarginPercent = totalRev > 0 ? (((totalRev - (foodRev * 0.45)) / totalRev) * 100).toFixed(1) : '0.0';
+    const netMarginPercent = totalRev > 0 ? ((netSurplus / totalRev) * 100).toFixed(1) : '0.0';
+
     return {
       bookings: periodBookings,
+      paidBookings,
       orders: periodOrders,
+      paidOrders,
       activityRev,
       foodRev,
       totalRev,
+      pendingRev,
+      refundedRev,
       visitorsCount,
       bookingsCount,
       ordersCount,
       totalTransactions,
-      avgTransactionValue
+      avgTransactionValue,
+      periodPurchases,
+      totalPurchasesCost,
+      totalPurchasesPaid,
+      totalPurchasesOutstanding,
+      periodSalaries,
+      totalPayrollPaid,
+      periodPayments,
+      paidPayments,
+      cashCollections,
+      upiCollections,
+      cardCollections,
+      onlineCollections,
+      netSurplus,
+      grossMarginPercent,
+      netMarginPercent
     };
   };
 
@@ -907,811 +982,920 @@ export const AdminDashboard: React.FC = () => {
       {/* ----------------------------------------------------------------- */}
       {/* 1. ANALYTICS VIEW */}
       {/* ----------------------------------------------------------------- */}
-      {activeTab === 'analytics' && (
-        <div className="space-y-6">
+      {activeTab === 'analytics' && (() => {
+        // Compute expenses & payroll stats for filtered period
+        const periodPurchases = filteredSalesData.periodPurchases;
+        const totalPurchasesCost = filteredSalesData.totalPurchasesCost;
+        const totalPurchasesPaid = filteredSalesData.totalPurchasesPaid;
+        const totalPurchasesOutstanding = filteredSalesData.totalPurchasesOutstanding;
 
-          {/* ── 1. FIXED SALES SUMMARY HIGHLIGHT CARDS (TODAY, 7 DAYS, 30 DAYS, ALL-TIME) ── */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-[#00ABAB]/10 border border-[#00ABAB]/30 text-[#40E0D0]">
-                  <TrendingUp className="w-4 h-4" />
-                </span>
-                <div>
-                  <h3 className="text-sm font-bold text-white tracking-wide uppercase font-sans">
-                    Sales Overview & Performance Periods
-                  </h3>
-                  <p className="text-[11px] text-[#9CA3AF]">
-                    Consolidated gross revenue benchmarks across adventure sports and Food Street cafe
-                  </p>
-                </div>
-              </div>
-            </div>
+        const periodSalaries = filteredSalesData.periodSalaries;
+        const totalPayrollPaid = filteredSalesData.totalPayrollPaid;
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Today's Sales */}
-              <div 
-                onClick={() => setAnalyticsDateFilter('today')}
-                className={`p-4 glass-card rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
-                  analyticsDateFilter === 'today'
-                    ? 'border-[#00ABAB] shadow-[0_0_25px_rgba(0,171,171,0.3)] bg-[#00ABAB]/10'
-                    : 'border-[#00ABAB]/30 hover:border-[#00ABAB]/70 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)]'
-                }`}
-              >
-                <div className="flex items-center justify-between text-[#9CA3AF] mb-1.5">
-                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-[#40E0D0]">
-                    <Clock className="w-3.5 h-3.5" /> Today's Sales
-                  </span>
-                  <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30 group-hover:scale-110 transition-transform">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-                <div className="text-2xl font-extrabold text-[#40E0D0] font-mono">
-                  ₹{todaySales.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-                <div className="pt-2 border-t border-[#1C1C1C] mt-2 space-y-1">
-                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
-                    <span>Activities:</span>
-                    <span className="text-white font-bold">₹{todaySales.activityRev.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
-                    <span>Food Street:</span>
-                    <span className="text-white font-bold">₹{todaySales.foodRev.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px] font-mono text-teal-400 pt-0.5 font-bold">
-                    <span>Volume:</span>
-                    <span>{todaySales.visitorsCount} Guests • {todaySales.ordersCount} Orders</span>
-                  </div>
-                </div>
-                {analyticsDateFilter === 'today' && (
-                  <div className="absolute top-2 right-2 flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#40E0D0] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ABAB]"></span>
-                  </div>
-                )}
-              </div>
+        // Department-wise expense breakdown
+        const deptExpenseMap: Record<string, number> = {};
+        periodPurchases.forEach(p => {
+          const dept = p.department || 'General Administration';
+          deptExpenseMap[dept] = (deptExpenseMap[dept] || 0) + (p.totalCost || 0);
+        });
+        const deptExpenseList = Object.entries(deptExpenseMap).map(([dept, cost]) => ({ dept, cost })).sort((a, b) => b.cost - a.cost);
 
-              {/* Last 7 Days Sales */}
-              <div 
-                onClick={() => setAnalyticsDateFilter('7days')}
-                className={`p-4 glass-card rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
-                  analyticsDateFilter === '7days'
-                    ? 'border-[#00ABAB] shadow-[0_0_25px_rgba(0,171,171,0.3)] bg-[#00ABAB]/10'
-                    : 'border-[#00ABAB]/30 hover:border-[#00ABAB]/70 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)]'
-                }`}
-              >
-                <div className="flex items-center justify-between text-[#9CA3AF] mb-1.5">
-                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-white">
-                    <CalendarDays className="w-3.5 h-3.5 text-[#00ABAB]" /> Last 7 Days
-                  </span>
-                  <span className="p-1.5 bg-[#0A0A0A] text-[#00ABAB] rounded-lg border border-[#00ABAB]/30 group-hover:scale-110 transition-transform">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-                <div className="text-2xl font-extrabold text-white font-mono">
-                  ₹{last7DaysSales.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-                <div className="pt-2 border-t border-[#1C1C1C] mt-2 space-y-1">
-                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
-                    <span>Activities:</span>
-                    <span className="text-white font-bold">₹{last7DaysSales.activityRev.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
-                    <span>Food Street:</span>
-                    <span className="text-white font-bold">₹{last7DaysSales.foodRev.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px] font-mono text-teal-400 pt-0.5 font-bold">
-                    <span>Volume:</span>
-                    <span>{last7DaysSales.visitorsCount} Guests • {last7DaysSales.ordersCount} Orders</span>
-                  </div>
-                </div>
-                {analyticsDateFilter === '7days' && (
-                  <div className="absolute top-2 right-2 flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#40E0D0] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ABAB]"></span>
-                  </div>
-                )}
-              </div>
+        // Cafe food item sales breakdown
+        const itemSalesMap: Record<string, { name: string; category: string; price: number; qtySold: number; revenue: number }> = {};
+        filteredSalesData.paidOrders.forEach(o => {
+          (o.items || []).forEach(item => {
+            const key = item.menuItemId || item.name;
+            if (!itemSalesMap[key]) {
+              itemSalesMap[key] = {
+                name: item.name,
+                category: item.category || 'Food & Beverages',
+                price: item.price || 0,
+                qtySold: 0,
+                revenue: 0
+              };
+            }
+            itemSalesMap[key].qtySold += (item.quantity || 1);
+            itemSalesMap[key].revenue += ((item.price || 0) * (item.quantity || 1));
+          });
+        });
+        const topSellingItems = Object.values(itemSalesMap).sort((a, b) => b.revenue - a.revenue);
 
-              {/* Last 30 Days Sales */}
-              <div 
-                onClick={() => setAnalyticsDateFilter('30days')}
-                className={`p-4 glass-card rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
-                  analyticsDateFilter === '30days'
-                    ? 'border-[#00ABAB] shadow-[0_0_25px_rgba(0,171,171,0.3)] bg-[#00ABAB]/10'
-                    : 'border-[#00ABAB]/30 hover:border-[#00ABAB]/70 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)]'
-                }`}
-              >
-                <div className="flex items-center justify-between text-[#9CA3AF] mb-1.5">
-                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-white">
-                    <CalendarRange className="w-3.5 h-3.5 text-[#00ABAB]" /> Last 30 Days
-                  </span>
-                  <span className="p-1.5 bg-[#0A0A0A] text-[#00ABAB] rounded-lg border border-[#00ABAB]/30 group-hover:scale-110 transition-transform">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-                <div className="text-2xl font-extrabold text-white font-mono">
-                  ₹{last30DaysSales.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-                <div className="pt-2 border-t border-[#1C1C1C] mt-2 space-y-1">
-                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
-                    <span>Activities:</span>
-                    <span className="text-white font-bold">₹{last30DaysSales.activityRev.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
-                    <span>Food Street:</span>
-                    <span className="text-white font-bold">₹{last30DaysSales.foodRev.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px] font-mono text-teal-400 pt-0.5 font-bold">
-                    <span>Volume:</span>
-                    <span>{last30DaysSales.visitorsCount} Guests • {last30DaysSales.ordersCount} Orders</span>
-                  </div>
-                </div>
-                {analyticsDateFilter === '30days' && (
-                  <div className="absolute top-2 right-2 flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#40E0D0] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ABAB]"></span>
-                  </div>
-                )}
-              </div>
+        // Staff payroll records for period
+        const staffUsers = users.filter(u => u.role !== 'customer');
 
-              {/* All-Time Total Sales */}
-              <div 
-                onClick={() => setAnalyticsDateFilter('all')}
-                className={`p-4 glass-card rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
-                  analyticsDateFilter === 'all'
-                    ? 'border-[#00ABAB] shadow-[0_0_25px_rgba(0,171,171,0.3)] bg-[#00ABAB]/10'
-                    : 'border-[#00ABAB]/30 hover:border-[#00ABAB]/70 hover:shadow-[0_0_20px_rgba(0,171,171,0.2)]'
-                }`}
-              >
-                <div className="flex items-center justify-between text-[#9CA3AF] mb-1.5">
-                  <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-white">
-                    <Sparkles className="w-3.5 h-3.5 text-[#40E0D0]" /> All-Time Sales
-                  </span>
-                  <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30 group-hover:scale-110 transition-transform">
-                    <IndianRupee className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-                <div className="text-2xl font-extrabold text-[#40E0D0] font-mono">
-                  ₹{allTimeSales.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-                <div className="pt-2 border-t border-[#1C1C1C] mt-2 space-y-1">
-                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
-                    <span>Activities:</span>
-                    <span className="text-white font-bold">₹{allTimeSales.activityRev.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px] font-mono text-[#9CA3AF]">
-                    <span>Food Street:</span>
-                    <span className="text-white font-bold">₹{allTimeSales.foodRev.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px] font-mono text-teal-400 pt-0.5 font-bold">
-                    <span>Volume:</span>
-                    <span>{allTimeSales.visitorsCount} Guests • {allTimeSales.ordersCount} Orders</span>
-                  </div>
-                </div>
-                {analyticsDateFilter === 'all' && (
-                  <div className="absolute top-2 right-2 flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#40E0D0] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ABAB]"></span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+        return (
+          <div className="space-y-6">
 
-          {/* ── 2. CUSTOM SALES DROPDOWN & DATE RANGE FILTER CONTROL BAR ── */}
-          <div className="p-5 glass-panel border border-[#00ABAB]/40 rounded-2xl shadow-[0_0_30px_rgba(0,171,171,0.15)] space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <span className="p-2 bg-[#0A0A0A] text-[#40E0D0] rounded-xl border border-[#00ABAB]/30">
-                  <Filter className="w-5 h-5" />
-                </span>
-                <div>
-                  <h4 className="font-bold text-sm text-white font-sans flex items-center gap-2">
-                    Sales Window & Custom Filter
-                    <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-[#00ABAB]/20 text-[#40E0D0] border border-[#00ABAB]/40 rounded-md">
-                      {getAnalyticsFilterTitle()}
-                    </span>
-                  </h4>
-                  <p className="text-[11px] text-[#9CA3AF] font-sans">
-                    Select a preset period or custom date range to filter real-time revenue analytics and breakdown charts
-                  </p>
-                </div>
-              </div>
-
-              {/* Dropdown Menu & Quick Pills */}
-              <div className="flex flex-wrap items-center gap-2.5">
-                {/* Custom Dropdown Selector */}
-                <div className="relative inline-block">
-                  <select
-                    id="select-sales-date-filter"
-                    value={analyticsDateFilter}
-                    onChange={e => setAnalyticsDateFilter(e.target.value as any)}
-                    className="bg-[#0A0A0A] text-[#40E0D0] border border-[#00ABAB]/50 rounded-xl px-4 py-2 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#00ABAB] cursor-pointer appearance-none pr-9 hover:border-[#00ABAB] transition-all shadow-inner"
-                  >
-                    <option value="all">🌐 All-Time History</option>
-                    <option value="today">📅 Today's Sales</option>
-                    <option value="yesterday">⏪ Yesterday's Sales</option>
-                    <option value="7days">📊 Last 7 Days Sales</option>
-                    <option value="30days">📈 Last 30 Days Sales</option>
-                    <option value="this_month">🗓️ This Month (Current)</option>
-                    <option value="last_month">⏮️ Last Month</option>
-                    <option value="custom">⚙️ Custom Date Range...</option>
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-[#40E0D0] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-80" />
-                </div>
-
-                {/* Quick Switch Buttons */}
-                <div className="flex items-center gap-1 bg-[#0A0A0A] p-1 rounded-xl border border-[#1C1C1C]">
-                  <button
-                    type="button"
-                    onClick={() => setAnalyticsDateFilter('all')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                      analyticsDateFilter === 'all'
-                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
-                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAnalyticsDateFilter('today')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                      analyticsDateFilter === 'today'
-                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
-                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    Today
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAnalyticsDateFilter('7days')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                      analyticsDateFilter === '7days'
-                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
-                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    7 Days
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAnalyticsDateFilter('30days')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                      analyticsDateFilter === '30days'
-                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
-                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    30 Days
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAnalyticsDateFilter('this_month')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                      analyticsDateFilter === 'this_month'
-                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
-                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    This Month
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAnalyticsDateFilter('custom')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                      analyticsDateFilter === 'custom'
-                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
-                        : 'text-[#9CA3AF] hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    Custom
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Custom Date Range Picker Fields (Shown when Custom Range is active) */}
-            {analyticsDateFilter === 'custom' && (
-              <div className="pt-3 border-t border-[#1C1C1C] flex flex-wrap items-center gap-3 bg-[#0A0A0A]/60 p-3 rounded-xl border border-[#00ABAB]/20 animate-fadeIn">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-[#9CA3AF]">From Date:</span>
-                  <input
-                    type="date"
-                    id="input-analytics-custom-start"
-                    value={analyticsCustomStart}
-                    onChange={e => setAnalyticsCustomStart(e.target.value)}
-                    className="bg-[#141414] text-white border border-[#00ABAB]/40 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#00ABAB]"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-[#9CA3AF]">To Date:</span>
-                  <input
-                    type="date"
-                    id="input-analytics-custom-end"
-                    value={analyticsCustomEnd}
-                    onChange={e => setAnalyticsCustomEnd(e.target.value)}
-                    className="bg-[#141414] text-white border border-[#00ABAB]/40 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#00ABAB]"
-                  />
-                </div>
+            {/* ── SUB-NAVIGATION TABS (ABSTRACT vs BREAKDOWNS vs PROFIT & LOSS) ── */}
+            <div className="flex border-b border-[#00ABAB]/30 gap-1.5 overflow-x-auto pb-2">
+              {[
+                { id: 'abstract', label: '📊 Executive Abstract', desc: 'Consolidated Park P&L & KPIs' },
+                { id: 'breakdown_activities', label: '🎯 Activities Breakdown', desc: 'Tickets & Packages' },
+                { id: 'breakdown_cafe', label: '🍔 Food Street & Cafe', desc: 'Dining & Inventory COGS' },
+                { id: 'breakdown_expenses', label: '🧾 Operating Expenses', desc: 'Purchases & Overheads' },
+                { id: 'breakdown_payroll', label: '👥 Staff Payroll', desc: 'Attendance-Audited Salary' },
+                { id: 'breakdown_payments', label: '💳 Payment Collections', desc: 'Cash, UPI, POS & Audit' },
+                { id: 'profit_loss', label: '📑 Profit & Loss (P&L)', desc: 'Full GAAP Statement' },
+              ].map(sub => (
                 <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    const end = d.toISOString().split('T')[0];
-                    d.setDate(d.getDate() - 7);
-                    const start = d.toISOString().split('T')[0];
-                    setAnalyticsCustomStart(start);
-                    setAnalyticsCustomEnd(end);
-                  }}
-                  className="text-[11px] font-mono text-[#40E0D0] hover:underline px-2 py-1 cursor-pointer"
+                  key={sub.id}
+                  onClick={() => setAnalyticsViewMode(sub.id as any)}
+                  className={`px-3.5 py-2 text-xs font-bold transition-all rounded-xl cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                    analyticsViewMode === sub.id
+                      ? 'bg-[#00ABAB] text-black font-black shadow-[0_0_15px_rgba(0,171,171,0.4)]'
+                      : 'bg-[#0A0A0A] text-[#9CA3AF] hover:text-white border border-[#1C1C1C]'
+                  }`}
                 >
-                  Reset to Last 7 Days
+                  {sub.label}
                 </button>
+              ))}
+            </div>
+
+            {/* ── 1. PROFIT & LOSS DIRECT VIEW ── */}
+            {analyticsViewMode === 'profit_loss' && (
+              <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl p-6">
+                <AccountsFinancePanel readOnly={true} initialSubTab="profit_loss" />
               </div>
             )}
 
-            {/* Active Filter Scope Summary Badge */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#1C1C1C] text-[11px] font-mono text-[#9CA3AF]">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#00ABAB] animate-pulse"></span>
-                <span>Active Scope: <strong className="text-white">{getAnalyticsFilterTitle()}</strong></span>
-              </div>
-              <div className="flex items-center gap-4 text-xs font-bold text-white">
-                <span>Revenue: <strong className="text-[#40E0D0]">₹{filteredSalesData.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-                <span>Transactions: <strong className="text-teal-400">{filteredSalesData.totalTransactions}</strong></span>
-              </div>
-            </div>
-          </div>
+            {/* ── 2. SHARED DATE RANGE SELECTOR BAR (For Abstract & Breakdowns) ── */}
+            {analyticsViewMode !== 'profit_loss' && (
+              <div className="p-4 glass-panel border border-[#00ABAB]/40 rounded-2xl shadow-[0_0_25px_rgba(0,171,171,0.1)] space-y-3">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2 bg-[#0A0A0A] text-[#40E0D0] rounded-xl border border-[#00ABAB]/30">
+                      <Filter className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h4 className="font-bold text-xs text-white font-sans flex items-center gap-2">
+                        Reporting Period Scope:
+                        <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-[#00ABAB]/20 text-[#40E0D0] border border-[#00ABAB]/40 rounded-md">
+                          {getAnalyticsFilterTitle()}
+                        </span>
+                      </h4>
+                      <p className="text-[10px] text-[#9CA3AF] font-sans">
+                        Reconciles live revenue, purchases, payroll, and cashflow across all modules
+                      </p>
+                    </div>
+                  </div>
 
-          {/* ── 3. FILTER-AWARE DETAILED KPI CARDS ── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Filtered Gross Sales</div>
-              <div className="text-xl font-extrabold text-[#40E0D0] font-mono">
-                ₹{filteredSalesData.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-[9px] text-[#9CA3AF] font-mono">
-                {allTimeSales.totalRev > 0 ? ((filteredSalesData.totalRev / allTimeSales.totalRev) * 100).toFixed(1) : 0}% of all-time
-              </p>
-            </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative inline-block">
+                      <select
+                        value={analyticsDateFilter}
+                        onChange={e => setAnalyticsDateFilter(e.target.value as any)}
+                        className="bg-[#0A0A0A] text-[#40E0D0] border border-[#00ABAB]/50 rounded-xl px-3 py-1.5 text-xs font-mono font-bold focus:outline-none cursor-pointer appearance-none pr-8 hover:border-[#00ABAB]"
+                      >
+                        <option value="all">🌐 All-Time History</option>
+                        <option value="today">📅 Today</option>
+                        <option value="yesterday">⏪ Yesterday</option>
+                        <option value="7days">📊 Last 7 Days</option>
+                        <option value="30days">📈 Last 30 Days</option>
+                        <option value="this_month">🗓️ This Month</option>
+                        <option value="last_month">⏮️ Last Month</option>
+                        <option value="custom">⚙️ Custom Range...</option>
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-[#40E0D0] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-80" />
+                    </div>
 
-            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Activities Sales</div>
-              <div className="text-xl font-extrabold text-white font-mono">
-                ₹{filteredSalesData.activityRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-[9px] text-teal-400 font-mono">
-                {((filteredSalesData.activityRev / (filteredSalesData.totalRev || 1)) * 100).toFixed(0)}% contribution
-              </p>
-            </div>
-
-            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Food Street Sales</div>
-              <div className="text-xl font-extrabold text-white font-mono">
-                ₹{filteredSalesData.foodRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-[9px] text-teal-400 font-mono">
-                {((filteredSalesData.foodRev / (filteredSalesData.totalRev || 1)) * 100).toFixed(0)}% contribution
-              </p>
-            </div>
-
-            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Tickets / Visitors</div>
-              <div className="text-xl font-extrabold text-white font-mono">
-                {filteredSalesData.visitorsCount}
-              </div>
-              <p className="text-[9px] text-[#9CA3AF] font-mono">
-                Across {filteredSalesData.bookingsCount} bookings
-              </p>
-            </div>
-
-            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Food Orders</div>
-              <div className="text-xl font-extrabold text-white font-mono">
-                {filteredSalesData.ordersCount}
-              </div>
-              <p className="text-[9px] text-[#9CA3AF] font-mono">
-                Cafe & stall orders
-              </p>
-            </div>
-
-            <div className="p-3.5 glass-card border border-[#00ABAB]/30 rounded-xl space-y-1 hover:shadow-[0_0_15px_rgba(0,171,171,0.2)] transition-all">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-[#9CA3AF] font-sans">Avg. Transaction</div>
-              <div className="text-xl font-extrabold text-[#40E0D0] font-mono">
-                ₹{filteredSalesData.avgTransactionValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-[9px] text-[#9CA3AF] font-mono">
-                Per ticket/food sale
-              </p>
-            </div>
-          </div>
-
-          {/* ── 4. REVENUE CHARTS GRID ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            {/* Sales Trend Chart */}
-            <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Multi-Source Revenue History</h4>
-                  <p className="text-[11px] text-[#9CA3AF] font-sans">
-                    Sales compared across adventure tickets and food items ({getAnalyticsFilterTitle()})
-                  </p>
-                </div>
-                <span className="text-[11px] font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-2.5 py-1 rounded-lg border border-[#00ABAB]/30">
-                  {salesTrendData.length} Intervals
-                </span>
-              </div>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={salesTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorAct" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#007B8B" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#007B8B" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorFood" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#99F6E4" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#99F6E4" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1C1C1C" />
-                    <XAxis dataKey="date" stroke="#007B8B" opacity={0.6} fontSize={11} tickLine={false} />
-                    <YAxis stroke="#007B8B" opacity={0.6} fontSize={11} tickLine={false} />
-                    <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', borderColor: '#00ABAB', color: '#FFFFFF', borderRadius: '8px' }} />
-                    <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: '#9CA3AF' }} />
-                    <Area type="monotone" dataKey="Activities" stroke="#007B8B" fillOpacity={1} fill="url(#colorAct)" />
-                    <Area type="monotone" dataKey="Food Street" stroke="#00ABAB" fillOpacity={1} fill="url(#colorFood)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Activities Performance Chart */}
-            <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-sm text-[#FFFFFF] font-sans">Activity Popularity Matrix</h4>
-                  <p className="text-[11px] text-[#9CA3AF] font-sans">
-                    Gross monetary earnings generated by sport ({getAnalyticsFilterTitle()})
-                  </p>
-                </div>
-                <span className="text-[11px] font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-2.5 py-1 rounded-lg border border-[#00ABAB]/30">
-                  {activityPerformanceData.length} Activities
-                </span>
-              </div>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={activityPerformanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1C1C1C" />
-                    <XAxis dataKey="name" stroke="#007B8B" opacity={0.6} fontSize={10} tickLine={false} />
-                    <YAxis stroke="#007B8B" opacity={0.6} fontSize={10} tickLine={false} />
-                    <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', borderColor: '#00ABAB', color: '#FFFFFF', borderRadius: '8px' }} />
-                    <Bar dataKey="revenue" fill="#007B8B" radius={[6, 6, 0, 0]} name="Revenue (₹)">
-                      {activityPerformanceData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={index === 0 ? '#007B8B' : index === 1 ? '#134E4A' : '#00ABAB'} />
+                    <div className="flex items-center gap-1 bg-[#0A0A0A] p-1 rounded-xl border border-[#1C1C1C]">
+                      {(['all', 'today', '7days', '30days', 'this_month', 'custom'] as const).map(f => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => setAnalyticsDateFilter(f)}
+                          className={`px-2 py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer capitalize ${
+                            analyticsDateFilter === f
+                              ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.5)]'
+                              : 'text-[#9CA3AF] hover:text-white'
+                          }`}
+                        >
+                          {f === 'all' ? 'All' : f === '7days' ? '7 Days' : f === '30days' ? '30 Days' : f === 'this_month' ? 'This Month' : f}
+                        </button>
                       ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+                    </div>
+                  </div>
+                </div>
 
-          </div>
-
-          {/* ── 1. ACTIVITY-WISE VISITORS & AMOUNT COLLECTED ── */}
-          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden space-y-4 p-5">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 pb-3 border-b border-[#00ABAB]/30">
-              <div>
-                <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                  <Award className="w-5 h-5 text-[#00ABAB]" /> Activity-Wise Visitors & Revenue Summary
-                </h3>
-                <p className="text-[#9CA3AF] text-xs mt-0.5">
-                  Total visitors and amount collected for each adventure activity ({getAnalyticsFilterTitle()})
-                </p>
+                {analyticsDateFilter === 'custom' && (
+                  <div className="pt-2 border-t border-[#1C1C1C] flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1.5 text-xs font-mono">
+                      <span className="text-[#9CA3AF]">From:</span>
+                      <input
+                        type="date"
+                        value={analyticsCustomStart}
+                        onChange={e => setAnalyticsCustomStart(e.target.value)}
+                        className="bg-[#141414] text-white border border-[#00ABAB]/40 rounded-lg px-2.5 py-1 text-xs font-mono"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs font-mono">
+                      <span className="text-[#9CA3AF]">To:</span>
+                      <input
+                        type="date"
+                        value={analyticsCustomEnd}
+                        onChange={e => setAnalyticsCustomEnd(e.target.value)}
+                        className="bg-[#141414] text-white border border-[#00ABAB]/40 rounded-lg px-2.5 py-1 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
-                  {activities.length} Active Sports
-                </span>
-                <span className="text-xs font-mono font-bold text-teal-300 bg-[#00ABAB]/10 px-3 py-1 rounded-full border border-[#00ABAB]/30">
-                  ₹{filteredSalesData.activityRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Total
-                </span>
-              </div>
-            </div>
+            )}
 
-            <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
-              <table className="w-full text-left text-xs text-[#FFFFFF]">
-                <thead>
-                  <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
-                    <th className="p-3.5">Activity Name</th>
-                    <th className="p-3.5">Type</th>
-                    <th className="p-3.5 text-center">Visitors Count</th>
-                    <th className="p-3.5 text-center">Bookings Count</th>
-                    <th className="p-3.5 text-right">Amount Collected (₹)</th>
-                    <th className="p-3.5 text-right">Revenue Share</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1C1C1C]">
-                  {activityDetailedStats.map(stat => (
-                    <tr key={`act-stat-${stat.id}`} className="hover:bg-[#1C1C1C]/40 transition-colors">
-                      <td className="p-3.5 font-bold text-[#FFFFFF] flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-[#00ABAB]" />
-                        {stat.name}
-                      </td>
-                      <td className="p-3.5 font-mono text-[10px] text-[#9CA3AF] uppercase">
-                        <span className="px-2 py-0.5 rounded bg-[#1C1C1C] border border-[#00ABAB]/20 text-[#40E0D0]">
-                          {stat.type.replace('_', ' ')}
+            {/* ── 3. EXECUTIVE ABSTRACT VIEW ── */}
+            {analyticsViewMode === 'abstract' && (
+              <div className="space-y-6">
+
+                {/* Fixed Quick Overview Snapshots (Today, 7D, 30D, All-Time) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { label: "Today's Revenue", data: todaySales, filter: 'today', icon: <Clock className="w-3.5 h-3.5 text-[#40E0D0]" /> },
+                    { label: 'Last 7 Days', data: last7DaysSales, filter: '7days', icon: <CalendarDays className="w-3.5 h-3.5 text-[#00ABAB]" /> },
+                    { label: 'Last 30 Days', data: last30DaysSales, filter: '30days', icon: <CalendarRange className="w-3.5 h-3.5 text-[#00ABAB]" /> },
+                    { label: 'All-Time Lifetime', data: allTimeSales, filter: 'all', icon: <Sparkles className="w-3.5 h-3.5 text-[#40E0D0]" /> },
+                  ].map((card, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => setAnalyticsDateFilter(card.filter as any)}
+                      className={`p-4 glass-card rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
+                        analyticsDateFilter === card.filter
+                          ? 'border-[#00ABAB] shadow-[0_0_20px_rgba(0,171,171,0.25)] bg-[#00ABAB]/10'
+                          : 'border-[#00ABAB]/20 hover:border-[#00ABAB]/60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[#9CA3AF] mb-1.5">
+                        <span className="text-[11px] uppercase tracking-wider font-bold font-sans flex items-center gap-1.5 text-[#40E0D0]">
+                          {card.icon} {card.label}
                         </span>
-                      </td>
-                      <td className="p-3.5 text-center font-mono font-bold text-[#40E0D0] text-sm">
-                        {stat.visitorsCount}
-                      </td>
-                      <td className="p-3.5 text-center font-mono text-[#9CA3AF]">
-                        {stat.bookingsCount}
-                      </td>
-                      <td className="p-3.5 text-right font-mono font-extrabold text-white text-sm">
-                        ₹{stat.amountCollected.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-3.5 text-right font-mono text-xs">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-20 bg-[#1C1C1C] h-2 rounded-full overflow-hidden">
-                            <div className="bg-[#00ABAB] h-full rounded-full" style={{ width: `${Math.min(100, stat.sharePercentage)}%` }} />
-                          </div>
-                          <span className="font-bold text-teal-400">{stat.sharePercentage.toFixed(1)}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ── 2. PACKAGE-WISE VISITORS & AMOUNT COLLECTED ── */}
-          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden space-y-4 p-5">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 pb-3 border-b border-[#00ABAB]/30">
-              <div>
-                <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                  <Tag className="w-5 h-5 text-[#00ABAB]" /> Package-Wise Visitors & Revenue Summary
-                </h3>
-                <p className="text-[#9CA3AF] text-xs mt-0.5">
-                  Detailed breakdown of visitors and revenue per specific package tier ({getAnalyticsFilterTitle()})
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
-                  {packageDetailedStats.length} Configured Packages
-                </span>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
-              <table className="w-full text-left text-xs text-[#FFFFFF]">
-                <thead>
-                  <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
-                    <th className="p-3.5">Activity</th>
-                    <th className="p-3.5">Package Name</th>
-                    <th className="p-3.5 text-right">Price (₹)</th>
-                    <th className="p-3.5 text-center">Visitors / Tickets</th>
-                    <th className="p-3.5 text-right">Amount Collected (₹)</th>
-                    <th className="p-3.5 text-right">Share of Activity</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1C1C1C]">
-                  {packageDetailedStats.map(pkgStat => (
-                    <tr key={`pkg-stat-${pkgStat.activityId}-${pkgStat.packageId}`} className="hover:bg-[#1C1C1C]/40 transition-colors">
-                      <td className="p-3.5 font-semibold text-[#9CA3AF]">
-                        {pkgStat.activityName}
-                      </td>
-                      <td className="p-3.5 font-bold text-white">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Tag className="w-3 h-3 text-[#00ABAB]" />
-                          {pkgStat.packageName}
+                        <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30">
+                          <TrendingUp className="h-3.5 w-3.5" />
                         </span>
-                      </td>
-                      <td className="p-3.5 text-right font-mono text-slate-300">
-                        ₹{pkgStat.price.toLocaleString('en-IN')}
-                      </td>
-                      <td className="p-3.5 text-center font-mono font-bold text-[#40E0D0] text-sm">
-                        {pkgStat.visitorsCount}
-                      </td>
-                      <td className="p-3.5 text-right font-mono font-extrabold text-white text-sm">
-                        ₹{pkgStat.amountCollected.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="p-3.5 text-right font-mono text-xs">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-16 bg-[#1C1C1C] h-2 rounded-full overflow-hidden">
-                            <div className="bg-[#40E0D0] h-full rounded-full" style={{ width: `${Math.min(100, pkgStat.shareOfActivity)}%` }} />
-                          </div>
-                          <span className="font-bold text-slate-300">{pkgStat.shareOfActivity.toFixed(1)}%</span>
+                      </div>
+                      <div className="text-2xl font-extrabold text-[#40E0D0] font-mono">
+                        ₹{card.data.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="pt-2 border-t border-[#1C1C1C] mt-2 space-y-1 text-[10px] font-mono">
+                        <div className="flex justify-between text-[#9CA3AF]">
+                          <span>Activities:</span>
+                          <span className="text-white font-bold">₹{card.data.activityRev.toLocaleString('en-IN')}</span>
                         </div>
-                      </td>
-                    </tr>
+                        <div className="flex justify-between text-[#9CA3AF]">
+                          <span>Food Street:</span>
+                          <span className="text-white font-bold">₹{card.data.foodRev.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-teal-400 font-bold pt-0.5">
+                          <span>Volume:</span>
+                          <span>{card.data.visitorsCount} Guests • {card.data.ordersCount} Orders</span>
+                        </div>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+
+                {/* ── EXECUTIVE ABSTRACT CONSOLIDATED FINANCIAL CARD ── */}
+                <div className="glass-panel border-2 border-[#00ABAB]/40 rounded-3xl p-6 bg-gradient-to-br from-[#061019] via-[#0A1622] to-[#04090F] shadow-[0_0_35px_rgba(0,171,171,0.15)] space-y-5">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-[#00ABAB]/20 pb-4">
+                    <div>
+                      <span className="px-2.5 py-1 text-[10px] font-mono font-black uppercase tracking-wider bg-[#00ABAB]/20 text-[#40E0D0] border border-[#00ABAB]/30 rounded-lg">
+                        Executive Park Financial Abstract ({getAnalyticsFilterTitle()})
+                      </span>
+                      <h3 className="text-xl font-black text-white mt-1">Consolidated Net Operating Statement</h3>
+                      <p className="text-xs text-[#9CA3AF]">Total Revenue (Ticketing + Food) vs Operating Expenses, Supplies, and Attendance-Audited Payroll</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase font-mono text-[#9CA3AF]">Net Operating Result (EBITDA)</p>
+                      <p className={`text-2xl font-black font-mono ${filteredSalesData.netSurplus >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {filteredSalesData.netSurplus >= 0 ? '+' : ''}₹{filteredSalesData.netSurplus.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-[10px] font-mono font-bold text-teal-400">
+                        {filteredSalesData.netMarginPercent}% Net Operating Margin
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* High Level Inflow vs Outflow Pillars */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Gross Inflow */}
+                    <div className="bg-[#0A0A0A]/80 p-4 rounded-2xl border border-emerald-500/30 space-y-1">
+                      <p className="text-[10px] font-mono uppercase text-emerald-400 font-bold flex items-center gap-1.5">
+                        <TrendingUp className="w-3.5 h-3.5" /> Total Gross Revenue
+                      </p>
+                      <p className="text-xl font-black text-white font-mono">
+                        ₹{filteredSalesData.totalRev.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </p>
+                      <div className="text-[10px] text-[#9CA3AF] pt-1 border-t border-[#1C1C1C] flex justify-between font-mono">
+                        <span>Activities: ₹{filteredSalesData.activityRev.toLocaleString('en-IN')}</span>
+                        <span>Cafe: ₹{filteredSalesData.foodRev.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+
+                    {/* Purchases & Direct Supplies */}
+                    <div className="bg-[#0A0A0A]/80 p-4 rounded-2xl border border-amber-500/30 space-y-1">
+                      <p className="text-[10px] font-mono uppercase text-amber-400 font-bold flex items-center gap-1.5">
+                        <Package className="w-3.5 h-3.5" /> Operating Purchases & OPEX
+                      </p>
+                      <p className="text-xl font-black text-white font-mono">
+                        ₹{totalPurchasesCost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </p>
+                      <div className="text-[10px] text-[#9CA3AF] pt-1 border-t border-[#1C1C1C] flex justify-between font-mono">
+                        <span>Paid: ₹{totalPurchasesPaid.toLocaleString('en-IN')}</span>
+                        <span className="text-rose-400">Due: ₹{totalPurchasesOutstanding.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+
+                    {/* Staff Payroll */}
+                    <div className="bg-[#0A0A0A]/80 p-4 rounded-2xl border border-purple-500/30 space-y-1">
+                      <p className="text-[10px] font-mono uppercase text-purple-400 font-bold flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5" /> Staff Payroll Disbursal
+                      </p>
+                      <p className="text-xl font-black text-white font-mono">
+                        ₹{totalPayrollPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </p>
+                      <div className="text-[10px] text-[#9CA3AF] pt-1 border-t border-[#1C1C1C] flex justify-between font-mono">
+                        <span>Staff Count: {staffUsers.length}</span>
+                        <span>{periodSalaries.length} Salary Disbursals</span>
+                      </div>
+                    </div>
+
+                    {/* Reconciled Collections Split */}
+                    <div className="bg-[#0A0A0A]/80 p-4 rounded-2xl border border-[#00ABAB]/30 space-y-1">
+                      <p className="text-[10px] font-mono uppercase text-[#00ABAB] font-bold flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5" /> Collections Channel Split
+                      </p>
+                      <p className="text-xl font-black text-[#40E0D0] font-mono">
+                        ₹{filteredSalesData.paidPayments.reduce((s, p) => s + p.amount, 0).toLocaleString('en-IN')}
+                      </p>
+                      <div className="text-[9px] text-[#9CA3AF] pt-1 border-t border-[#1C1C1C] flex justify-between font-mono">
+                        <span>Cash: ₹{filteredSalesData.cashCollections.toLocaleString('en-IN')}</span>
+                        <span>UPI/Card: ₹{(filteredSalesData.upiCollections + filteredSalesData.cardCollections + filteredSalesData.onlineCollections).toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Secondary KPI Bar */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-[#1C1C1C] text-xs font-mono">
+                    <div className="bg-[#0A0A0A] p-2.5 rounded-xl border border-[#1C1C1C]">
+                      <span className="text-[#9CA3AF] text-[10px]">Total Visitors / Riders:</span>
+                      <p className="text-white font-bold text-sm mt-0.5">{filteredSalesData.visitorsCount} Guests</p>
+                    </div>
+                    <div className="bg-[#0A0A0A] p-2.5 rounded-xl border border-[#1C1C1C]">
+                      <span className="text-[#9CA3AF] text-[10px]">Dining Food Orders:</span>
+                      <p className="text-white font-bold text-sm mt-0.5">{filteredSalesData.ordersCount} Orders</p>
+                    </div>
+                    <div className="bg-[#0A0A0A] p-2.5 rounded-xl border border-[#1C1C1C]">
+                      <span className="text-[#9CA3AF] text-[10px]">Avg. Transaction Value:</span>
+                      <p className="text-[#40E0D0] font-bold text-sm mt-0.5">₹{filteredSalesData.avgTransactionValue.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-[#0A0A0A] p-2.5 rounded-xl border border-[#1C1C1C]">
+                      <span className="text-[#9CA3AF] text-[10px]">Pending / Receivables:</span>
+                      <p className="text-amber-400 font-bold text-sm mt-0.5">₹{filteredSalesData.pendingRev.toLocaleString('en-IN')}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Revenue Charts Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Sales Trend Chart */}
+                  <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-sm text-white font-sans">Multi-Source Revenue History</h4>
+                        <p className="text-[11px] text-[#9CA3AF] font-sans">
+                          Comparative trend across adventure tickets and food sales ({getAnalyticsFilterTitle()})
+                        </p>
+                      </div>
+                      <span className="text-[11px] font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-2.5 py-1 rounded-lg border border-[#00ABAB]/30">
+                        {salesTrendData.length} Intervals
+                      </span>
+                    </div>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={salesTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorAct" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#007B8B" stopOpacity={0.8}/>
+                              <stop offset="95%" stopColor="#007B8B" stopOpacity={0}/>
+                            </linearGradient>
+                            <linearGradient id="colorFood" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#99F6E4" stopOpacity={0.8}/>
+                              <stop offset="95%" stopColor="#99F6E4" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1C1C1C" />
+                          <XAxis dataKey="date" stroke="#007B8B" opacity={0.6} fontSize={11} tickLine={false} />
+                          <YAxis stroke="#007B8B" opacity={0.6} fontSize={11} tickLine={false} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', borderColor: '#00ABAB', color: '#FFFFFF', borderRadius: '8px' }} />
+                          <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: '#9CA3AF' }} />
+                          <Area type="monotone" dataKey="Activities" stroke="#007B8B" fillOpacity={1} fill="url(#colorAct)" />
+                          <Area type="monotone" dataKey="Food Street" stroke="#00ABAB" fillOpacity={1} fill="url(#colorFood)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Activities Performance Chart */}
+                  <div className="p-5 glass-panel border border-[#00ABAB]/30 rounded-2xl space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-sm text-white font-sans">Activity Popularity Matrix</h4>
+                        <p className="text-[11px] text-[#9CA3AF] font-sans">
+                          Gross earnings generated by sport ({getAnalyticsFilterTitle()})
+                        </p>
+                      </div>
+                      <span className="text-[11px] font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-2.5 py-1 rounded-lg border border-[#00ABAB]/30">
+                        {activityPerformanceData.length} Activities
+                      </span>
+                    </div>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={activityPerformanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1C1C1C" />
+                          <XAxis dataKey="name" stroke="#007B8B" opacity={0.6} fontSize={10} tickLine={false} />
+                          <YAxis stroke="#007B8B" opacity={0.6} fontSize={10} tickLine={false} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', borderColor: '#00ABAB', color: '#FFFFFF', borderRadius: '8px' }} />
+                          <Bar dataKey="revenue" fill="#007B8B" radius={[6, 6, 0, 0]} name="Revenue (₹)">
+                            {activityPerformanceData.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={index === 0 ? '#007B8B' : index === 1 ? '#134E4A' : '#00ABAB'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* ── 4. ACTIVITIES BREAKDOWN VIEW ── */}
+            {analyticsViewMode === 'breakdown_activities' && (
+              <div className="space-y-6">
+                {/* Activity KPI Summary */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#00ABAB]/30">
+                    <p className="text-[10px] font-mono uppercase text-[#00ABAB] font-bold">Total Activity Revenue</p>
+                    <p className="text-xl font-black text-white font-mono mt-1">₹{filteredSalesData.activityRev.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono uppercase text-[#9CA3AF] font-bold">Total Riders / Visitors</p>
+                    <p className="text-xl font-black text-[#40E0D0] font-mono mt-1">{filteredSalesData.visitorsCount}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono uppercase text-[#9CA3AF] font-bold">Total Bookings Count</p>
+                    <p className="text-xl font-black text-white font-mono mt-1">{filteredSalesData.bookingsCount}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono uppercase text-[#9CA3AF] font-bold">Share of Total Park Sales</p>
+                    <p className="text-xl font-black text-teal-400 font-mono mt-1">
+                      {filteredSalesData.totalRev > 0 ? ((filteredSalesData.activityRev / filteredSalesData.totalRev) * 100).toFixed(1) : '0.0'}%
+                    </p>
+                  </div>
+                </div>
+
+                {/* Activity-Wise Summary Table */}
+                <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden space-y-4 p-5">
+                  <div className="flex justify-between items-center pb-3 border-b border-[#00ABAB]/30">
+                    <h3 className="font-bold text-base text-white flex items-center gap-2">
+                      <Award className="w-4 h-4 text-[#00ABAB]" /> Activity-Wise Riders & Revenue Breakdown
+                    </h3>
+                    <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
+                      {activityDetailedStats.length} Activities
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
+                    <table className="w-full text-left text-xs text-white">
+                      <thead>
+                        <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
+                          <th className="p-3">Activity</th>
+                          <th className="p-3">Type</th>
+                          <th className="p-3 text-center">Visitors / Riders</th>
+                          <th className="p-3 text-center">Bookings</th>
+                          <th className="p-3 text-right">Amount Collected</th>
+                          <th className="p-3 text-right">Share of Activities</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#1C1C1C]">
+                        {activityDetailedStats.map(stat => (
+                          <tr key={stat.id} className="hover:bg-[#1C1C1C]/40 transition-colors">
+                            <td className="p-3 font-bold text-white">{stat.name}</td>
+                            <td className="p-3 text-[#9CA3AF] capitalize">{stat.type}</td>
+                            <td className="p-3 text-center font-mono font-bold text-[#40E0D0]">{stat.visitorsCount}</td>
+                            <td className="p-3 text-center font-mono text-[#9CA3AF]">{stat.bookingsCount}</td>
+                            <td className="p-3 text-right font-mono font-bold text-white">₹{stat.amountCollected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-3 text-right font-mono text-teal-400 font-bold">{stat.sharePercentage.toFixed(1)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Package-Wise Breakdown Table */}
+                <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden space-y-4 p-5">
+                  <div className="flex justify-between items-center pb-3 border-b border-[#00ABAB]/30">
+                    <h3 className="font-bold text-base text-white flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-[#00ABAB]" /> Package-Wise Performance Breakdown
+                    </h3>
+                    <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
+                      {packageDetailedStats.length} Packages
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
+                    <table className="w-full text-left text-xs text-white">
+                      <thead>
+                        <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
+                          <th className="p-3">Activity</th>
+                          <th className="p-3">Package Name</th>
+                          <th className="p-3 text-right">Price</th>
+                          <th className="p-3 text-center">Riders Sold</th>
+                          <th className="p-3 text-right">Revenue</th>
+                          <th className="p-3 text-right">Share of Activity</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#1C1C1C]">
+                        {packageDetailedStats.map(pkgStat => (
+                          <tr key={`pkg-${pkgStat.activityId}-${pkgStat.packageId}`} className="hover:bg-[#1C1C1C]/40 transition-colors">
+                            <td className="p-3 text-[#9CA3AF]">{pkgStat.activityName}</td>
+                            <td className="p-3 font-bold text-white">{pkgStat.packageName}</td>
+                            <td className="p-3 text-right font-mono text-[#9CA3AF]">₹{pkgStat.price.toLocaleString('en-IN')}</td>
+                            <td className="p-3 text-center font-mono font-bold text-[#40E0D0]">{pkgStat.visitorsCount}</td>
+                            <td className="p-3 text-right font-mono font-bold text-white">₹{pkgStat.amountCollected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-3 text-right font-mono text-teal-400 font-bold">{pkgStat.shareOfActivity.toFixed(1)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── 5. CAFE & FOOD STREET BREAKDOWN VIEW ── */}
+            {analyticsViewMode === 'breakdown_cafe' && (
+              <div className="space-y-6">
+                {/* Cafe KPIs */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#00ABAB]/30">
+                    <p className="text-[10px] font-mono uppercase text-[#00ABAB] font-bold">Total Food Street Sales</p>
+                    <p className="text-xl font-black text-white font-mono mt-1">₹{filteredSalesData.foodRev.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono uppercase text-[#9CA3AF] font-bold">Total Dining Orders</p>
+                    <p className="text-xl font-black text-[#40E0D0] font-mono mt-1">{filteredSalesData.ordersCount}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono uppercase text-[#9CA3AF] font-bold">Est. Ingredient COGS</p>
+                    <p className="text-xl font-black text-amber-400 font-mono mt-1">₹{(filteredSalesData.foodRev * 0.42).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono uppercase text-[#9CA3AF] font-bold">Cafe Gross Margin %</p>
+                    <p className="text-xl font-black text-emerald-400 font-mono mt-1">58.0%</p>
+                  </div>
+                </div>
+
+                {/* Top Selling Items Table */}
+                <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden space-y-4 p-5">
+                  <div className="flex justify-between items-center pb-3 border-b border-[#00ABAB]/30">
+                    <h3 className="font-bold text-base text-white flex items-center gap-2">
+                      <Utensils className="w-4 h-4 text-[#00ABAB]" /> Item-Wise Cafe Sales & Revenue Ranking
+                    </h3>
+                    <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
+                      {topSellingItems.length} Sold Items
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
+                    <table className="w-full text-left text-xs text-white">
+                      <thead>
+                        <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
+                          <th className="p-3">Item Name</th>
+                          <th className="p-3">Category</th>
+                          <th className="p-3 text-right">Unit Price</th>
+                          <th className="p-3 text-center">Units Sold</th>
+                          <th className="p-3 text-right">Total Revenue</th>
+                          <th className="p-3 text-right">Contribution %</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#1C1C1C]">
+                        {topSellingItems.length === 0 ? (
+                          <tr><td colSpan={6} className="text-center py-8 text-[#9CA3AF]">No food orders recorded in this period.</td></tr>
+                        ) : topSellingItems.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-[#1C1C1C]/40 transition-colors">
+                            <td className="p-3 font-bold text-white flex items-center gap-2">
+                              <span className="w-4 h-4 rounded-full bg-[#00ABAB]/20 text-[#40E0D0] text-[9px] font-mono flex items-center justify-center font-bold">{idx + 1}</span>
+                              {item.name}
+                            </td>
+                            <td className="p-3 text-[#9CA3AF]">{item.category}</td>
+                            <td className="p-3 text-right font-mono text-[#9CA3AF]">₹{item.price.toLocaleString('en-IN')}</td>
+                            <td className="p-3 text-center font-mono font-bold text-[#40E0D0]">{item.qtySold}</td>
+                            <td className="p-3 text-right font-mono font-bold text-white">₹{item.revenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-3 text-right font-mono text-teal-400 font-bold">
+                              {filteredSalesData.foodRev > 0 ? ((item.revenue / filteredSalesData.foodRev) * 100).toFixed(1) : '0.0'}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── 6. OPERATING EXPENSES BREAKDOWN VIEW ── */}
+            {analyticsViewMode === 'breakdown_expenses' && (
+              <div className="space-y-6">
+                {/* Expense KPIs */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-amber-500/30">
+                    <p className="text-[10px] font-mono uppercase text-amber-400 font-bold">Total Purchases &amp; OPEX</p>
+                    <p className="text-xl font-black text-white font-mono mt-1">₹{totalPurchasesCost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-emerald-500/30">
+                    <p className="text-[10px] font-mono uppercase text-emerald-400 font-bold">Paid Outflow</p>
+                    <p className="text-xl font-black text-emerald-400 font-mono mt-1">₹{totalPurchasesPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-rose-500/30">
+                    <p className="text-[10px] font-mono uppercase text-rose-400 font-bold">Outstanding Liabilities</p>
+                    <p className="text-xl font-black text-rose-400 font-mono mt-1">₹{totalPurchasesOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono uppercase text-[#9CA3AF] font-bold">Total Invoices / Entries</p>
+                    <p className="text-xl font-black text-white font-mono mt-1">{periodPurchases.length}</p>
+                  </div>
+                </div>
+
+                {/* Department Expense Split Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {deptExpenseList.map((dept, idx) => (
+                    <div key={idx} className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C] space-y-1">
+                      <p className="text-xs font-bold text-white truncate">{dept.dept}</p>
+                      <p className="text-lg font-black text-amber-400 font-mono">₹{dept.cost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                      <p className="text-[10px] text-[#9CA3AF] font-mono">
+                        {totalPurchasesCost > 0 ? ((dept.cost / totalPurchasesCost) * 100).toFixed(1) : '0.0'}% of total expenses
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Purchase Register Table */}
+                <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden space-y-4 p-5">
+                  <div className="flex justify-between items-center pb-3 border-b border-[#00ABAB]/30">
+                    <h3 className="font-bold text-base text-white flex items-center gap-2">
+                      <Package className="w-4 h-4 text-[#00ABAB]" /> Itemized Purchase &amp; Expense Register
+                    </h3>
+                    <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
+                      {periodPurchases.length} Records
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
+                    <table className="w-full text-left text-xs text-white">
+                      <thead>
+                        <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
+                          <th className="p-3">Date</th>
+                          <th className="p-3">Department</th>
+                          <th className="p-3">Item Name</th>
+                          <th className="p-3">Supplier</th>
+                          <th className="p-3 text-right">Total Cost</th>
+                          <th className="p-3 text-right">Amount Paid</th>
+                          <th className="p-3 text-right">Balance Due</th>
+                          <th className="p-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#1C1C1C]">
+                        {periodPurchases.length === 0 ? (
+                          <tr><td colSpan={8} className="text-center py-8 text-[#9CA3AF]">No purchase entries recorded in this period.</td></tr>
+                        ) : periodPurchases.map((p, idx) => (
+                          <tr key={idx} className="hover:bg-[#1C1C1C]/40 transition-colors">
+                            <td className="p-3 font-mono text-[#9CA3AF]">{p.date}</td>
+                            <td className="p-3 text-white font-medium">{p.department}</td>
+                            <td className="p-3 font-bold text-white">{p.itemName}</td>
+                            <td className="p-3 text-[#9CA3AF]">{p.supplier}</td>
+                            <td className="p-3 text-right font-mono font-bold text-white">₹{(p.totalCost || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-3 text-right font-mono text-emerald-400">₹{(p.amountPaid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className={`p-3 text-right font-mono font-bold ${(p.outstandingBalance || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              ₹{(p.outstandingBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                p.paymentStatus === 'Paid' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : p.paymentStatus === 'Partially Paid' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              }`}>
+                                {p.paymentStatus}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── 7. STAFF PAYROLL BREAKDOWN VIEW ── */}
+            {analyticsViewMode === 'breakdown_payroll' && (
+              <div className="space-y-6">
+                {/* Payroll KPIs */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-purple-500/30">
+                    <p className="text-[10px] font-mono uppercase text-purple-400 font-bold">Total Payroll Disbursed</p>
+                    <p className="text-xl font-black text-white font-mono mt-1">₹{totalPayrollPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono uppercase text-[#9CA3AF] font-bold">Active Staff Headcount</p>
+                    <p className="text-xl font-black text-white font-mono mt-1">{staffUsers.length} Employees</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono uppercase text-[#9CA3AF] font-bold">Salary Records in Period</p>
+                    <p className="text-xl font-black text-[#40E0D0] font-mono mt-1">{periodSalaries.length}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono uppercase text-[#9CA3AF] font-bold">Audit Method</p>
+                    <p className="text-sm font-bold text-emerald-400 mt-1 flex items-center gap-1">
+                      <ShieldCheck className="w-4 h-4" /> Attendance Deductions (30 Days)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Staff Payroll Table */}
+                <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl overflow-hidden space-y-4 p-5">
+                  <div className="flex justify-between items-center pb-3 border-b border-[#00ABAB]/30">
+                    <h3 className="font-bold text-base text-white flex items-center gap-2">
+                      <Users className="w-4 h-4 text-[#00ABAB]" /> Attendance-Audited Staff Monthly Payroll Ledger
+                    </h3>
+                    <span className="text-xs font-mono font-bold text-[#40E0D0] bg-[#0A0A0A] px-3 py-1 rounded-full border border-[#00ABAB]/30">
+                      {periodSalaries.length} Slips
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-[#1C1C1C]">
+                    <table className="w-full text-left text-xs text-white">
+                      <thead>
+                        <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
+                          <th className="p-3">Staff Name</th>
+                          <th className="p-3">Month</th>
+                          <th className="p-3 text-right">Base Salary</th>
+                          <th className="p-3 text-center">Present / Absent</th>
+                          <th className="p-3 text-right">Leave Deductions</th>
+                          <th className="p-3 text-right">Overtime / Bonus</th>
+                          <th className="p-3 text-right">Net Disbursed</th>
+                          <th className="p-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#1C1C1C]">
+                        {periodSalaries.length === 0 ? (
+                          <tr><td colSpan={8} className="text-center py-8 text-[#9CA3AF]">No salary payment records found for this period.</td></tr>
+                        ) : periodSalaries.map((sal, idx) => (
+                          <tr key={idx} className="hover:bg-[#1C1C1C]/40 transition-colors">
+                            <td className="p-3 font-bold text-white">{sal.staffName}</td>
+                            <td className="p-3 font-mono text-[#9CA3AF]">{sal.month}</td>
+                            <td className="p-3 text-right font-mono text-[#9CA3AF]">₹{sal.baseSalary?.toLocaleString('en-IN')}</td>
+                            <td className="p-3 text-center font-mono">
+                              <span className="text-emerald-400 font-bold">{sal.presentDays} Present</span> / <span className="text-rose-400 font-bold">{sal.absentDays} Leave</span>
+                            </td>
+                            <td className="p-3 text-right font-mono text-rose-400">
+                              -₹{(sal.leaveDeduction || sal.deductionAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-3 text-right font-mono text-teal-400">
+                              +₹{(sal.overtimePay || sal.bonusAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-3 text-right font-mono font-black text-white">
+                              ₹{(sal.netPayable || sal.calculatedSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                {sal.paymentStatus || 'Paid'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── 8. PAYMENT COLLECTIONS BREAKDOWN VIEW ── */}
+            {analyticsViewMode === 'breakdown_payments' && (
+              <div className="space-y-6">
+                {/* Collection Summaries Grid */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#00ABAB]/30">
+                    <p className="text-[10px] font-mono text-[#00ABAB] uppercase tracking-wider font-bold">Total Period Collected</p>
+                    <p className="text-xl font-black text-[#00ABAB] mt-1 font-mono">
+                      ₹{filteredSalesData.paidPayments.reduce((s, p) => s + p.amount, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#9CA3AF] uppercase tracking-wider font-bold">Counter Cash</p>
+                    <p className="text-xl font-black text-emerald-400 mt-1 font-mono">₹{filteredSalesData.cashCollections.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#9CA3AF] uppercase tracking-wider font-bold">Counter UPI / Dynamic QR</p>
+                    <p className="text-xl font-black text-violet-400 mt-1 font-mono">₹{filteredSalesData.upiCollections.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
+                    <p className="text-[10px] font-mono text-[#9CA3AF] uppercase tracking-wider font-bold">Card POS &amp; Online Gateway</p>
+                    <p className="text-xl font-black text-blue-400 mt-1 font-mono">
+                      ₹{(filteredSalesData.cardCollections + filteredSalesData.onlineCollections).toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Complete Transaction Logs Table */}
+                <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl p-5 space-y-4">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#00ABAB]/30 pb-3">
+                    <div>
+                      <h3 className="font-bold text-base text-white flex items-center gap-2">
+                        <IndianRupee className="w-4 h-4 text-[#00ABAB]" /> Complete Real-Time Transaction Logs
+                      </h3>
+                      <p className="text-[#9CA3AF] text-xs mt-0.5">Live database audit stream of all ticket sales, food orders, and counter collections</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleExportDashboardCSV}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#00ABAB] text-black rounded-lg hover:bg-[#00ABAB]/80 transition-all cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Export CSV
+                    </button>
+                  </div>
+
+                  {/* Filter Controls Bar */}
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-[#0A0A0A] p-3 rounded-xl border border-[#1C1C1C]">
+                    <div className="relative md:col-span-2">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#9CA3AF]" />
+                      <input
+                        type="text"
+                        placeholder="Search customer, phone, invoice, ticket ID, package..."
+                        value={dashLogSearch}
+                        onChange={e => setDashLogSearch(e.target.value)}
+                        className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-[#9CA3AF] focus:border-[#00ABAB] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <select
+                        value={dashLogMethodFilter}
+                        onChange={e => setDashLogMethodFilter(e.target.value)}
+                        className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ABAB] outline-none capitalize"
+                      >
+                        <option value="all">All Payment Methods</option>
+                        <option value="cash">Cash</option>
+                        <option value="upi">UPI / QR Code</option>
+                        <option value="card">Card POS</option>
+                        <option value="razorpay">Online (Razorpay)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <select
+                        value={dashLogStatusFilter}
+                        onChange={e => setDashLogStatusFilter(e.target.value)}
+                        className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ABAB] outline-none capitalize"
+                      >
+                        <option value="all">All Payment Statuses</option>
+                        <option value="paid">Paid / Success</option>
+                        <option value="pending">Pending</option>
+                        <option value="refunded">Refunded</option>
+                        <option value="failed">Failed</option>
+                      </select>
+                    </div>
+                    <div>
+                      <select
+                        value={dashLogDateFilter}
+                        onChange={e => setDashLogDateFilter(e.target.value)}
+                        className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ABAB] outline-none"
+                      >
+                        <option value="all">All Time</option>
+                        <option value="today">Today Only</option>
+                        <option value="7days">Past 7 Days</option>
+                        <option value="30days">Past 30 Days</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Filtered Logs Table */}
+                  <div className="overflow-x-auto rounded-xl border border-[#1C1C1C] max-h-[500px]">
+                    <table className="w-full text-left text-xs text-white">
+                      <thead className="sticky top-0 bg-[#0A0A0A] shadow-md z-10">
+                        <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
+                          <th className="p-3">Invoice / Ref ID</th>
+                          <th className="p-3">Ref ID</th>
+                          <th className="p-3">Customer Details</th>
+                          <th className="p-3">Activity / Dining</th>
+                          <th className="p-3 text-right">Amount (₹)</th>
+                          <th className="p-3 text-center">Method</th>
+                          <th className="p-3 text-center">Status</th>
+                          <th className="p-3 text-right">Timestamp</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#1C1C1C]">
+                        {filteredDashboardPayments.length === 0 ? (
+                          <tr><td colSpan={8} className="p-8 text-center text-[#9CA3AF] font-mono">No transaction records match the current filters.</td></tr>
+                        ) : filteredDashboardPayments.map(pay => {
+                          const booking = bookings.find(b => b.id === pay.bookingId);
+                          const order = orders.find(o => o.id === pay.orderId);
+                          const custName = pay.customerName || booking?.customerName || order?.customerName || 'Walk-in Guest';
+                          const custPhone = pay.customerPhone || booking?.customerPhone || order?.customerPhone || '';
+                          const actName = pay.activityName || booking?.activityName || (pay.orderId ? 'Food Street Dining' : 'General Admission');
+                          const invoiceId = pay.invoice_id || (pay.orderId ? `INV-CAFE-${pay.orderId.slice(-6)}` : `INV-B-${pay.bookingId?.slice(-6) || '—'}`);
+
+                          return (
+                            <tr key={`dash-pay-${pay.id}`} className="hover:bg-[#1C1C1C]/50 transition-colors">
+                              <td className="p-3 font-mono font-bold text-[#40E0D0] text-[11px]">{invoiceId}</td>
+                              <td className="p-3 font-mono text-[10px] text-[#9CA3AF]">{pay.bookingId ? `B-${pay.bookingId.slice(-6)}` : pay.orderId ? `O-${pay.orderId.slice(-6)}` : '—'}</td>
+                              <td className="p-3">
+                                <div className="font-bold text-white">{custName}</div>
+                                <div className="text-[10px] text-[#40E0D0] font-mono mt-0.5">{custPhone}</div>
+                              </td>
+                              <td className="p-3">
+                                <div className="font-semibold text-white">{actName}</div>
+                                <div className="text-[10px] text-[#9CA3AF] mt-0.5">{booking?.packageName || booking?.details || (pay.orderId ? 'Cafe Dining' : 'Standard Ticket')}</div>
+                              </td>
+                              <td className="p-3 text-right font-mono font-extrabold text-white text-sm">
+                                ₹{pay.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="p-3 text-center font-mono text-[10px] uppercase font-bold text-teal-400">
+                                {pay.method}
+                              </td>
+                              <td className="p-3 text-center font-mono text-[10px]">
+                                <span className={`inline-block px-2 py-0.5 rounded-full font-bold uppercase ${
+                                  pay.status === 'paid' || pay.status === 'success' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                  : pay.status === 'pending' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                  : pay.status === 'refunded' ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                                  : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                                }`}>
+                                  {pay.status}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right font-mono text-[10px] text-[#9CA3AF] whitespace-nowrap">
+                                {new Date(pay.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-between items-center text-xs text-[#9CA3AF] pt-2">
+                    <span>Showing {filteredDashboardPayments.length} of {payments.length} transactions</span>
+                    <span className="font-mono text-emerald-400 flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Reconciled with accounting
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
           </div>
-
-          {/* ── 3. COMPLETE REAL-TIME TRANSACTION LOGS TABLE ── */}
-          <div className="glass-panel border border-[#00ABAB]/30 rounded-2xl p-5 space-y-4">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#00ABAB]/30 pb-3">
-              <div>
-                <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                  <IndianRupee className="w-5 h-5 text-[#00ABAB]" /> Complete Real-Time Transaction Logs
-                </h3>
-                <p className="text-[#9CA3AF] text-xs mt-0.5">Live database audit stream of all ticket sales, food orders, and counter transactions</p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleExportDashboardCSV}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#00ABAB] text-black rounded-lg hover:bg-[#00ABAB]/80 transition-all cursor-pointer"
-                >
-                  <Download className="w-4 h-4" /> Export CSV
-                </button>
-                <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Live Realtime Sync
-                </span>
-              </div>
-            </div>
-
-            {/* Filter Controls Bar */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-[#0A0A0A] p-3 rounded-xl border border-[#1C1C1C]">
-              
-              {/* Search Box */}
-              <div className="relative md:col-span-2">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
-                <input
-                  type="text"
-                  placeholder="Search customer, phone, invoice, ticket ID, package..."
-                  value={dashLogSearch}
-                  onChange={e => setDashLogSearch(e.target.value)}
-                  className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-[#9CA3AF] focus:border-[#00ABAB] outline-none"
-                />
-              </div>
-
-              {/* Payment Method Filter */}
-              <div>
-                <select
-                  value={dashLogMethodFilter}
-                  onChange={e => setDashLogMethodFilter(e.target.value)}
-                  className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ABAB] outline-none capitalize"
-                >
-                  <option value="all">All Payment Methods</option>
-                  <option value="cash">Cash</option>
-                  <option value="upi">UPI / QR Code</option>
-                  <option value="card">Card POS</option>
-                  <option value="razorpay">Online (Razorpay)</option>
-                </select>
-              </div>
-
-              {/* Status Filter */}
-              <div>
-                <select
-                  value={dashLogStatusFilter}
-                  onChange={e => setDashLogStatusFilter(e.target.value)}
-                  className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ABAB] outline-none capitalize"
-                >
-                  <option value="all">All Payment Statuses</option>
-                  <option value="paid">Paid / Success</option>
-                  <option value="pending">Pending</option>
-                  <option value="refunded">Refunded</option>
-                  <option value="failed">Failed</option>
-                </select>
-              </div>
-
-              {/* Date Filter */}
-              <div>
-                <select
-                  value={dashLogDateFilter}
-                  onChange={e => setDashLogDateFilter(e.target.value)}
-                  className="w-full bg-[#1C1C1C] border border-[#00ABAB]/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ABAB] outline-none"
-                >
-                  <option value="all">All Time</option>
-                  <option value="today">Today Only</option>
-                  <option value="7days">Past 7 Days</option>
-                  <option value="30days">Past 30 Days</option>
-                </select>
-              </div>
-
-            </div>
-
-            {/* Filtered Logs Table */}
-            <div className="overflow-x-auto rounded-xl border border-[#1C1C1C] max-h-[500px]">
-              <table className="w-full text-left text-xs text-[#FFFFFF]">
-                <thead className="sticky top-0 bg-[#0A0A0A] shadow-md z-10">
-                  <tr className="bg-[#0A0A0A] border-b border-[#00ABAB]/30 text-[#9CA3AF] font-mono font-bold uppercase tracking-wider">
-                    <th className="p-3">Invoice / Ref ID</th>
-                    <th className="p-3">Booking ID</th>
-                    <th className="p-3">Customer Details</th>
-                    <th className="p-3">Activity & Package</th>
-                    <th className="p-3 text-center">Qty / Visitors</th>
-                    <th className="p-3 text-right">Amount (₹)</th>
-                    <th className="p-3 text-center">Method</th>
-                    <th className="p-3 text-center">Status</th>
-                    <th className="p-3 text-right">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1C1C1C]">
-                  {filteredDashboardPayments.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="p-8 text-center text-[#9CA3AF] font-mono">
-                        No transaction records match the current filters.
-                      </td>
-                    </tr>
-                  ) : filteredDashboardPayments.map(pay => {
-                    const booking = bookings.find(b => b.id === pay.bookingId);
-                    const methodUpper = (pay.method || 'CASH').toUpperCase();
-                    const statusUpper = (pay.status || 'PAID').toUpperCase();
-
-                    const methodBadgeClass =
-                      methodUpper === 'CASH' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                      : methodUpper.includes('CARD') ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                      : methodUpper === 'UPI' || methodUpper === 'QRCODE' ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
-                      : 'bg-teal-500/10 text-[#40E0D0] border-teal-500/20';
-
-                    const statusBadgeClass =
-                      statusUpper === 'PAID' || statusUpper === 'SUCCESS' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                      : statusUpper === 'PENDING' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                      : statusUpper === 'REFUNDED' ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
-                      : 'bg-rose-500/15 text-rose-400 border-rose-500/30';
-
-                    return (
-                      <tr key={`dash-pay-${pay.id}`} className="hover:bg-[#1C1C1C]/50 transition-colors">
-                        <td className="p-3 font-mono font-bold text-[#40E0D0] text-[11px]">
-                          {pay.invoice_id || `INV-B-${pay.bookingId?.slice(-6) || '—'}`}
-                        </td>
-                        <td className="p-3 font-mono text-[10px] text-[#9CA3AF]">
-                          {pay.bookingId || pay.orderId || '—'}
-                        </td>
-                        <td className="p-3">
-                          <div className="font-bold text-white">{pay.customerName || booking?.customerName || 'Guest Customer'}</div>
-                          <div className="text-[10px] text-[#40E0D0] font-mono mt-0.5">{pay.customerPhone || booking?.customerPhone || pay.customer_id || ''}</div>
-                        </td>
-                        <td className="p-3">
-                          <div className="font-semibold text-white">{pay.activityName || booking?.activityName || 'Activity'}</div>
-                          <div className="text-[10px] text-[#9CA3AF] mt-0.5">{booking?.packageName || booking?.details || 'Standard Ticket'}</div>
-                        </td>
-                        <td className="p-3 text-center font-mono font-bold text-white">
-                          {booking?.quantity || 1}
-                        </td>
-                        <td className="p-3 text-right font-mono font-extrabold text-white text-sm">
-                          ₹{pay.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-3 text-center font-mono text-[10px]">
-                          <span className={`inline-block px-2 py-0.5 rounded border ${methodBadgeClass}`}>
-                            {methodUpper}
-                          </span>
-                        </td>
-                        <td className="p-3 text-center font-mono text-[10px]">
-                          <span className={`inline-block px-2 py-0.5 rounded-full font-bold border ${statusBadgeClass}`}>
-                            {statusUpper}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right font-mono text-[10px] text-[#9CA3AF] whitespace-nowrap">
-                          {new Date(pay.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex justify-between items-center text-xs text-[#9CA3AF] pt-2">
-              <span>Showing {filteredDashboardPayments.length} of {payments.length} transactions</span>
-              <span className="font-mono">Real-time sync active</span>
-            </div>
-          </div>
-
-        </div>
-      )}
+        );
+      })()}
 
       {/* ----------------------------------------------------------------- */}
       {/* 2. ACTIVITIES VIEW */}
@@ -2630,25 +2814,34 @@ export const AdminDashboard: React.FC = () => {
 
       {/* ── PAYMENT REPORTS TAB ── */}
       {activeTab === 'payments' && (() => {
-        const filteredPayments = payments.filter(p => {
+        // Filter payments by date range
+        const periodPayments = payments.filter(p => isDateInFilter(parseSafeDate(p.timestamp), payDateFilter, payCustomStart, payCustomEnd));
+
+        const filteredPayments = periodPayments.filter(p => {
           const matchesMethod = payFilter === 'all' ? true
             : payFilter === 'pending' ? (p.status === 'pending' || p.payment_status === 'PENDING')
             : payFilter === 'failed' ? (p.status === 'failed' || p.payment_status === 'FAILED')
             : p.method === payFilter;
           const booking = bookings.find(b => b.id === p.bookingId);
+          const order = orders.find(o => o.id === p.orderId);
           const ticket = tickets.find(t => t.bookingId === p.bookingId);
           const searchLower = paySearch.toLowerCase();
           const matchesSearch = !paySearch
             || booking?.customerName?.toLowerCase().includes(searchLower)
+            || order?.customerName?.toLowerCase().includes(searchLower)
+            || p.customerName?.toLowerCase().includes(searchLower)
             || p.bookingId?.toLowerCase().includes(searchLower)
+            || p.orderId?.toLowerCase().includes(searchLower)
             || ticket?.id?.toLowerCase().includes(searchLower)
             || p.transactionId?.toLowerCase().includes(searchLower)
-            || p.invoice_id?.toLowerCase().includes(searchLower);
+            || p.invoice_id?.toLowerCase().includes(searchLower)
+            || p.referenceNumber?.toLowerCase().includes(searchLower)
+            || p.razorpayPaymentId?.toLowerCase().includes(searchLower);
           return matchesMethod && matchesSearch;
         }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-        // Summaries across ALL payments in state
-        const allPayments = payments;
+        // Summaries across period payments
+        const allPayments = periodPayments;
 
         // Overall collection metrics
         const totalOverallCollection = allPayments
@@ -2687,6 +2880,42 @@ export const AdminDashboard: React.FC = () => {
         const methodColors: Record<string, string> = { upi: 'text-violet-400', card: 'text-blue-400', cash: 'text-emerald-400', razorpay: 'text-[#00ABAB]', net_banking: 'text-amber-400' };
         const statusColors: Record<string, string> = { success: 'text-emerald-400 bg-emerald-500/10', paid: 'text-emerald-400 bg-emerald-500/10', pending: 'text-amber-400 bg-amber-500/10', failed: 'text-red-400 bg-red-500/10', cancelled: 'text-gray-400 bg-gray-500/10', refunded: 'text-purple-400 bg-purple-500/10' };
 
+        const handleExportPaymentsCSV = () => {
+          const headers = ["Invoice ID", "Ref ID", "Customer Name", "Customer Contact", "Activity / Dining", "Amount", "Payment Method", "Payment Status", "Txn Ref", "Timestamp"];
+          const rows = filteredPayments.map(pay => {
+            const booking = bookings.find(b => b.id === pay.bookingId);
+            const order = orders.find(o => o.id === pay.orderId);
+            const custName = pay.customerName || booking?.customerName || order?.customerName || 'Walk-in Guest';
+            const custContact = pay.customerPhone || booking?.customerPhone || booking?.customerEmail || order?.customerPhone || '';
+            const actName = pay.activityName || booking?.activityName || (pay.orderId ? 'Food Street Dining' : 'General Admission');
+            const invId = pay.invoice_id || (pay.orderId ? `INV-CAFE-${pay.orderId.slice(-6)}` : `INV-B-${pay.bookingId?.slice(-6) || ''}`);
+            const refId = pay.bookingId || pay.orderId || '';
+
+            return [
+              `"${invId}"`,
+              `"${refId}"`,
+              `"${custName}"`,
+              `"${custContact}"`,
+              `"${actName}"`,
+              pay.amount || 0,
+              `"${pay.method?.toUpperCase() || ''}"`,
+              `"${pay.status?.toUpperCase() || ''}"`,
+              `"${pay.razorpayPaymentId || pay.referenceNumber || pay.transactionId || ''}"`,
+              `"${new Date(pay.timestamp).toLocaleString('en-IN')}"`
+            ];
+          });
+
+          const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.setAttribute("download", `deuce_payment_reports_${payDateFilter}_${new Date().toISOString().split('T')[0]}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
+
         return (
           <div className="space-y-6">
             
@@ -2706,49 +2935,102 @@ export const AdminDashboard: React.FC = () => {
               </button>
             </div>
 
+            {/* Date Range Filter Bar for Payment Reports */}
+            <div className="p-4 glass-panel border border-[#00ABAB]/30 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-[#0A0A0A] text-[#40E0D0] rounded-lg border border-[#00ABAB]/30">
+                  <CalendarRange className="w-4 h-4" />
+                </span>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Payment Audit Date Range</h4>
+                  <p className="text-[10px] text-[#9CA3AF]">Showing collections recorded within the selected period</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(['all', 'today', 'yesterday', '7days', '30days', 'this_month', 'custom'] as const).map(filter => (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => setPayDateFilter(filter)}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all capitalize ${
+                      payDateFilter === filter
+                        ? 'bg-[#00ABAB] text-black shadow-[0_0_10px_rgba(0,171,171,0.4)]'
+                        : 'bg-[#0A0A0A] text-[#9CA3AF] hover:text-white border border-[#1C1C1C]'
+                    }`}
+                  >
+                    {filter === 'all' ? 'All History' : filter === '7days' ? '7 Days' : filter === '30days' ? '30 Days' : filter === 'this_month' ? 'This Month' : filter}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {payDateFilter === 'custom' && (
+              <div className="flex flex-wrap items-center gap-3 bg-[#0A0A0A] p-3 rounded-xl border border-[#1C1C1C] text-xs font-mono">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[#9CA3AF]">From Date:</span>
+                  <input
+                    type="date"
+                    value={payCustomStart}
+                    onChange={e => setPayCustomStart(e.target.value)}
+                    className="bg-[#141414] text-white border border-[#00ABAB]/40 rounded-lg px-2.5 py-1 text-xs font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[#9CA3AF]">To Date:</span>
+                  <input
+                    type="date"
+                    value={payCustomEnd}
+                    onChange={e => setPayCustomEnd(e.target.value)}
+                    className="bg-[#141414] text-white border border-[#00ABAB]/40 rounded-lg px-2.5 py-1 text-xs font-mono"
+                  />
+                </div>
+              </div>
+            )}
+
             {reconciliationTab === 'reports' ? (
               <>
                 {/* ── Collection Summaries Grid ── */}
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                   <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#00ABAB]/40 shadow-[0_0_15px_rgba(0,171,171,0.1)]">
                     <p className="text-[10px] font-mono text-[#00ABAB] uppercase tracking-wider font-bold">Total Overall Collection</p>
-                    <p className="text-lg font-black text-[#00ABAB] mt-1">₹{totalOverallCollection.toLocaleString('en-IN')}</p>
+                    <p className="text-lg font-black text-[#00ABAB] mt-1 font-mono">₹{totalOverallCollection.toLocaleString('en-IN')}</p>
                   </div>
                   <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
                     <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Total Online Collection</p>
-                    <p className="text-lg font-black text-violet-400 mt-1">₹{totalOnlineCollection.toLocaleString('en-IN')}</p>
+                    <p className="text-lg font-black text-violet-400 mt-1 font-mono">₹{totalOnlineCollection.toLocaleString('en-IN')}</p>
                   </div>
                   <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
                     <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Total Counter Collection</p>
-                    <p className="text-lg font-black text-emerald-400 mt-1">₹{totalCounterCollection.toLocaleString('en-IN')}</p>
+                    <p className="text-lg font-black text-emerald-400 mt-1 font-mono">₹{totalCounterCollection.toLocaleString('en-IN')}</p>
                   </div>
                   <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
                     <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Counter Cash Collection</p>
-                    <p className="text-lg font-black text-emerald-400 mt-1">₹{counterCashCollection.toLocaleString('en-IN')}</p>
+                    <p className="text-lg font-black text-emerald-400 mt-1 font-mono">₹{counterCashCollection.toLocaleString('en-IN')}</p>
                   </div>
                   <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
                     <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Counter UPI Collection</p>
-                    <p className="text-lg font-black text-violet-400 mt-1">₹{counterUpiCollection.toLocaleString('en-IN')}</p>
+                    <p className="text-lg font-black text-violet-400 mt-1 font-mono">₹{counterUpiCollection.toLocaleString('en-IN')}</p>
                   </div>
                   <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
                     <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Counter Card POS Collection</p>
-                    <p className="text-lg font-black text-blue-400 mt-1">₹{counterCardCollection.toLocaleString('en-IN')}</p>
+                    <p className="text-lg font-black text-blue-400 mt-1 font-mono">₹{counterCardCollection.toLocaleString('en-IN')}</p>
                   </div>
                   <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
                     <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Failed Transactions</p>
-                    <p className="text-lg font-black text-red-400 mt-1">{failedCount}</p>
+                    <p className="text-lg font-black text-red-400 mt-1 font-mono">{failedCount}</p>
                   </div>
                   <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
                     <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Pending Transactions</p>
-                    <p className="text-lg font-black text-amber-400 mt-1">{pendingCount}</p>
+                    <p className="text-lg font-black text-amber-400 mt-1 font-mono">{pendingCount}</p>
                   </div>
                   <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#1C1C1C]">
                     <p className="text-[10px] font-mono text-[#94A3B8] uppercase tracking-wider font-bold">Refunds Processed</p>
-                    <p className="text-lg font-black text-purple-400 mt-1">₹{refundsSum.toLocaleString('en-IN')}</p>
+                    <p className="text-lg font-black text-purple-400 mt-1 font-mono">₹{refundsSum.toLocaleString('en-IN')}</p>
                   </div>
                   <div className="bg-[#0A0A0A] p-4 rounded-xl border border-[#00ABAB]/30">
                     <p className="text-[10px] font-mono text-[#00ABAB] uppercase tracking-wider font-bold">Net Collection (Overall - Refund)</p>
-                    <p className="text-lg font-black text-[#00ABAB] mt-1">₹{netCollection.toLocaleString('en-IN')}</p>
+                    <p className="text-lg font-black text-[#00ABAB] mt-1 font-mono">₹{netCollection.toLocaleString('en-IN')}</p>
                   </div>
                 </div>
 
@@ -2757,8 +3039,15 @@ export const AdminDashboard: React.FC = () => {
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                     <div>
                       <h3 className="font-bold text-lg text-white flex items-center gap-2"><IndianRupee className="w-5 h-5 text-[#00ABAB]" /> Transaction History Log</h3>
-                      <p className="text-[#94A3B8] text-xs mt-0.5">Search and filter cash, card, and UPI collections</p>
+                      <p className="text-[#94A3B8] text-xs mt-0.5">Search and filter cash, card, UPI, and food dining collections ({periodPayments.length} transactions)</p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={handleExportPaymentsCSV}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#00ABAB] text-black rounded-lg hover:bg-[#00ABAB]/80 transition-all cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Export Payments CSV
+                    </button>
                   </div>
 
                   {/* Filters */}
@@ -2767,7 +3056,7 @@ export const AdminDashboard: React.FC = () => {
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
                       <input
                         type="text"
-                        placeholder="Search by name, invoice, booking ID, txn ref..."
+                        placeholder="Search by customer, invoice, booking ID, cafe order ID, txn ref..."
                         value={paySearch}
                         onChange={e => setPaySearch(e.target.value)}
                         className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-[#94A3B8] focus:border-[#00ABAB] outline-none"
@@ -2793,9 +3082,9 @@ export const AdminDashboard: React.FC = () => {
                       <thead>
                         <tr className="bg-[#1C1C1C] text-[#94A3B8] text-xs uppercase tracking-wider">
                           <th className="px-4 py-3 text-left">Invoice ID</th>
-                          <th className="px-4 py-3 text-left">Booking ID</th>
+                          <th className="px-4 py-3 text-left">Ref ID</th>
                           <th className="px-4 py-3 text-left">Customer</th>
-                          <th className="px-4 py-3 text-left">Activity</th>
+                          <th className="px-4 py-3 text-left">Activity / Item</th>
                           <th className="px-4 py-3 text-right">Amount</th>
                           <th className="px-4 py-3 text-left">Method</th>
                           <th className="px-4 py-3 text-left">Status</th>
@@ -2805,19 +3094,26 @@ export const AdminDashboard: React.FC = () => {
                       </thead>
                       <tbody className="divide-y divide-[#1C1C1C]">
                         {filteredPayments.length === 0 ? (
-                          <tr><td colSpan={9} className="text-center py-10 text-[#94A3B8]">No payments found matching filters.</td></tr>
+                          <tr><td colSpan={9} className="text-center py-10 text-[#94A3B8]">No payments found matching filters for this period.</td></tr>
                         ) : filteredPayments.map(pay => {
                           const booking = bookings.find(b => b.id === pay.bookingId);
+                          const order = orders.find(o => o.id === pay.orderId);
+                          const custName = pay.customerName || booking?.customerName || order?.customerName || 'Walk-in Guest';
+                          const custContact = pay.customerPhone || booking?.customerPhone || booking?.customerEmail || order?.customerPhone || '—';
+                          const actName = pay.activityName || booking?.activityName || (pay.orderId ? 'Food Street Dining' : 'General Admission');
+                          const invId = pay.invoice_id || (pay.orderId ? `INV-CAFE-${pay.orderId.slice(-6)}` : `INV-B-${pay.bookingId?.slice(-6) || '—'}`);
+                          const refId = pay.bookingId ? `B-${pay.bookingId.slice(-6)}` : pay.orderId ? `O-${pay.orderId.slice(-6)}` : '—';
+
                           return (
                             <tr key={pay.id} className="hover:bg-[#1C1C1C]/50 transition-colors text-xs">
-                              <td className="px-4 py-3 font-mono text-[10px] text-[#00ABAB] font-bold">{pay.invoice_id || `INV-B-${pay.bookingId?.slice(-6) || '—'}`}</td>
-                              <td className="px-4 py-3 font-mono text-[10px] text-[#94A3B8]">{pay.bookingId?.slice(-8) || '—'}</td>
+                              <td className="px-4 py-3 font-mono text-[10px] text-[#00ABAB] font-bold">{invId}</td>
+                              <td className="px-4 py-3 font-mono text-[10px] text-[#94A3B8]">{refId}</td>
                               <td className="px-4 py-3">
-                                <p className="font-medium text-white">{booking?.customerName || '—'}</p>
-                                <p className="text-[9px] text-[#94A3B8]">{booking?.customerEmail || '—'}</p>
+                                <p className="font-medium text-white">{custName}</p>
+                                <p className="text-[9px] text-[#94A3B8]">{custContact}</p>
                               </td>
-                              <td className="px-4 py-3 text-[#94A3B8] text-xs">{booking?.activityName || '—'}</td>
-                              <td className="px-4 py-3 text-right font-bold text-white">₹{pay.amount.toLocaleString('en-IN')}</td>
+                              <td className="px-4 py-3 text-[#94A3B8] text-xs">{actName}</td>
+                              <td className="px-4 py-3 text-right font-bold text-white font-mono">₹{pay.amount.toLocaleString('en-IN')}</td>
                               <td className="px-4 py-3">
                                 <span className={`font-bold uppercase text-[10px] ${methodColors[pay.method] || 'text-white'}`}>{pay.method}</span>
                               </td>
@@ -2864,13 +3160,13 @@ export const AdminDashboard: React.FC = () => {
                             <div key={local.id} className="p-3 hover:bg-[#1C1C1C]/30 flex justify-between items-center transition-colors">
                               <div>
                                 <p className="font-bold text-white font-mono text-[10px]">{local.invoice_id || 'COUNTER CASH'}</p>
-                                <p className="text-[10px] text-[#94A3B8] font-mono mt-0.5">Booking: {local.bookingId?.slice(-8) || '—'}</p>
+                                <p className="text-[10px] text-[#94A3B8] font-mono mt-0.5">Booking: {local.bookingId?.slice(-8) || local.orderId?.slice(-8) || '—'}</p>
                                 <p className="text-[9px] text-[#94A3B8] mt-0.5">TxID: {local.transactionId || '—'}</p>
                               </div>
                               <div className="text-right">
-                                <p className="font-bold text-white">₹{local.amount.toLocaleString('en-IN')}</p>
-                                <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold mt-1 ${hasMatch ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                                  {hasMatch ? 'Reconciled' : 'Local Only (Cash)'}
+                                <p className="font-bold text-white font-mono">₹{local.amount.toLocaleString('en-IN')}</p>
+                                <span className={`text-[9px] uppercase font-bold ${hasMatch ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                  {hasMatch ? 'Verified Matched' : 'Local Capture Only'}
                                 </span>
                               </div>
                             </div>
@@ -2879,31 +3175,43 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Gateway API captures */}
+                    {/* Gateway Records */}
                     <div className="space-y-3">
-                      <h4 className="font-bold text-sm text-[#94A3B8] border-b border-[#1c1c1c] pb-2">Gateway/POS Captured API Transactions ({gatewayPayments.length} txn)</h4>
+                      <h4 className="font-bold text-sm text-[#94A3B8] border-b border-[#1c1c1c] pb-2">Razorpay Online Gateway Captures ({gatewayPayments.length} txn)</h4>
                       <div className="overflow-y-auto max-h-[400px] border border-[#1c1c1c] rounded-xl text-xs divide-y divide-[#1c1c1c]">
                         {gatewayPayments.length === 0 ? (
-                          <div className="p-6 text-center text-[#94A3B8]">No gateway API transactions loaded. Configure Razorpay secret key.</div>
-                        ) : gatewayPayments.map(gateway => {
-                          const localMatch = payments.find(p => p.gateway_payment_id === gateway.id || p.transactionId === gateway.id || p.bookingId === gateway.notes?.bookingRef);
-                          const isRefunded = gateway.status === 'refunded';
-                          return (
-                            <div key={gateway.id} className="p-3 hover:bg-[#1C1C1C]/30 flex justify-between items-center transition-colors">
+                          <div className="p-8 text-center text-[#94A3B8]">
+                            <p>No remote gateway transactions loaded.</p>
+                            <button
+                              onClick={() => {
+                                setIsReconciling(true);
+                                fetch('/api/payments/reconcile')
+                                  .then(r => r.json())
+                                  .then(data => {
+                                    if (data.gatewayPayments) setGatewayPayments(data.gatewayPayments);
+                                  })
+                                  .catch(err => console.error('Failed reconciliation fetch:', err))
+                                  .finally(() => setIsReconciling(false));
+                              }}
+                              className="mt-3 px-3 py-1.5 bg-[#00ABAB] text-black font-bold text-xs rounded-lg hover:bg-[#00ABAB]/80 transition-all cursor-pointer"
+                            >
+                              Fetch Remote Logs
+                            </button>
+                          </div>
+                        ) : (
+                          gatewayPayments.map(gw => (
+                            <div key={gw.id} className="p-3 hover:bg-[#1C1C1C]/30 flex justify-between items-center transition-colors">
                               <div>
-                                <p className="font-bold text-white font-mono text-[10px]">{gateway.id}</p>
-                                <p className="text-[10px] text-[#94A3B8] font-mono mt-0.5">Ref Notes: {gateway.notes?.bookingRef || 'Direct/Online'}</p>
-                                <p className="text-[9px] text-[#94A3B8] mt-0.5">Method: {gateway.method?.toUpperCase()} | Status: {gateway.status?.toUpperCase()}</p>
+                                <p className="font-bold text-white font-mono text-[10px]">{gw.id}</p>
+                                <p className="text-[9px] text-[#94A3B8]">{gw.email || gw.contact || '—'}</p>
                               </div>
                               <div className="text-right">
-                                <p className="font-bold text-[#00ABAB]">₹{(gateway.amount / 100).toLocaleString('en-IN')}</p>
-                                <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold mt-1 ${localMatch ? 'bg-emerald-500/10 text-emerald-400' : isRefunded ? 'bg-purple-500/10 text-purple-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                                  {localMatch ? 'Matching' : isRefunded ? 'Refunded' : 'Missing in Local'}
-                                </span>
+                                <p className="font-bold text-white font-mono">₹{(gw.amount / 100).toLocaleString('en-IN')}</p>
+                                <span className="text-[9px] uppercase font-bold text-emerald-400">{gw.status}</span>
                               </div>
                             </div>
-                          );
-                        })}
+                          ))
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2917,7 +3225,7 @@ export const AdminDashboard: React.FC = () => {
       {/* ── ACCOUNTS & FINANCE TAB ── */}
       {activeTab === 'accounts_finance' && (
         <div className="glass-panel border border-[#00ABAB]/20 rounded-2xl p-6">
-          <AccountsFinancePanel />
+          <AccountsFinancePanel readOnly={true} />
         </div>
       )}
 

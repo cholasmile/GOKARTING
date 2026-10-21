@@ -60,7 +60,7 @@ export interface CafeFinancialSummary {
   itemsCount: number;
 }
 
-export type CafeDateFilterType = 'all' | 'today' | 'yesterday' | 'this_week' | 'this_month' | 'custom';
+export type CafeDateFilterType = 'all' | 'today' | 'yesterday' | 'this_week' | '7days' | '30days' | 'this_month' | 'last_month' | 'this_year' | 'custom';
 
 /**
  * Returns [startDateStr, endDateStr] in YYYY-MM-DD
@@ -94,6 +94,28 @@ export function getCafeDateBounds(
     return { startDate: fmt(startOfWeek), endDate: todayStr };
   }
 
+  if (filterType === '7days') {
+    const d7 = new Date(now);
+    d7.setDate(d7.getDate() - 6);
+    return { startDate: fmt(d7), endDate: todayStr };
+  }
+
+  if (filterType === '30days') {
+    const d30 = new Date(now);
+    d30.setDate(d30.getDate() - 29);
+    return { startDate: fmt(d30), endDate: todayStr };
+  }
+
+  if (filterType === 'last_month') {
+    const startLast = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endLast = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { startDate: fmt(startLast), endDate: fmt(endLast) };
+  }
+
+  if (filterType === 'this_year') {
+    return { startDate: `${now.getFullYear()}-01-01`, endDate: todayStr };
+  }
+
   if (filterType === 'this_month') {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     return { startDate: fmt(startOfMonth), endDate: todayStr };
@@ -108,6 +130,15 @@ export function getCafeDateBounds(
 
   // 'all'
   return { startDate: '2020-01-01', endDate: todayStr };
+}
+
+/**
+ * Checks if a date string falls within [startDate, endDate] (inclusive, YYYY-MM-DD comparison)
+ */
+export function isDateWithinBounds(dateStr?: string | null, bounds?: { startDate: string; endDate: string }): boolean {
+  if (!dateStr || !bounds) return true;
+  const d = dateStr.slice(0, 10);
+  return d >= bounds.startDate && d <= bounds.endDate;
 }
 
 /**

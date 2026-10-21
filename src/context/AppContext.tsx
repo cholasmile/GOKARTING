@@ -366,7 +366,8 @@ const synthesizePayments = (currentPayments: Payment[], currentBookings: Booking
       const isFailed = b.paymentStatus === 'failed';
       const isCancelled = b.paymentStatus === 'cancelled';
 
-      const methodVal = (b.discountType === 'cash' ? 'cash' : 'upi') as any;
+      const rawMethod = (b as any).paymentMethod || (b.discountType === 'cash' ? 'cash' : 'upi');
+      const methodVal = typeof rawMethod === 'string' ? rawMethod.toLowerCase() : 'cash';
       const statusVal = isPaid ? 'paid' : isPending ? 'pending' : isRefunded ? 'refunded' : isFailed ? 'failed' : isCancelled ? 'cancelled' : 'paid';
 
       const synth: Payment = {
