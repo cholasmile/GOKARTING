@@ -6,7 +6,7 @@
     "role": "super_admin",
     "organizationId": "org_deuce_default",
     "createdAt": "2026-10-09T03:02:04.823Z",
-    "updatedAt": "2026-10-12T02:24:21.557Z"
+    "updatedAt": "2026-10-25T17:14:56.353Z"
   },
   {
     "id": "usr-g-1791514924808",
@@ -15,7 +15,7 @@
     "role": "ticket_counter_staff",
     "organizationId": "org_deuce_default",
     "createdAt": "2026-10-09T03:02:04.808Z",
-    "updatedAt": "2026-10-12T02:24:21.577Z"
+    "updatedAt": "2026-10-25T17:14:56.370Z"
   },
   {
     "id": "user-1",

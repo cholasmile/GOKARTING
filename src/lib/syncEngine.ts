@@ -27,7 +27,41 @@ export const TABLE_MAP_TO_DEXIE: Record<string, string> = {
   'karts': 'karts',
   'sessions': 'sessions',
   'waivers': 'waivers',
-  'inventory': 'inventory'
+  'inventory': 'inventory',
+  'staffAttendance': 'staffAttendance',
+  'staff_attendance': 'staffAttendance',
+  'staffSalaryPayments': 'staffSalaryPayments',
+  'salary_payments': 'staffSalaryPayments',
+  'shifts': 'shifts',
+  'leaveRequests': 'leaveRequests',
+  'leave_requests': 'leaveRequests',
+  'foodStreetPurchases': 'foodStreetPurchases',
+  'food_purchases': 'foodStreetPurchases',
+  'stockMovements': 'stockMovements',
+  'stock_movements': 'stockMovements',
+  'menuItemRecipes': 'menuItemRecipes',
+  'menu_recipes': 'menuItemRecipes',
+  'suppliers': 'suppliers',
+  'purchaseItems': 'purchaseItems',
+  'purchase_items': 'purchaseItems',
+  'dayExpenses': 'dayExpenses',
+  'day_expenses': 'dayExpenses',
+  'financeAuditLogs': 'financeAuditLogs',
+  'finance_audit': 'financeAuditLogs'
+};
+
+// Verified base schema columns physically existing in the Supabase database
+export const BASE_SUPABASE_COLUMNS: Record<string, string[]> = {
+  'activities': ['id', 'name', 'description', 'adultPrice', 'childPrice', 'image', 'dailyLimit', 'safetyInstructions', 'packages', 'type'],
+  'bookings': ['id', 'customerName', 'customerEmail', 'activityId', 'activityName', 'date', 'timeSlot', 'ticketType', 'details', 'quantity', 'totalAmount', 'paymentStatus', 'bookingDate'],
+  'tickets': ['id', 'bookingId', 'customerName', 'customerEmail', 'activityId', 'activityName', 'date', 'timeSlot', 'ticketType', 'quantity', 'qrCodeValue', 'status', 'scannedAt', 'scannedBy'],
+  'payments': ['id', 'orderId', 'bookingId', 'amount', 'method', 'status', 'transactionId', 'timestamp'],
+  'food_orders': ['id', 'customerName', 'customerEmail', 'items', 'totalAmount', 'status', 'paymentStatus', 'createdAt'],
+  'users': ['id', 'name', 'email', 'role', 'department'],
+  'food_vendors': ['id', 'name', 'type', 'image', 'ownerName', 'stallNumber'],
+  'menu_items': ['id', 'vendorId', 'name', 'description', 'price', 'category', 'isAvailable', 'image'],
+  'inventory': ['id', 'vendorId', 'name', 'currentStock', 'minStockLevel', 'unit'],
+  'notifications': ['id', 'recipient', 'title', 'body', 'channel', 'sentAt']
 };
 
 export const TABLE_MAP_TO_SUPABASE: Record<string, string> = {
@@ -49,19 +83,102 @@ export const TABLE_MAP_TO_SUPABASE: Record<string, string> = {
   'sessions': 'sessions',
   'waivers': 'waivers',
   'inventory': 'inventory'
+  // NOTE: staffAttendance, shifts, leaveRequests, suppliers, purchaseItems,
+  // dayExpenses, financeAuditLogs, foodStreetPurchases, stockMovements, menuItemRecipes
+  // do NOT have Supabase tables in the current schema. Operations for these tables
+  // are stored locally (Dexie + localStorage) and via the Express backend only.
+  // Supabase upsert is gracefully skipped for these tables (no entry = skip).
 };
 
 export const SUPABASE_COLUMNS: Record<string, string[]> = {
-  'bookings': ['id', 'customerName', 'customerEmail', 'activityId', 'activityName', 'date', 'timeSlot', 'ticketType', 'details', 'quantity', 'totalAmount', 'paymentStatus', 'bookingDate'],
-  'tickets': ['id', 'bookingId', 'customerName', 'customerEmail', 'activityId', 'activityName', 'date', 'timeSlot', 'ticketType', 'quantity', 'qrCodeValue', 'status'],
-  'payments': ['id', 'orderId', 'bookingId', 'amount', 'method', 'status', 'transactionId', 'timestamp'],
-  'food_orders': ['id', 'customerName', 'customerEmail', 'items', 'totalAmount', 'status', 'paymentMethod', 'createdAt'],
-  'users': ['id', 'name', 'email', 'role', 'department'],
-  'activities': ['id', 'name', 'description', 'adultPrice', 'childPrice', 'image', 'dailyLimit', 'safetyInstructions', 'packages', 'type'],
-  'food_vendors': ['id', 'name', 'type', 'image', 'ownerName', 'stallNumber'],
-  'menu_items': ['id', 'vendorId', 'name', 'description', 'price', 'category', 'isAvailable', 'image'],
-  'inventory': ['id', 'vendorId', 'name', 'currentStock', 'minStockLevel', 'unit'],
-  'notifications': ['id', 'recipient', 'title', 'body', 'timestamp', 'channel', 'read']
+  'bookings': [
+    'id', 'customerName', 'customerEmail', 'customerPhone',
+    'activityId', 'activityName', 'date', 'timeSlot', 'ticketType', 'details',
+    'quantity', 'totalAmount', 'paymentStatus', 'bookingDate',
+    'discountType', 'discountPercentage', 'discountAmount', 'originalAmount',
+    'status', 'packageId', 'packageName', 'unitPrice',
+    'cancellationReason', 'refundAmount', 'refundMethod', 'refundedAt', 'refundedBy',
+    'organizationId', 'updatedAt'
+  ],
+  'tickets': [
+    'id', 'bookingId', 'customerName', 'customerEmail', 'customerPhone',
+    'activityId', 'activityName', 'date', 'timeSlot', 'ticketType',
+    'quantity', 'qrCodeValue', 'status', 'scannedAt', 'scannedBy',
+    'packageId', 'packageName', 'unitPrice',
+    'cancellationReason', 'refundAmount', 'refundedAt', 'refundedBy',
+    'organizationId', 'updatedAt'
+  ],
+  'payments': [
+    'id', 'orderId', 'bookingId', 'amount', 'method', 'status', 'transactionId', 'timestamp',
+    'invoice_id', 'customer_id', 'currency', 'payment_method', 'payment_status',
+    'gateway', 'gateway_order_id', 'gateway_payment_id', 'gateway_reference_id',
+    'pos_transaction_id', 'terminal_id',
+    'created_at', 'updated_at', 'paid_at', 'failure_reason', 'refund_status',
+    'ticketId', 'customerName', 'customerPhone', 'activityName', 'counterId', 'staffId',
+    'referenceNumber', 'amountReceived', 'changeGiven', 'confirmedAt',
+    'razorpayOrderId', 'razorpayPaymentId',
+    'organizationId', 'updatedAt'
+  ],
+  'food_orders': [
+    'id', 'customerName', 'customerEmail', 'customerPhone',
+    'items', 'totalAmount', 'subtotal', 'taxRate', 'taxAmount', 'cgstAmount', 'sgstAmount',
+    'status', 'paymentStatus', 'paymentMethod', 'invoiceNumber', 'tokenNumber',
+    'createdAt', 'updatedAt'
+  ],
+  'users': [
+    'id', 'name', 'email', 'role', 'department',
+    'phone', 'password', 'vendorId', 'employmentStatus',
+    'employeeId', 'joiningDate', 'designation', 'salary',
+    'organizationId', 'updatedAt'
+  ],
+  'activities': [
+    'id', 'name', 'description', 'adultPrice', 'childPrice', 'image', 'dailyLimit',
+    'safetyInstructions', 'packages', 'type',
+    'videoUrl', 'shortDescription', 'detailedDescription',
+    'photos', 'coverPhotoId', 'duration', 'ageRequirement', 'rules',
+    'isActive', 'displayOrder', 'offers',
+    'organizationId', 'updatedAt'
+  ],
+  'food_vendors': [
+    'id', 'name', 'type', 'image', 'ownerName', 'stallNumber',
+    'organizationId', 'updatedAt'
+  ],
+  'menu_items': [
+    'id', 'vendorId', 'name', 'description', 'price', 'category', 'isAvailable', 'image',
+    'currentStock', 'stockQuantity', 'unit',
+    'purchasePrice', 'supplierName', 'purchaseDate', 'purchaseQuantity',
+    'openingStock', 'wastageQuantity', 'stockAdjustment',
+    'quantitySold', 'salesAmount',
+    'organizationId', 'updatedAt'
+  ],
+  'inventory': [
+    'id', 'vendorId', 'name', 'currentStock', 'minStockLevel', 'unit',
+    'category', 'openingStock', 'totalPurchased', 'totalConsumed', 'totalSold', 'totalWasted',
+    'lastPurchaseDate', 'lastPurchasePrice', 'supplier', 'costPrice',
+    'organizationId', 'updatedAt'
+  ],
+  'notifications': [
+    'id', 'recipient', 'title', 'body', 'channel', 'sentAt', 'read'
+  ],
+  'karts': [
+    'id', 'kartNumber', 'name', 'status', 'batteryLevel', 'fuelLevel',
+    'assignedDriver', 'assignedSessionId', 'currentDriverId',
+    'lastMaintenance', 'totalLaps', 'isAvailable', 'updatedAt'
+  ],
+  'sessions': [
+    'id', 'sessionName', 'startTime', 'endTime', 'status',
+    'maxDrivers', 'driverIds', 'kartAssignments', 'activityId', 'raceType', 'updatedAt'
+  ],
+  'waivers': [
+    'id', 'customerName', 'customerEmail', 'customerPhone',
+    'ticketId', 'activityId', 'signedAt', 'guardianName',
+    'waiverVersion', 'agreedToTerms', 'signatureData', 'updatedAt'
+  ],
+  'lap_records': [
+    'id', 'sessionId', 'driverId', 'driverName', 'kartId', 'kartNumber',
+    'lapNumber', 'lapTime', 'sector1Time', 'sector2Time', 'sector3Time',
+    'timestamp', 'isFastestLap', 'updatedAt'
+  ]
 };
 
 // Dependency order: push parent tables before dependent foreign-key children
@@ -293,24 +410,37 @@ class SyncEngine {
     }
 
     try {
-      console.log('[SyncEngine] Subscribing to Supabase Realtime Data Channel...');
-      this.realTimeChannel = supabase
-        .channel('public-db-realtime-changes-' + Date.now())
-        .on(
+      console.log('[SyncEngine] Subscribing to Supabase Realtime Data Channels...');
+      const channel = supabase.channel('public-db-realtime-changes-' + Date.now());
+
+      const tablesToWatch = [
+        'bookings', 'tickets', 'payments', 'food_orders',
+        'inventory', 'menu_items', 'activities', 'food_vendors', 'users',
+        'karts', 'sessions', 'waivers', 'lap_records'
+      ];
+
+      for (const t of tablesToWatch) {
+        channel.on(
           'postgres_changes',
-          { event: '*', schema: 'public' },
+          { event: '*', schema: 'public', table: t },
           (payload: any) => {
-            console.log('[SyncEngine Realtime Event Received]:', payload.eventType, payload.table);
+            console.log('[SyncEngine Realtime Event Received: ' + t + ']:', payload.eventType);
             this.handleIncomingRealtimePayload(payload);
           }
-        )
-        .subscribe((status: string) => {
-          if (status === 'SUBSCRIBED') {
-            console.log('[SyncEngine Realtime Stream]: CONNECTED & ACTIVE');
-            this.isRealtimeActive = true;
-          }
-          this.broadcastStatus('idle');
-        });
+        );
+      }
+
+      this.realTimeChannel = channel.subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[SyncEngine Realtime Stream]: CONNECTED & ACTIVE');
+          this.isRealtimeActive = true;
+          // Trigger authoritative sync to catch up on any missed records
+          this.notifySyncCompleted(0);
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          this.isRealtimeActive = false;
+        }
+        this.broadcastStatus('idle');
+      });
     } catch (err) {
       console.error('[SyncEngine] Supabase Realtime connection failed:', err);
     }
@@ -543,7 +673,22 @@ class SyncEngine {
       if (isSupabaseConfigured && supabase) {
         for (const item of sortedItems) {
           try {
-            const targetTable = TABLE_MAP_TO_SUPABASE[item.table] || item.table;
+            // Skip tables that have no Supabase schema equivalents (local-only tables).
+            // These are handled by the Express backend API batch above.
+            const hasSupabaseMapping = Object.prototype.hasOwnProperty.call(TABLE_MAP_TO_SUPABASE, item.table);
+            if (!hasSupabaseMapping) {
+              // This table is local-only (e.g., staffAttendance, foodStreetPurchases).
+              // If the API batch succeeded, mark it as synced so it clears from queue.
+              if (apiBatchSuccess && item.id) {
+                await db.syncQueue.update(item.id, { status: 'synced' });
+                await db.syncQueue.delete(item.id);
+                totalSynced++;
+                supabaseSuccessCount++;
+              }
+              continue;
+            }
+
+            const targetTable = TABLE_MAP_TO_SUPABASE[item.table];
             let itemSuccess = false;
 
             if (item.action === 'delete') {
@@ -556,7 +701,8 @@ class SyncEngine {
                 }
               }
             } else {
-              // Upsert operation: sanitize columns for Supabase schema to prevent unknown column rejections
+              // Upsert operation: use SUPABASE_COLUMNS whitelist when defined to prevent
+              // unknown-column rejections. If no whitelist exists for this table, send full payload.
               const targetCols = SUPABASE_COLUMNS[targetTable];
               let payloadToUpsert = item.payload;
               if (targetCols && Array.isArray(targetCols) && item.payload && typeof item.payload === 'object') {
@@ -567,15 +713,40 @@ class SyncEngine {
                   }
                 }
               }
+              // Ensure id is always present
+              if (!payloadToUpsert.id && item.payload?.id) {
+                payloadToUpsert.id = item.payload.id;
+              }
 
-              const { error } = await supabase.from(targetTable).upsert([payloadToUpsert], { onConflict: 'id' });
+              let { error } = await supabase.from(targetTable).upsert([payloadToUpsert], { onConflict: 'id' });
               if (!error) {
                 itemSuccess = true;
               } else {
-                console.warn(`[SyncEngine] Supabase upsert error on ${targetTable}:`, error);
-                // If table doesn't exist in Supabase (e.g., karts/sessions) or schema mismatch, check if API batch succeeded
-                if (apiBatchSuccess) {
+                // If column doesn't exist in Supabase schema (PGRST204), fall back to base verified schema columns
+                if (error.code === 'PGRST204' && BASE_SUPABASE_COLUMNS[targetTable]) {
+                  console.warn(`[SyncEngine] Column mismatch on ${targetTable} (${error.message}). Retrying with base verified schema columns...`);
+                  const baseCols = BASE_SUPABASE_COLUMNS[targetTable];
+                  const fallbackPayload = { id: item.payload.id };
+                  for (const col of baseCols) {
+                    if (item.payload[col] !== undefined) {
+                      fallbackPayload[col] = item.payload[col];
+                    }
+                  }
+                  const retryRes = await supabase.from(targetTable).upsert([fallbackPayload], { onConflict: 'id' });
+                  if (!retryRes.error) {
+                    itemSuccess = true;
+                  } else {
+                    console.warn(`[SyncEngine] Supabase fallback upsert error on ${targetTable}:`, retryRes.error);
+                  }
+                } else if (error.code === 'PGRST205') {
+                  // Table doesn't exist in Supabase schema cache (e.g. karts/sessions before migration)
+                  console.warn(`[SyncEngine] Table '${targetTable}' does not exist in Supabase schema. Synced locally via Dexie and Express API.`);
                   itemSuccess = true;
+                } else {
+                  console.warn(`[SyncEngine] Supabase upsert error on ${targetTable}:`, error);
+                  if (apiBatchSuccess) {
+                    itemSuccess = true;
+                  }
                 }
               }
             }

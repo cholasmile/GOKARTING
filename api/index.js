@@ -643,6 +643,17 @@ const sessionsStore = createJsonStore('sessions_store.json', []);
 const waiversStore = createJsonStore('waivers_store.json', []);
 const lapRecordsStore = createJsonStore('lap_records_store.json', []);
 const activitiesStore = createJsonStore('activities_store.json', []);
+const staffAttendanceStore = createJsonStore('staff_attendance_store.json', []);
+const salaryPaymentsStore = createJsonStore('salary_payments_store.json', []);
+const shiftsStore = createJsonStore('shifts_store.json', []);
+const leaveRequestsStore = createJsonStore('leave_requests_store.json', []);
+const foodPurchasesStore = createJsonStore('food_purchases_store.json', []);
+const stockMovementsStore = createJsonStore('stock_movements_store.json', []);
+const menuRecipesStore = createJsonStore('menu_recipes_store.json', []);
+const suppliersStore = createJsonStore('suppliers_store.json', []);
+const purchaseItemsStore = createJsonStore('purchase_items_store.json', []);
+const dayExpensesStore = createJsonStore('day_expenses_store.json', []);
+const financeAuditStore = createJsonStore('finance_audit_store.json', []);
 
 app.get('/api/karts', (req, res) => res.json(kartsStore.get()));
 app.post('/api/karts', (req, res) => {
@@ -876,6 +887,17 @@ app.get('/api/sync/all', (req, res) => {
     sessions: sessionsStore.get(),
     waivers: waiversStore.get(),
     lapRecords: lapRecordsStore.get(),
+    staffAttendance: staffAttendanceStore.get(),
+    staffSalaryPayments: salaryPaymentsStore.get(),
+    shifts: shiftsStore.get(),
+    leaveRequests: leaveRequestsStore.get(),
+    foodStreetPurchases: foodPurchasesStore.get(),
+    stockMovements: stockMovementsStore.get(),
+    menuItemRecipes: menuRecipesStore.get(),
+    suppliers: suppliersStore.get(),
+    purchaseItems: purchaseItemsStore.get(),
+    dayExpenses: dayExpensesStore.get(),
+    financeAuditLogs: financeAuditStore.get(),
     serverTime: new Date().toISOString()
   });
 });
@@ -906,7 +928,27 @@ app.post('/api/sync/batch', (req, res) => {
       'food_vendors': vendorsStore,
       'vendors': vendorsStore,
       'inventory': inventoryStore,
-      'activities': activitiesStore
+      'activities': activitiesStore,
+      'staffAttendance': staffAttendanceStore,
+      'staff_attendance': staffAttendanceStore,
+      'staffSalaryPayments': salaryPaymentsStore,
+      'salary_payments': salaryPaymentsStore,
+      'shifts': shiftsStore,
+      'leaveRequests': leaveRequestsStore,
+      'leave_requests': leaveRequestsStore,
+      'foodStreetPurchases': foodPurchasesStore,
+      'food_purchases': foodPurchasesStore,
+      'stockMovements': stockMovementsStore,
+      'stock_movements': stockMovementsStore,
+      'menuItemRecipes': menuRecipesStore,
+      'menu_recipes': menuRecipesStore,
+      'suppliers': suppliersStore,
+      'purchaseItems': purchaseItemsStore,
+      'purchase_items': purchaseItemsStore,
+      'dayExpenses': dayExpensesStore,
+      'day_expenses': dayExpensesStore,
+      'financeAuditLogs': financeAuditStore,
+      'finance_audit': financeAuditStore
     };
 
     let processedCount = 0;

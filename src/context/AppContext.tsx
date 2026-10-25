@@ -478,79 +478,145 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setActivities(prev => {
           if (eventType === 'DELETE') return prev.filter(a => a.id !== record.id);
           const exists = prev.some(a => a.id === record.id);
-          return exists ? prev.map(a => a.id === record.id ? record : a) : [record, ...prev];
+          return exists ? prev.map(a => a.id === record.id ? { ...a, ...record } : a) : [record, ...prev];
         });
       } else if (table === 'bookings') {
         setBookings(prev => {
           if (eventType === 'DELETE') return prev.filter(b => b.id !== record.id);
           const exists = prev.some(b => b.id === record.id);
-          return exists ? prev.map(b => b.id === record.id ? record : b) : [record, ...prev];
+          return exists ? prev.map(b => b.id === record.id ? { ...b, ...record } : b) : [record, ...prev];
         });
       } else if (table === 'tickets') {
         setTickets(prev => {
           if (eventType === 'DELETE') return prev.filter(t => t.id !== record.id);
           const exists = prev.some(t => t.id === record.id);
-          return exists ? prev.map(t => t.id === record.id ? record : t) : [record, ...prev];
+          return exists ? prev.map(t => t.id === record.id ? { ...t, ...record } : t) : [record, ...prev];
         });
       } else if (table === 'food_orders' || table === 'orders') {
         setOrders(prev => {
           if (eventType === 'DELETE') return prev.filter(o => o.id !== record.id);
           const exists = prev.some(o => o.id === record.id);
-          return exists ? prev.map(o => o.id === record.id ? record : o) : [record, ...prev];
+          return exists ? prev.map(o => o.id === record.id ? { ...o, ...record } : o) : [record, ...prev];
         });
       } else if (table === 'payments') {
         setPayments(prev => {
           if (eventType === 'DELETE') return prev.filter(p => p.id !== record.id);
           const exists = prev.some(p => p.id === record.id);
-          return exists ? prev.map(p => p.id === record.id ? record : p) : [record, ...prev];
+          return exists ? prev.map(p => p.id === record.id ? { ...p, ...record } : p) : [record, ...prev];
         });
       } else if (table === 'users') {
         setUsers(prev => {
           if (eventType === 'DELETE') return prev.filter(u => u.id !== record.id);
           const exists = prev.some(u => u.id === record.id);
-          return exists ? prev.map(u => u.id === record.id ? record : u) : [record, ...prev];
+          return exists ? prev.map(u => u.id === record.id ? { ...u, ...record } : u) : [record, ...prev];
         });
       } else if (table === 'karts') {
         setKarts(prev => {
           if (eventType === 'DELETE') return prev.filter(k => k.id !== record.id);
           const exists = prev.some(k => k.id === record.id);
-          return exists ? prev.map(k => k.id === record.id ? record : k) : [record, ...prev];
+          return exists ? prev.map(k => k.id === record.id ? { ...k, ...record } : k) : [record, ...prev];
         });
       } else if (table === 'sessions') {
         setSessions(prev => {
           if (eventType === 'DELETE') return prev.filter(s => s.id !== record.id);
           const exists = prev.some(s => s.id === record.id);
-          return exists ? prev.map(s => s.id === record.id ? record : s) : [record, ...prev];
+          return exists ? prev.map(s => s.id === record.id ? { ...s, ...record } : s) : [record, ...prev];
         });
       } else if (table === 'lap_records' || table === 'lapRecords') {
         setLapRecords(prev => {
           if (eventType === 'DELETE') return prev.filter(l => l.id !== record.id);
           const exists = prev.some(l => l.id === record.id);
-          return exists ? prev.map(l => l.id === record.id ? record : l) : [record, ...prev];
+          return exists ? prev.map(l => l.id === record.id ? { ...l, ...record } : l) : [record, ...prev];
         });
       } else if (table === 'waivers') {
         setWaivers(prev => {
           if (eventType === 'DELETE') return prev.filter(w => w.id !== record.id);
           const exists = prev.some(w => w.id === record.id);
-          return exists ? prev.map(w => w.id === record.id ? record : w) : [record, ...prev];
+          return exists ? prev.map(w => w.id === record.id ? { ...w, ...record } : w) : [record, ...prev];
         });
       } else if (table === 'menu_items' || table === 'menuItems') {
         setMenuItems(prev => {
           if (eventType === 'DELETE') return prev.filter(m => m.id !== record.id);
           const exists = prev.some(m => m.id === record.id);
-          return exists ? prev.map(m => m.id === record.id ? record : m) : [record, ...prev];
+          return exists ? prev.map(m => m.id === record.id ? { ...m, ...record } : m) : [record, ...prev];
         });
       } else if (table === 'inventory') {
         setInventory(prev => {
           if (eventType === 'DELETE') return prev.filter(i => i.id !== record.id);
           const exists = prev.some(i => i.id === record.id);
-          return exists ? prev.map(i => i.id === record.id ? record : i) : [record, ...prev];
+          return exists ? prev.map(i => i.id === record.id ? { ...i, ...record } : i) : [record, ...prev];
         });
       } else if (table === 'food_vendors' || table === 'vendors') {
         setVendors(prev => {
           if (eventType === 'DELETE') return prev.filter(v => v.id !== record.id);
           const exists = prev.some(v => v.id === record.id);
-          return exists ? prev.map(v => v.id === record.id ? record : v) : [record, ...prev];
+          return exists ? prev.map(v => v.id === record.id ? { ...v, ...record } : v) : [record, ...prev];
+        });
+      } else if (table === 'staffAttendance' || table === 'staff_attendance') {
+        setStaffAttendance(prev => {
+          if (eventType === 'DELETE') return prev.filter(s => s.id !== record.id);
+          const exists = prev.some(s => s.id === record.id);
+          return exists ? prev.map(s => s.id === record.id ? { ...s, ...record } : s) : [record, ...prev];
+        });
+      } else if (table === 'staffSalaryPayments' || table === 'salary_payments') {
+        setStaffSalaryPayments(prev => {
+          if (eventType === 'DELETE') return prev.filter(s => s.id !== record.id);
+          const exists = prev.some(s => s.id === record.id);
+          return exists ? prev.map(s => s.id === record.id ? { ...s, ...record } : s) : [record, ...prev];
+        });
+      } else if (table === 'shifts') {
+        setShifts(prev => {
+          if (eventType === 'DELETE') return prev.filter(s => s.id !== record.id);
+          const exists = prev.some(s => s.id === record.id);
+          return exists ? prev.map(s => s.id === record.id ? { ...s, ...record } : s) : [record, ...prev];
+        });
+      } else if (table === 'leaveRequests' || table === 'leave_requests') {
+        setLeaveRequests(prev => {
+          if (eventType === 'DELETE') return prev.filter(l => l.id !== record.id);
+          const exists = prev.some(l => l.id === record.id);
+          return exists ? prev.map(l => l.id === record.id ? { ...l, ...record } : l) : [record, ...prev];
+        });
+      } else if (table === 'foodStreetPurchases' || table === 'food_purchases') {
+        setFoodStreetPurchases(prev => {
+          if (eventType === 'DELETE') return prev.filter(f => f.id !== record.id);
+          const exists = prev.some(f => f.id === record.id);
+          return exists ? prev.map(f => f.id === record.id ? { ...f, ...record } : f) : [record, ...prev];
+        });
+      } else if (table === 'stockMovements' || table === 'stock_movements') {
+        setStockMovements(prev => {
+          if (eventType === 'DELETE') return prev.filter(sm => sm.id !== record.id);
+          const exists = prev.some(sm => sm.id === record.id);
+          return exists ? prev.map(sm => sm.id === record.id ? { ...sm, ...record } : sm) : [record, ...prev];
+        });
+      } else if (table === 'menuItemRecipes' || table === 'menu_recipes') {
+        setMenuItemRecipes(prev => {
+          if (eventType === 'DELETE') return prev.filter(r => r.menuItemId !== record.menuItemId);
+          const exists = prev.some(r => r.menuItemId === record.menuItemId);
+          return exists ? prev.map(r => r.menuItemId === record.menuItemId ? { ...r, ...record } : r) : [record, ...prev];
+        });
+      } else if (table === 'suppliers') {
+        setSuppliers(prev => {
+          if (eventType === 'DELETE') return prev.filter(s => s.id !== record.id);
+          const exists = prev.some(s => s.id === record.id);
+          return exists ? prev.map(s => s.id === record.id ? { ...s, ...record } : s) : [record, ...prev];
+        });
+      } else if (table === 'purchaseItems' || table === 'purchase_items') {
+        setPurchaseItems(prev => {
+          if (eventType === 'DELETE') return prev.filter(p => p.id !== record.id);
+          const exists = prev.some(p => p.id === record.id);
+          return exists ? prev.map(p => p.id === record.id ? { ...p, ...record } : p) : [record, ...prev];
+        });
+      } else if (table === 'dayExpenses' || table === 'day_expenses') {
+        setDayExpenses(prev => {
+          if (eventType === 'DELETE') return prev.filter(d => d.id !== record.id);
+          const exists = prev.some(d => d.id === record.id);
+          return exists ? prev.map(d => d.id === record.id ? { ...d, ...record } : d) : [record, ...prev];
+        });
+      } else if (table === 'financeAuditLogs' || table === 'finance_audit') {
+        setFinanceAuditLogs(prev => {
+          if (eventType === 'DELETE') return prev.filter(f => f.id !== record.id);
+          const exists = prev.some(f => f.id === record.id);
+          return exists ? prev.map(f => f.id === record.id ? { ...f, ...record } : f) : [record, ...prev];
         });
       }
     });
@@ -1168,6 +1234,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const pullUnifiedSync = async () => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
+    // Track which tables were populated from Supabase (authoritative source).
+    // Express backend data will NOT overwrite these tables to prevent stale data wins.
+    const sbPopulated = new Set<string>();
+
     // 1. If Supabase is configured, pull latest authoritative records from Supabase
     if (isSupabaseConfigured && supabase) {
       try {
@@ -1194,6 +1264,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ]);
 
         if (Array.isArray(sbBookings) && sbBookings.length > 0) {
+          sbPopulated.add('bookings');
           setBookings(prev => {
             const merged = mergeEntitiesWithProtection(prev, sbBookings);
             try { localStorage.setItem('ap_bookings', JSON.stringify(merged)); } catch {}
@@ -1202,6 +1273,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
         if (Array.isArray(sbTickets) && sbTickets.length > 0) {
+          sbPopulated.add('tickets');
           setTickets(prev => {
             const merged = mergeEntitiesWithProtection(prev, sbTickets);
             try { localStorage.setItem('ap_tickets', JSON.stringify(merged)); } catch {}
@@ -1210,6 +1282,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
         if (Array.isArray(sbPayments) && sbPayments.length > 0) {
+          sbPopulated.add('payments');
           setPayments(prev => {
             const merged = mergeEntitiesWithProtection(prev, sbPayments);
             try { localStorage.setItem('ap_payments', JSON.stringify(merged)); } catch {}
@@ -1218,6 +1291,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
         if (Array.isArray(sbOrders) && sbOrders.length > 0) {
+          sbPopulated.add('orders');
           setOrders(prev => {
             const merged = mergeEntitiesWithProtection(prev, sbOrders);
             try { localStorage.setItem('ap_orders', JSON.stringify(merged)); } catch {}
@@ -1226,6 +1300,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
         if (Array.isArray(sbUsers) && sbUsers.length > 0) {
+          sbPopulated.add('users');
           const cleanUsers = sbUsers.filter((u: any) => u.id !== 'usr-gam' && u.role !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
           setUsers(prev => {
             const merged = mergeEntitiesWithProtection(prev, cleanUsers);
@@ -1235,6 +1310,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
         if (Array.isArray(sbActivities) && sbActivities.length > 0) {
+          sbPopulated.add('activities');
           const cleanActs = sbActivities.filter((a: any) => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
           setActivities(prev => {
             const merged = mergeEntitiesWithProtection(prev, cleanActs);
@@ -1244,6 +1320,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
         if (Array.isArray(sbMenuItems) && sbMenuItems.length > 0) {
+          sbPopulated.add('menuItems');
           setMenuItems(prev => {
             const merged = mergeEntitiesWithProtection(prev, sbMenuItems);
             try { localStorage.setItem('ap_menu_items', JSON.stringify(merged)); } catch {}
@@ -1252,6 +1329,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
         if (Array.isArray(sbVendors) && sbVendors.length > 0) {
+          sbPopulated.add('vendors');
           setVendors(prev => {
             const merged = mergeEntitiesWithProtection(prev, sbVendors);
             try { localStorage.setItem('ap_vendors', JSON.stringify(merged)); } catch {}
@@ -1260,6 +1338,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
         if (Array.isArray(sbInventory) && sbInventory.length > 0) {
+          sbPopulated.add('inventory');
           setInventory(prev => {
             const merged = mergeEntitiesWithProtection(prev, sbInventory);
             try { localStorage.setItem('ap_inventory', JSON.stringify(merged)); } catch {}
@@ -1278,7 +1357,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!res.ok) return;
       const data = await res.json();
       if (data) {
-        if (Array.isArray(data.bookings) && data.bookings.length > 0) {
+        if (!sbPopulated.has('bookings') && Array.isArray(data.bookings) && data.bookings.length > 0) {
           setBookings(prev => {
             const merged = mergeEntitiesWithProtection<Booking>(prev, data.bookings as Booking[]);
             try { localStorage.setItem('ap_bookings', JSON.stringify(merged)); } catch {}
@@ -1286,7 +1365,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return merged;
           });
         }
-        if (Array.isArray(data.tickets) && data.tickets.length > 0) {
+        if (!sbPopulated.has('tickets') && Array.isArray(data.tickets) && data.tickets.length > 0) {
           setTickets(prev => {
             const merged = mergeEntitiesWithProtection<Ticket>(prev, data.tickets as Ticket[]);
             try { localStorage.setItem('ap_tickets', JSON.stringify(merged)); } catch {}
@@ -1294,7 +1373,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return merged;
           });
         }
-        if (Array.isArray(data.payments) && data.payments.length > 0) {
+        if (!sbPopulated.has('payments') && Array.isArray(data.payments) && data.payments.length > 0) {
           setPayments(prev => {
             const merged = mergeEntitiesWithProtection<Payment>(prev, data.payments as Payment[]);
             try { localStorage.setItem('ap_payments', JSON.stringify(merged)); } catch {}
@@ -1302,7 +1381,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return merged;
           });
         }
-        if (Array.isArray(data.orders) && data.orders.length > 0) {
+        if (!sbPopulated.has('orders') && Array.isArray(data.orders) && data.orders.length > 0) {
           setOrders(prev => {
             const merged = mergeEntitiesWithProtection<FoodOrder>(prev, data.orders as FoodOrder[]);
             try { localStorage.setItem('ap_orders', JSON.stringify(merged)); } catch {}
@@ -1310,7 +1389,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return merged;
           });
         }
-        if (Array.isArray(data.users) && data.users.length > 0) {
+        if (!sbPopulated.has('users') && Array.isArray(data.users) && data.users.length > 0) {
           const cleanUsers = data.users.filter((u: any) => u.id !== 'usr-gam' && u.role !== 'gaming_staff' && !u.email?.toLowerCase().includes('gaming'));
           setUsers(prev => {
             const merged = mergeEntitiesWithProtection<User>(prev, cleanUsers as User[]);
@@ -1319,7 +1398,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return merged;
           });
         }
-        if (Array.isArray(data.activities) && data.activities.length > 0) {
+        if (!sbPopulated.has('activities') && Array.isArray(data.activities) && data.activities.length > 0) {
           const cleanActs = data.activities.filter((a: any) => a.id !== 'act-gaming-pc' && !a.id?.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming'));
           setActivities(prev => {
             const merged = mergeEntitiesWithProtection<Activity>(prev, cleanActs as Activity[]);
@@ -1328,7 +1407,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return merged;
           });
         }
-        if (Array.isArray(data.menuItems) && data.menuItems.length > 0) {
+        if (!sbPopulated.has('menuItems') && Array.isArray(data.menuItems) && data.menuItems.length > 0) {
           setMenuItems(prev => {
             const merged = mergeEntitiesWithProtection<MenuItem>(prev, data.menuItems as MenuItem[]);
             try { localStorage.setItem('ap_menu_items', JSON.stringify(merged)); } catch {}
@@ -1336,7 +1415,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return merged;
           });
         }
-        if (Array.isArray(data.vendors) && data.vendors.length > 0) {
+        if (!sbPopulated.has('vendors') && Array.isArray(data.vendors) && data.vendors.length > 0) {
           setVendors(prev => {
             const merged = mergeEntitiesWithProtection<FoodVendor>(prev, data.vendors as FoodVendor[]);
             try { localStorage.setItem('ap_vendors', JSON.stringify(merged)); } catch {}
@@ -1344,7 +1423,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return merged;
           });
         }
-        if (Array.isArray(data.inventory) && data.inventory.length > 0) {
+        if (!sbPopulated.has('inventory') && Array.isArray(data.inventory) && data.inventory.length > 0) {
           setInventory(prev => {
             const merged = mergeEntitiesWithProtection<InventoryItem>(prev, data.inventory as InventoryItem[]);
             try { localStorage.setItem('ap_inventory', JSON.stringify(merged)); } catch {}
@@ -1381,6 +1460,94 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const merged = mergeEntitiesWithProtection<LapRecord>(prev, data.lapRecords as LapRecord[]);
             try { localStorage.setItem('ap_lapRecords', JSON.stringify(merged)); } catch {}
             db.lapRecords.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.staffAttendance) && data.staffAttendance.length > 0) {
+          setStaffAttendance(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.staffAttendance);
+            try { localStorage.setItem('ap_staff_attendance', JSON.stringify(merged)); } catch {}
+            db.staffAttendance.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.staffSalaryPayments) && data.staffSalaryPayments.length > 0) {
+          setStaffSalaryPayments(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.staffSalaryPayments);
+            try { localStorage.setItem('ap_salary_payments', JSON.stringify(merged)); } catch {}
+            db.staffSalaryPayments.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.shifts) && data.shifts.length > 0) {
+          setShifts(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.shifts);
+            try { localStorage.setItem('ap_shifts', JSON.stringify(merged)); } catch {}
+            db.shifts.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.leaveRequests) && data.leaveRequests.length > 0) {
+          setLeaveRequests(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.leaveRequests);
+            try { localStorage.setItem('ap_leave_requests', JSON.stringify(merged)); } catch {}
+            db.leaveRequests.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.foodStreetPurchases) && data.foodStreetPurchases.length > 0) {
+          setFoodStreetPurchases(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.foodStreetPurchases);
+            try { localStorage.setItem('ap_food_purchases', JSON.stringify(merged)); } catch {}
+            db.foodStreetPurchases.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.stockMovements) && data.stockMovements.length > 0) {
+          setStockMovements(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.stockMovements);
+            try { localStorage.setItem('ap_stock_movements', JSON.stringify(merged)); } catch {}
+            db.stockMovements.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.menuItemRecipes) && data.menuItemRecipes.length > 0) {
+          setMenuItemRecipes(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.menuItemRecipes);
+            try { localStorage.setItem('ap_menu_recipes', JSON.stringify(merged)); } catch {}
+            db.menuItemRecipes.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.suppliers) && data.suppliers.length > 0) {
+          setSuppliers(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.suppliers);
+            try { localStorage.setItem('ap_finance_suppliers', JSON.stringify(merged)); } catch {}
+            db.suppliers.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.purchaseItems) && data.purchaseItems.length > 0) {
+          setPurchaseItems(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.purchaseItems);
+            try { localStorage.setItem('ap_purchase_items', JSON.stringify(merged)); } catch {}
+            db.purchaseItems.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.dayExpenses) && data.dayExpenses.length > 0) {
+          setDayExpenses(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.dayExpenses);
+            try { localStorage.setItem('ap_day_expenses', JSON.stringify(merged)); } catch {}
+            db.dayExpenses.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.financeAuditLogs) && data.financeAuditLogs.length > 0) {
+          setFinanceAuditLogs(prev => {
+            const merged = mergeEntitiesWithProtection(prev, data.financeAuditLogs);
+            try { localStorage.setItem('ap_finance_audit_logs', JSON.stringify(merged)); } catch {}
+            db.financeAuditLogs.bulkPut(merged);
             return merged;
           });
         }
