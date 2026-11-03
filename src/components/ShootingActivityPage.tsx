@@ -198,7 +198,7 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
         body: JSON.stringify({ amount: bookingTotal, currency: 'INR' })
       }).then(res => res.json()).then(order => {
         const options = {
-          key: razorpayKeyId || 'rzp_live_TYnsYBkCUZzRR3',
+          key: razorpayKeyId || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || '',
           amount: order.amount,
           currency: order.currency,
           name: 'Deuce Adventure Park',

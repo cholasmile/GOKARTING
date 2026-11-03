@@ -332,7 +332,7 @@ export const CustomerDashboard: React.FC = () => {
 
       // 2. Open Razorpay Modal
       const options = {
-        key: razorpayKeyId || 'rzp_live_TYnsYBkCUZzRR3',
+        key: razorpayKeyId || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || '',
         amount: order.amount,
         currency: order.currency,
         name: 'Deuce Adventure Park',

@@ -12,6 +12,7 @@ import { UnifiedTicketingFlow } from './UnifiedTicketingFlow';
 import { printTicket } from '../lib/printTicket';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
 import { FoodStreetInventoryPanel } from './admin/FoodStreetInventoryPanel';
+import { OnlineBookingsManager } from './OnlineBookingsManager';
 import { compressImageFile } from '../lib/imageUtils';
 
 export const TicketingDashboard: React.FC = () => {
@@ -23,7 +24,7 @@ export const TicketingDashboard: React.FC = () => {
   } = useAppContext();
 
   // Active top-level subtab
-  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'cafe_pos' | 'cafe_menu' | 'history'>('new_booking');
+  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'online_bookings' | 'cafe_pos' | 'cafe_menu' | 'history'>('new_booking');
   
   // ── 1. Activity Booking State ───────────────────────────────────────────
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);

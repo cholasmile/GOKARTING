@@ -957,7 +957,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const [razorpayKeyId, setRazorpayKeyId] = useState<string>(() => {
-    return (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_live_TYnsYBkCUZzRR3';
+    return (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || '';
   });
   const [posProvider, setPosProviderState] = useState<string>('mock_pos');
   const [posTerminalName, setPosTerminalNameState] = useState<string>('Deuce POS Terminal 1');

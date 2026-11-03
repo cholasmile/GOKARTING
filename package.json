@@ -1,7 +1,9 @@
 {
-  "name": "react-example",
+  "name": "deuce-adventure-park-os",
+  "productName": "Deuce Adventure Park OS",
+  "description": "Deuce Adventure Park Hybrid Management & Counter Ticketing OS",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
@@ -10,8 +12,40 @@
     "preview": "vite preview --port=3000 --host=0.0.0.0",
     "app:start": "concurrently \"tsx api/index.js\" \"vite preview --port=3000 --host=0.0.0.0\"",
     "desktop": "electron .",
+    "desktop:build": "npm run build && electron-builder --win",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
+  },
+  "build": {
+    "appId": "com.deucepark.os",
+    "productName": "Deuce Adventure Park OS",
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "api/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/favicon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Deuce Adventure Park OS"
+    }
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

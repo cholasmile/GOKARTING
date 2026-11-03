@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, Menu } from 'electron';
+import { app, BrowserWindow, shell, Menu, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
@@ -131,6 +131,16 @@ async function createWindow() {
     }
   });
 }
+
+// IPC Handlers for Local Database & Station Utilities
+ipcMain.handle('get-db-stats', async () => {
+  try {
+    const { sqliteGetStats } = await import('../api/sqliteDb.js');
+    return sqliteGetStats();
+  } catch (err) {
+    return { error: err.message };
+  }
+});
 
 app.whenReady().then(createWindow);
 

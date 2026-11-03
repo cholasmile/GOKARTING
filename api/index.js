@@ -1,4 +1,10 @@
 import express from 'express';
+import { checkSlotAvailability, createSlotHold, confirmBookingWithPayment, validateAndCheckIn, getOnlineBookingsList } from './bookingService.js';
+import {
+  sqliteSaveTicket, sqliteGetTickets, sqliteUpsertDailySummary, sqliteGetDailySummaries,
+  sqliteCacheOnlineBookings, sqliteCheckInOnlineBookingOffline, sqliteGetPendingSyncItems,
+  sqliteMarkQueueItemDone, sqliteGetStats
+} from './sqliteDb.js';
 import cors from 'cors';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
@@ -22,8 +28,8 @@ try {
   console.error('[backend] Failed to read config.json:', e);
 }
 
-const getSecret = (key, placeholder) => {
-  return config[key] || process.env[key] || placeholder;
+const getSecret = (key, placeholder = '') => {
+  return process.env[key] || config[key] || placeholder;
 };
 
 const app = express();
@@ -39,13 +45,10 @@ if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
 }
 
-const LIVE_KEY_ID = 'rzp_live_TYnsYBkCUZzRR3';
-const LIVE_KEY_SECRET = 'o6uE9Rd6ucqEetOhsurGYWmF';
-
-// Initialize razorpay instance dynamically
+// Initialize razorpay instance dynamically from server environment variables
 let razorpay = new Razorpay({
-  key_id: getSecret('RAZORPAY_KEY_ID', LIVE_KEY_ID),
-  key_secret: getSecret('RAZORPAY_KEY_SECRET', LIVE_KEY_SECRET),
+  key_id: getSecret('RAZORPAY_KEY_ID', ''),
+  key_secret: getSecret('RAZORPAY_KEY_SECRET', ''),
 });
 
 // Idempotency store — prevents duplicate ticket generation for same Razorpay order
@@ -65,8 +68,8 @@ app.post('/api/razorpay/create-order', async (req, res) => {
     const finalAmount = Math.round((baseAmount + serviceFee) * 100) / 100;
     const amountInPaise = Math.round(finalAmount * 100);
 
-    const key_secret = getSecret('RAZORPAY_KEY_SECRET', LIVE_KEY_SECRET);
-    const key_id = getSecret('RAZORPAY_KEY_ID', LIVE_KEY_ID);
+    const key_secret = getSecret('RAZORPAY_KEY_SECRET', '');
+    const key_id = getSecret('RAZORPAY_KEY_ID', '');
 
     if (!key_secret || !key_id) {
       const mockOrder = {
@@ -733,6 +736,42 @@ app.post('/api/users', (req, res) => {
 app.delete('/api/users/:id', (req, res) => {
   usersStore.delete(req.params.id, 'users');
   res.json({ success: true });
+});
+
+
+// ─── CENTRAL BOOKING & ATOMIC AVAILABILITY API ─────────────────────────────────
+app.get('/api/bookings/availability', (req, res) => {
+  const { activityId, date, timeSlot } = req.query;
+  if (!activityId || !date || !timeSlot) {
+    return res.status(400).json({ error: 'activityId, date, and timeSlot are required.' });
+  }
+  const availability = checkSlotAvailability(activityId, date, timeSlot);
+  res.json(availability);
+});
+
+app.post('/api/bookings/hold', (req, res) => {
+  const result = createSlotHold(req.body);
+  if (!result.success) {
+    return res.status(409).json(result);
+  }
+  res.json(result);
+});
+
+app.post('/api/bookings/confirm', (req, res) => {
+  const result = confirmBookingWithPayment(req.body);
+  res.json(result);
+});
+
+app.post('/api/bookings/check-in', (req, res) => {
+  const { qrOrRef, terminalId, staffName } = req.body;
+  const result = validateAndCheckIn(qrOrRef, terminalId, staffName);
+  res.json(result);
+});
+
+app.get('/api/bookings/online', (req, res) => {
+  const { date, status } = req.query;
+  const list = getOnlineBookingsList(date, status);
+  res.json(list);
 });
 
 app.get('/api/bookings', (req, res) => res.json(bookingsStore.get()));

@@ -1,6 +1,4 @@
 {
-  "RAZORPAY_KEY_ID": "rzp_live_TYnsYBkCUZzRR3",
-  "RAZORPAY_KEY_SECRET": "o6uE9Rd6ucqEetOhsurGYWmF",
   "COUNTER_UPI_ID": "deuce@upi",
   "BUSINESS_NAME": "Deuce Adventure Park",
   "POS_PROVIDER": "razorpay_pos",
