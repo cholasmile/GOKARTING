@@ -16,7 +16,8 @@ import {
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { db } from '../db/db';
 import { syncEngine, SyncStatus } from '../lib/syncEngine';
-import { generateOfflineId } from '../lib/deviceSetup';
+import { generateOfflineId, requestPersistentStorage } from '../lib/deviceSetup';
+import { salesSummaryEngine } from '../lib/salesSummaryEngine';
 import { INITIAL_USERS, INITIAL_ACTIVITIES } from '../data/initialData';
 
 interface AppContextProps {
@@ -1184,6 +1185,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (e) {}
 
     loadDataFromSupabase();
+    requestPersistentStorage();
+    salesSummaryEngine.calculateDailySummary().then(() => salesSummaryEngine.syncDailySummaryToSupabase());
   }, []);
 
   // Fetch backend persisted domain stores on startup (only if Supabase is NOT configured)

@@ -2,7 +2,7 @@ import Dexie, { Table } from 'dexie';
 import { 
   User, Activity, FoodVendor, MenuItem, InventoryItem, 
   Booking, Ticket, FoodOrder, Payment, NotificationLog,
-  Kart, GoKartingSession, LapRecord, GoKartingWaiver
+  Kart, GoKartingSession, LapRecord, GoKartingWaiver, DailySalesSummary
 } from '../types';
 
 export interface SyncQueueItem {
@@ -46,6 +46,7 @@ export class AppDB extends Dexie {
   purchaseItems!: Table<any, string>;
   dayExpenses!: Table<any, string>;
   financeAuditLogs!: Table<any, string>;
+  dailySalesSummaries!: Table<DailySalesSummary, string>;
 
   syncQueue!: Table<SyncQueueItem, number>;
 
@@ -188,8 +189,39 @@ export class AppDB extends Dexie {
       financeAuditLogs: 'id, entityType, entityId, performedBy, timestamp',
       syncQueue: '++id, table, action, status, createdAt'
     });
+
+    // Version 8: add dailySalesSummaries table for local & aggregated sales summaries
+    this.version(8).stores({
+      users: 'id, role, email, employeeId, department',
+      activities: 'id, type',
+      vendors: 'id, type',
+      menuItems: 'id, vendorId, category',
+      inventory: 'id, vendorId, name',
+      bookings: 'id, activityId, customerEmail, date',
+      tickets: 'id, bookingId, qrCodeValue, status, date',
+      orders: 'id, customerEmail, status',
+      notifications: 'id, recipient, channel',
+      payments: 'id, bookingId, orderId, status, timestamp',
+      karts: 'id, status',
+      sessions: 'id, status',
+      lapRecords: 'id, sessionId, driverId',
+      waivers: 'id, ticketId',
+      purchases: 'id, department, category, supplier, date, paymentStatus, workflowStatus',
+      staffAttendance: 'id, staffId, date, status',
+      staffSalaryPayments: 'id, staffId, month, paymentStatus, workflowStatus',
+      foodStreetPurchases: 'id, vendorId, purchaseDate, status, supplierName',
+      stockMovements: 'id, itemId, vendorId, type, timestamp',
+      menuItemRecipes: 'menuItemId',
+      shifts: 'id, name, isActive',
+      leaveRequests: 'id, staffId, startDate, status',
+      suppliers: 'id, supplierName, supplierType, isActive',
+      purchaseItems: 'id, itemCode, category, isActive',
+      dayExpenses: 'id, expenseRef, department, expenseCategory, workflowStatus, expenseDate',
+      financeAuditLogs: 'id, entityType, entityId, performedBy, timestamp',
+      dailySalesSummaries: 'id, business_date, computer_id, last_synced_at',
+      syncQueue: '++id, table, action, status, createdAt'
+    });
   }
 }
 
 export const db = new AppDB();
-

@@ -1,5 +1,6 @@
 import { db, SyncQueueItem } from '../db/db';
 import { supabase, isSupabaseConfigured } from './supabase';
+import { salesSummaryEngine } from './salesSummaryEngine';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 
@@ -557,6 +558,15 @@ class SyncEngine {
       }
     } catch (queueErr) {
       console.error('[SyncEngine] Error enqueueing operation:', queueErr);
+    }
+
+    // Trigger atomic daily sales summary calculation when operational sales records are written locally
+    if (['tickets', 'bookings', 'payments', 'orders', 'food_orders'].includes(table)) {
+      try {
+        salesSummaryEngine.triggerSummaryUpdate(payload.date || payload.timestamp || payload.bookingDate);
+      } catch (sumErr) {
+        console.warn('[SyncEngine] Error triggering summary calculation:', sumErr);
+      }
     }
 
     // 3. Broadcast to other tabs on same machine

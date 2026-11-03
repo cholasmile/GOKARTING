@@ -11,7 +11,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
 import {
-  TrendingUp, Users, Ticket, Utensils, Award, ShieldAlert, ShieldCheck,
+  TrendingUp, Users, Ticket, BarChart3, HardDrive, Utensils, Award, ShieldAlert, ShieldCheck,
   Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle,
   MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check,
   Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag, RotateCcw, Monitor, Gamepad2,
@@ -21,6 +21,8 @@ import ActivityManagementPanel from './admin/ActivityManagementPanel';
 import AccountsFinancePanel from './admin/AccountsFinancePanel';
 import { FoodStreetInventoryPanel } from './admin/FoodStreetInventoryPanel';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
+import { SalesAnalyticsDashboard } from './admin/SalesAnalyticsDashboard';
+import { DataSafetyBackupModal } from './admin/DataSafetyBackupModal';
 import { compressImageFile } from '../lib/imageUtils';
 
 export const AdminDashboard: React.FC = () => {
@@ -143,7 +145,8 @@ export const AdminDashboard: React.FC = () => {
   const [reconciliationTab, setReconciliationTab] = useState<'reports' | 'reconciliation'>('reports');
 
   // Active Admin Tabs
-  const [activeTab, setActiveTab] = useState<'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'payments' | 'pay_settings' | 'database' | 'accounts_finance'>('analytics');
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'sales_analytics' | 'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'payments' | 'pay_settings' | 'database' | 'accounts_finance'>('analytics');
   const [analyticsViewMode, setAnalyticsViewMode] = useState<
     'abstract' | 'breakdown_activities' | 'breakdown_cafe' | 'breakdown_expenses' | 'breakdown_payroll' | 'breakdown_payments' | 'profit_loss'
   >('abstract');
@@ -946,7 +949,7 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       <div className="flex border-b border-[#14F1D9]/20 gap-1.5 overflow-x-auto text-[#FFFFFF] pb-2">
-        {(['analytics', 'activities', 'activity_mgmt', 'vendors', 'retail_menu', 'users', 'reports', 'payments', 'accounts_finance', 'pay_settings', 'database'] as const).map(tab => (
+        {(['sales_analytics', 'analytics', 'activities', 'activity_mgmt', 'vendors', 'retail_menu', 'users', 'reports', 'payments', 'accounts_finance', 'pay_settings', 'database'] as const).map(tab => (
           <button
             key={tab}
             id={`btn-admin-tab-${tab}`}
@@ -957,6 +960,7 @@ export const AdminDashboard: React.FC = () => {
                 : 'border border-transparent text-[#94A3B8] hover:text-[#14F1D9] hover:bg-white/5'
             }`}
           >
+            {tab === 'sales_analytics' && <BarChart3 className="h-4 w-4 text-[#14F1D9]" />}
             {tab === 'analytics' && <TrendingUp className="h-4 w-4" />}
             {tab === 'activities' && <Award className="h-4 w-4" />}
             {tab === 'activity_mgmt' && <ImageIcon className="h-4 w-4" />}
@@ -968,7 +972,8 @@ export const AdminDashboard: React.FC = () => {
             {tab === 'accounts_finance' && <Banknote className="h-4 w-4" />}
             {tab === 'pay_settings' && <Settings className="h-4 w-4" />}
             {tab === 'database' && <Database className="h-4 w-4" />}
-            {tab === 'database' ? 'Supabase & RLS'
+            {tab === 'sales_analytics' ? 'Sales Analytics (Consolidated)'
+              : tab === 'database' ? 'Supabase & RLS'
               : tab === 'pay_settings' ? 'Pay Settings'
               : tab === 'payments' ? 'Pay Reports'
               : tab === 'activity_mgmt' ? 'Activity Mgmt'
@@ -978,6 +983,13 @@ export const AdminDashboard: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* 0. CONSOLIDATED SALES ANALYTICS (MINIMAL SUPABASE EGRESS) */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === 'sales_analytics' && (
+        <SalesAnalyticsDashboard onOpenBackupModal={() => setIsBackupModalOpen(true)} />
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* 1. ANALYTICS VIEW */}
@@ -4121,6 +4133,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
       {/* END MODALS */}
+      <DataSafetyBackupModal isOpen={isBackupModalOpen} onClose={() => setIsBackupModalOpen(false)} />
     </div>
   );
 };

@@ -705,3 +705,27 @@ export interface AuditLogEntry {
   details?: string;
 }
 
+
+
+export interface DailySalesSummary {
+  id: string;
+  business_date: string;
+  computer_id: string;
+  total_tickets: number;
+  single_kart_tickets: number;
+  double_kart_tickets: number;
+  silver_package_tickets: number;
+  golden_package_tickets: number;
+  total_gokart_sales: number;
+  air_rifle_sales: number;
+  horse_riding_sales: number;
+  car_simulator_sales: number;
+  moto_simulation_sales: number;
+  cash_total: number;
+  upi_total: number;
+  card_total: number;
+  total_sales: number;
+  last_synced_at: string;
+  sync_status?: 'synced' | 'pending' | 'failed';
+  error_message?: string;
+}
