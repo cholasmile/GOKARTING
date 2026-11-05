@@ -15,14 +15,16 @@ import {
   Plus, Edit, Trash2, Calendar, FileText, Download, CheckCircle,
   MapPin, Coffee, Clipboard, CreditCard, Database, Lock, Terminal, Settings, Key, Layers, Globe, Copy, Check,
   Banknote, Smartphone, Filter, Search, IndianRupee, Loader2, Image as ImageIcon, Tag, RotateCcw, Monitor, Gamepad2,
-  CalendarRange, Clock, ArrowUpRight, ChevronDown, CalendarDays, ShoppingBag, Sparkles, Package
+  CalendarRange, Clock, ArrowUpRight, ChevronDown, CalendarDays, ShoppingBag, Sparkles, Package, Boxes
 } from 'lucide-react';
+import { ComboPackManagementPanel } from './admin/ComboPackManagementPanel';
 import ActivityManagementPanel from './admin/ActivityManagementPanel';
 import AccountsFinancePanel from './admin/AccountsFinancePanel';
 import { FoodStreetInventoryPanel } from './admin/FoodStreetInventoryPanel';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
 import { SalesAnalyticsDashboard } from './admin/SalesAnalyticsDashboard';
 import { DataSafetyBackupModal } from './admin/DataSafetyBackupModal';
+import { OnlineBookingsManager } from './OnlineBookingsManager';
 import { compressImageFile } from '../lib/imageUtils';
 
 export const AdminDashboard: React.FC = () => {
@@ -146,7 +148,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Active Admin Tabs
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'sales_analytics' | 'analytics' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'payments' | 'pay_settings' | 'database' | 'accounts_finance'>('analytics');
+  const [activeTab, setActiveTab] = useState<'sales_analytics' | 'analytics' | 'combo_packs' | 'online_bookings' | 'activities' | 'activity_mgmt' | 'vendors' | 'retail_menu' | 'users' | 'reports' | 'payments' | 'pay_settings' | 'database' | 'accounts_finance'>('analytics');
   const [analyticsViewMode, setAnalyticsViewMode] = useState<
     'abstract' | 'breakdown_activities' | 'breakdown_cafe' | 'breakdown_expenses' | 'breakdown_payroll' | 'breakdown_payments' | 'profit_loss'
   >('abstract');
@@ -949,7 +951,7 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       <div className="flex border-b border-[#14F1D9]/20 gap-1.5 overflow-x-auto text-[#FFFFFF] pb-2">
-        {(['sales_analytics', 'analytics', 'activities', 'activity_mgmt', 'vendors', 'retail_menu', 'users', 'reports', 'payments', 'accounts_finance', 'pay_settings', 'database'] as const).map(tab => (
+        {(['sales_analytics', 'analytics', 'combo_packs', 'online_bookings', 'activities', 'activity_mgmt', 'vendors', 'retail_menu', 'users', 'reports', 'payments', 'accounts_finance', 'pay_settings', 'database'] as const).map(tab => (
           <button
             key={tab}
             id={`btn-admin-tab-${tab}`}
@@ -962,6 +964,8 @@ export const AdminDashboard: React.FC = () => {
           >
             {tab === 'sales_analytics' && <BarChart3 className="h-4 w-4 text-[#14F1D9]" />}
             {tab === 'analytics' && <TrendingUp className="h-4 w-4" />}
+            {tab === 'combo_packs' && <Boxes className="h-4 w-4 text-[#FFD700]" />}
+            {tab === 'online_bookings' && <Globe className="h-4 w-4 text-sky-400" />}
             {tab === 'activities' && <Award className="h-4 w-4" />}
             {tab === 'activity_mgmt' && <ImageIcon className="h-4 w-4" />}
             {tab === 'vendors' && <Coffee className="h-4 w-4" />}
@@ -973,6 +977,8 @@ export const AdminDashboard: React.FC = () => {
             {tab === 'pay_settings' && <Settings className="h-4 w-4" />}
             {tab === 'database' && <Database className="h-4 w-4" />}
             {tab === 'sales_analytics' ? 'Sales Analytics (Consolidated)'
+              : tab === 'combo_packs' ? 'Multi-Activity Combo Packs'
+              : tab === 'online_bookings' ? 'Online Bookings & Slots'
               : tab === 'database' ? 'Supabase & RLS'
               : tab === 'pay_settings' ? 'Pay Settings'
               : tab === 'payments' ? 'Pay Reports'
@@ -1908,6 +1914,20 @@ export const AdminDashboard: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* 1.5. MULTI-ACTIVITY COMBO PACKS */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === 'combo_packs' && (
+        <ComboPackManagementPanel />
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* 1.8. ONLINE BOOKINGS & CENTRAL CAPACITY */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === 'online_bookings' && (
+        <OnlineBookingsManager staffName="Super Admin" />
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* 2. ACTIVITIES VIEW */}
@@ -3860,6 +3880,7 @@ export const AdminDashboard: React.FC = () => {
                       <thead>
                         <tr className="bg-[#0A0A0A]/50 border-b border-[#00ABAB]/30">
                           <th className="text-left px-2 py-1.5 text-[#9CA3AF] font-bold">Package Name</th>
+                          <th className="text-left px-2 py-1.5 text-[#9CA3AF] font-bold">Duration / Laps / Units</th>
                           <th className="text-left px-2 py-1.5 text-[#9CA3AF] font-bold">Price (₹)</th>
                           <th className="text-left px-2 py-1.5 text-[#9CA3AF] font-bold">Description</th>
                           <th className="text-center px-2 py-1.5 text-[#9CA3AF] font-bold">Action</th>
@@ -3877,9 +3898,22 @@ export const AdminDashboard: React.FC = () => {
                                   newPkgs[idx].name = e.target.value;
                                   setActivityForm({ ...activityForm, packages: newPkgs });
                                 }}
-                                placeholder="Package Name"
-                                className="w-full px-2 py-1 bg-transparent border border-[#00ABAB]/30 rounded text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs"
+                                placeholder="e.g. Single Kart"
+                                className="w-full px-2 py-1 bg-transparent border border-[#00ABAB]/30 rounded text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs font-medium"
                                 required
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="text"
+                                value={pkg.unitOrDuration || ''}
+                                onChange={(e) => {
+                                  const newPkgs = [...activityForm.packages];
+                                  newPkgs[idx].unitOrDuration = e.target.value;
+                                  setActivityForm({ ...activityForm, packages: newPkgs });
+                                }}
+                                placeholder="e.g. 5 Laps, 10 Mins"
+                                className="w-32 px-2 py-1 bg-transparent border border-[#00ABAB]/30 rounded text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs font-mono"
                               />
                             </td>
                             <td className="px-2 py-1.5">
@@ -3892,7 +3926,7 @@ export const AdminDashboard: React.FC = () => {
                                   setActivityForm({ ...activityForm, packages: newPkgs });
                                 }}
                                 placeholder="Price"
-                                className="w-24 px-2 py-1 bg-transparent border border-[#00ABAB]/30 rounded text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs"
+                                className="w-24 px-2 py-1 bg-transparent border border-[#00ABAB]/30 rounded text-[#FFFFFF] focus:outline-none focus:border-[#40E0D0] text-xs font-mono font-bold"
                                 min={0}
                                 required
                               />

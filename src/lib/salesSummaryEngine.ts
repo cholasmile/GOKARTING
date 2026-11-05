@@ -111,6 +111,41 @@ class SalesSummaryEngine {
       const pkgName = (t.packageName || t.ticketType || '').toLowerCase();
       const pkgId = (t.packageId || '').toLowerCase();
 
+      // If ticket contains multiple packages (e.g., Single Kart + Double Kart combo bundle)
+      if (t.packageBundleItems && t.packageBundleItems.length > 0) {
+        for (const item of t.packageBundleItems) {
+          const iName = (item.packageName || '').toLowerCase();
+          const iId = (item.packageId || '').toLowerCase();
+          const iQty = item.quantity || 1;
+
+          if (
+            iId.includes('single') ||
+            iName.includes('single') ||
+            (actName.includes('kart') && !iName.includes('double') && !iName.includes('twin') && !iName.includes('race'))
+          ) {
+            single_kart_tickets += iQty;
+          }
+
+          if (
+            iId.includes('double') ||
+            iName.includes('double') ||
+            iName.includes('twin') ||
+            iName.includes('co-pilot')
+          ) {
+            double_kart_tickets += iQty;
+          }
+
+          if (iName.includes('silver') || iId.includes('silver')) {
+            silver_package_tickets += iQty;
+          }
+
+          if (iName.includes('golden') || iName.includes('gold') || iId.includes('golden') || iId.includes('gold')) {
+            golden_package_tickets += iQty;
+          }
+        }
+        continue;
+      }
+
       // Single Kart check
       if (
         pkgId.includes('single') ||

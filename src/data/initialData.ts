@@ -17,7 +17,7 @@
  * ============================================================
  */
 
-import { User, Activity, FoodVendor, MenuItem, InventoryItem, Booking, FoodOrder, Ticket } from '../types';
+import { User, Activity, FoodVendor, MenuItem, InventoryItem, Booking, FoodOrder, Ticket, ComboPack } from '../types';
 
 // ── Staff Accounts (used only as login fallback when Supabase is unavailable) ──
 // These are default credential definitions, NOT data to be inserted into production.
@@ -154,3 +154,47 @@ export const INITIAL_INVENTORY: InventoryItem[] = [];
 export const INITIAL_BOOKINGS: Booking[] = [];
 export const INITIAL_TICKETS: Ticket[] = [];
 export const INITIAL_FOOD_ORDERS: FoodOrder[] = [];
+
+// ── Default Curated Combo Pack ──
+export const INITIAL_COMBO_PACKS: ComboPack[] = [
+  {
+    id: 'combo-adventure-pack-1',
+    name: 'DEUCE Ultimate Adventure Pack',
+    description: 'The ultimate thrill experience: Go-Karting (5 Laps), Precision Air Gun Shooting (10 Shots), and Royal Horse Riding (15 Mins) bundled into a single pass with maximum savings!',
+    badge: 'POPULAR COMBO',
+    items: [
+      {
+        activityId: 'act-go-karting',
+        activityName: 'High-Octane Go-Karting',
+        packageId: 'pkg-kart-single',
+        packageName: 'Single Rider Experience',
+        unitOrDuration: '5 laps',
+        quantity: 1,
+        originalPrice: 350
+      },
+      {
+        activityId: 'act-air-gun',
+        activityName: 'Precision Air Gun Shooting',
+        packageId: 'pkg-shoot-1',
+        packageName: 'Starter Aim',
+        unitOrDuration: '10 shots',
+        quantity: 1,
+        originalPrice: 250
+      },
+      {
+        activityId: 'act-horse-riding',
+        activityName: 'Royal Horse Riding',
+        packageId: 'pkg-horse-pony',
+        packageName: 'Pony Walk',
+        unitOrDuration: '1 ride (15 Mins)',
+        quantity: 1,
+        originalPrice: 300
+      }
+    ],
+    originalPrice: 900,
+    comboPrice: 699,
+    validityDays: 30,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  }
+];

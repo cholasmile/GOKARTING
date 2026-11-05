@@ -23,8 +23,14 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+REM Build production assets if missing
+if not exist "dist\index.html" (
+    echo [*] Building production assets (first-time launch)...
+    call npm run build
+)
+
 echo [*] Starting Backend API Server (Port 5000)...
-start /b node api/index.js >nul 2>&1
+start /b node api/index.js
 
 echo [*] Starting Web Application (Port 3000)...
 echo [*] Opening Application in Browser...
@@ -35,6 +41,7 @@ start http://localhost:3000
 echo.
 echo =======================================================================
 echo  APPLICATION RUNNING AT: http://localhost:3000
+echo  BACKEND API RUNNING AT: http://localhost:5000
 echo  Press Ctrl+C or close this window to stop the application.
 echo =======================================================================
 echo.

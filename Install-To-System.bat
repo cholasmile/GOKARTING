@@ -14,14 +14,18 @@ set TARGET_DIR=%LOCALAPPDATA%\DeucePark
 if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
 
 echo [*] Copying application files...
-xcopy "%~dp0*" "%TARGET_DIR%\" /E /I /H /Y /Q >nul
+robocopy "%~dp0." "%TARGET_DIR%" /E /XD .git dist dist_electron /XF *.log /R:1 /W:1 >nul
+if %errorlevel% geq 8 (
+    xcopy "%~dp0*" "%TARGET_DIR%\" /E /I /H /Y /Q >nul
+)
 
 echo [*] Building production assets...
 cd /d "%TARGET_DIR%"
 
 where node >nul 2>nul
 if %errorlevel% equ 0 (
-    call npm run build >nul 2>&1
+    echo [*] Compiling production build with all features...
+    call npm run build
 )
 
 echo [*] Creating Desktop Shortcut...

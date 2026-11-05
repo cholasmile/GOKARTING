@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode';
 import { useAppContext } from '../context/AppContext';
-import { Ticket, Booking } from '../types';
-import { CheckCircle, XCircle, AlertTriangle, ScanLine, Camera, Loader2 } from 'lucide-react';
+import { Ticket, Booking, ComboRedemptionRecord } from '../types';
+import { CheckCircle, XCircle, AlertTriangle, ScanLine, Camera, Loader2, Boxes, Sparkles, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const StaffScanner: React.FC = () => {
-  const { scanTicket, currentUser, bookings } = useAppContext();
+  const { scanTicket, currentUser, bookings, comboRedemptions, redeemComboActivity } = useAppContext();
   
   const [scanResult, setScanResult] = useState<{
     success: boolean;
@@ -14,6 +14,8 @@ export const StaffScanner: React.FC = () => {
     ticket?: Ticket;
     isPendingPayment?: boolean;
     bookingId?: string;
+    isComboPack?: boolean;
+    comboRedemption?: any;
   } | null>(null);
   
   const [manualCode, setManualCode] = useState('');
@@ -183,6 +185,68 @@ export const StaffScanner: React.FC = () => {
                       <span className="text-[10px] text-[#94A3B8] font-bold uppercase block">Quantity</span>
                       <span className="text-white font-bold">{scanResult.ticket.quantity} ({scanResult.ticket.ticketType})</span>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Multi-Activity Combo Entitlements Tracking & Check-in */}
+              {scanResult.isComboPack && (
+                <div className="w-full max-w-md bg-[#0A0A0A] p-5 rounded-2xl border border-[#FFD700]/30 text-left mb-8 space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#1C1C1C]">
+                    <div className="flex items-center gap-2">
+                      <Boxes className="w-4 h-4 text-[#FFD700]" />
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">Combo Activity Entitlements</span>
+                    </div>
+                    <span className="text-[10px] text-[#FFD700] font-mono font-bold">Independent Check-In</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {comboRedemptions
+                      .filter(r => r.ticketId === scanResult.ticket?.id || r.bookingId === scanResult.ticket?.bookingId)
+                      .map(rec => (
+                        <div key={rec.id} className="p-3 rounded-xl bg-[#050816] border border-[#1C1C1C] flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                              <span>{rec.activityName}</span>
+                              {rec.unitOrDuration && (
+                                <span className="text-[10px] text-[#14F1D9] font-mono">({rec.unitOrDuration})</span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-[#94A3B8] mt-0.5">
+                              Used: {rec.redeemedQuantity}/{rec.totalQuantity} &bull; Remaining: <span className="text-white font-bold">{rec.remainingQuantity}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              rec.status === 'completed'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : rec.status === 'partially_redeemed'
+                                ? 'bg-amber-500/20 text-amber-300'
+                                : 'bg-teal-500/20 text-teal-300'
+                            }`}>
+                              {rec.status === 'completed' ? '✓ Used' : rec.status === 'partially_redeemed' ? 'Partial' : 'Available'}
+                            </span>
+
+                            {rec.remainingQuantity > 0 && (
+                              <button
+                                onClick={() => {
+                                  const res = redeemComboActivity({
+                                    redemptionId: rec.id,
+                                    quantityToRedeem: 1,
+                                    staffName: currentUser?.name || 'Gate Attendant',
+                                    station: 'Station Scanner'
+                                  });
+                                  alert(res.message);
+                                }}
+                                className="px-2.5 py-1 bg-[#14F1D9] text-black font-bold text-[10px] rounded hover:opacity-90 transition-all cursor-pointer whitespace-nowrap"
+                              >
+                                Check In 1
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 </div>
               )}

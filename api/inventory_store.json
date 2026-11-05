@@ -5,7 +5,9 @@
     "name": "Arabica Coffee Beans (kg)",
     "currentStock": 25,
     "minStockLevel": 5,
-    "unit": "kg"
+    "unit": "kg",
+    "updatedAt": "2026-11-03T04:02:36.523Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-whole-milk",
@@ -13,7 +15,9 @@
     "name": "Organic Whole Milk (Liters)",
     "currentStock": 4,
     "minStockLevel": 10,
-    "unit": "L"
+    "unit": "L",
+    "updatedAt": "2026-11-03T04:02:36.558Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-croissant-dough",
@@ -21,7 +25,9 @@
     "name": "Croissant Dough Pre-rolls",
     "currentStock": 40,
     "minStockLevel": 15,
-    "unit": "pcs"
+    "unit": "pcs",
+    "updatedAt": "2026-11-03T04:02:36.562Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-beef-patties",
@@ -29,7 +35,9 @@
     "name": "Angus Beef Patties",
     "currentStock": 65,
     "minStockLevel": 20,
-    "unit": "pcs"
+    "unit": "pcs",
+    "updatedAt": "2026-11-03T04:02:36.562Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-buns",
@@ -37,7 +45,9 @@
     "name": "Brioche Burger Buns",
     "currentStock": 12,
     "minStockLevel": 30,
-    "unit": "pcs"
+    "unit": "pcs",
+    "updatedAt": "2026-11-03T04:02:36.562Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-pepperoni",
@@ -45,7 +55,9 @@
     "name": "Sliced Italian Pepperoni (kg)",
     "currentStock": 8,
     "minStockLevel": 2,
-    "unit": "kg"
+    "unit": "kg",
+    "updatedAt": "2026-11-03T04:02:36.562Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-fries-frozen",
@@ -53,7 +65,9 @@
     "name": "Frozen Potato Sticks (kg)",
     "currentStock": 35,
     "minStockLevel": 10,
-    "unit": "kg"
+    "unit": "kg",
+    "updatedAt": "2026-11-03T04:02:36.562Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-spinach",
@@ -61,7 +75,9 @@
     "name": "Fresh Spinach leaves (kg)",
     "currentStock": 1.5,
     "minStockLevel": 3,
-    "unit": "kg"
+    "unit": "kg",
+    "updatedAt": "2026-11-03T04:02:36.562Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-ginger",
@@ -69,7 +85,9 @@
     "name": "Fresh Ginger Root (kg)",
     "currentStock": 4,
     "minStockLevel": 1,
-    "unit": "kg"
+    "unit": "kg",
+    "updatedAt": "2026-11-03T04:02:36.562Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-berries-frozen",
@@ -77,7 +95,9 @@
     "name": "Assorted Frozen Berries (kg)",
     "currentStock": 12,
     "minStockLevel": 4,
-    "unit": "kg"
+    "unit": "kg",
+    "updatedAt": "2026-11-03T04:02:36.562Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-cream",
@@ -85,7 +105,9 @@
     "name": "Whipping Cream (Liters)",
     "currentStock": 30,
     "minStockLevel": 8,
-    "unit": "L"
+    "unit": "L",
+    "updatedAt": "2026-11-03T04:02:36.562Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "inv-marshmallows",
@@ -93,6 +115,8 @@
     "name": "Marshmallows Bag (500g)",
     "currentStock": 2,
     "minStockLevel": 5,
-    "unit": "bags"
+    "unit": "bags",
+    "updatedAt": "2026-11-03T04:02:36.562Z",
+    "organizationId": "org_deuce_default"
   }
 ]

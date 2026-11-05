@@ -111,10 +111,38 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b border-gray-200">
-                <td className="py-0.5 font-semibold text-black">{ticket.activityName} ({ticket.quantity}x)</td>
-                <td className="py-0.5 text-right font-mono font-bold text-black">₹{totalAmount.toFixed(2)}</td>
-              </tr>
+              {booking.isComboPack && booking.comboItems && booking.comboItems.length > 0 ? (
+                <>
+                  <tr className="border-b border-black font-bold">
+                    <td className="py-0.5 text-black">{booking.comboPackName || ticket.activityName} ({ticket.quantity}x Combo)</td>
+                    <td className="py-0.5 text-right font-mono font-bold text-black">₹{totalAmount.toFixed(2)}</td>
+                  </tr>
+                  {booking.comboItems.map((ci, idx) => (
+                    <tr key={idx} className="border-b border-gray-200 text-[10px] print:text-[9.5px]">
+                      <td className="py-0.5 pl-2 text-gray-800">
+                        &#9642; {ci.activityName} ({ci.unitOrDuration}) × {ci.quantity * ticket.quantity}
+                      </td>
+                      <td className="py-0.5 text-right font-mono text-gray-600">Included</td>
+                    </tr>
+                  ))}
+                </>
+              ) : booking.isPackageBundle && booking.packageBundleItems && booking.packageBundleItems.length > 0 ? (
+                <>
+                  {booking.packageBundleItems.map((pi, idx) => (
+                    <tr key={idx} className="border-b border-gray-200">
+                      <td className="py-0.5 font-semibold text-black">
+                        {pi.packageName} {pi.unitOrDuration ? `(${pi.unitOrDuration})` : ''} ({pi.quantity}x)
+                      </td>
+                      <td className="py-0.5 text-right font-mono font-bold text-black">₹{pi.subtotal.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </>
+              ) : (
+                <tr className="border-b border-gray-200">
+                  <td className="py-0.5 font-semibold text-black">{ticket.activityName} ({ticket.quantity}x)</td>
+                  <td className="py-0.5 text-right font-mono font-bold text-black">₹{totalAmount.toFixed(2)}</td>
+                </tr>
+              )}
             </tbody>
           </table>
 
@@ -124,6 +152,21 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
             <span>SGST (9%): ₹{sgst.toFixed(2)}</span>
             <span>CGST (9%): ₹{cgst.toFixed(2)}</span>
           </div>
+
+          {booking.discountAmount && booking.discountAmount > 0 ? (
+            <div className="text-[10.5px] font-sans font-bold py-1 border-b border-black space-y-0.5 print:text-[9.5px]">
+              <div className="flex justify-between text-gray-700">
+                <span>Subtotal</span>
+                <span className="font-mono">₹{(booking.originalAmount || (totalAmount + booking.discountAmount)).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-emerald-800">
+                <span>
+                  Discount {booking.discountPercentage ? `(${booking.discountPercentage}%)` : (booking.discountType === 'cash' ? '(Cash Discount)' : '')}
+                </span>
+                <span className="font-mono">-₹{booking.discountAmount.toFixed(2)}</span>
+              </div>
+            </div>
+          ) : null}
 
           <table className="w-full text-xs font-sans print:text-[11px]">
             <tbody>

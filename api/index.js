@@ -657,6 +657,9 @@ const suppliersStore = createJsonStore('suppliers_store.json', []);
 const purchaseItemsStore = createJsonStore('purchase_items_store.json', []);
 const dayExpensesStore = createJsonStore('day_expenses_store.json', []);
 const financeAuditStore = createJsonStore('finance_audit_store.json', []);
+const comboPacksStore = createJsonStore('combo_packs_store.json', []);
+const comboRedemptionsStore = createJsonStore('combo_redemptions_store.json', []);
+const onlineBookingsStore = createJsonStore('online_bookings_store.json', []);
 
 app.get('/api/karts', (req, res) => res.json(kartsStore.get()));
 app.post('/api/karts', (req, res) => {
@@ -737,6 +740,35 @@ app.delete('/api/users/:id', (req, res) => {
   usersStore.delete(req.params.id, 'users');
   res.json({ success: true });
 });
+
+// ─── COMBO PACKS & REDEMPTIONS API ──────────────────────────────────────────
+app.get('/api/combo-packs', (req, res) => res.json(comboPacksStore.get()));
+app.post('/api/combo-packs', (req, res) => {
+  const count = comboPacksStore.upsert(req.body, 'combo_packs');
+  res.json({ success: true, count });
+});
+app.delete('/api/combo-packs/:id', (req, res) => {
+  comboPacksStore.delete(req.params.id, 'combo_packs');
+  res.json({ success: true });
+});
+
+app.get('/api/combo-redemptions', (req, res) => res.json(comboRedemptionsStore.get()));
+app.post('/api/combo-redemptions', (req, res) => {
+  const count = comboRedemptionsStore.upsert(req.body, 'combo_redemptions');
+  res.json({ success: true, count });
+});
+app.delete('/api/combo-redemptions/:id', (req, res) => {
+  comboRedemptionsStore.delete(req.params.id, 'combo_redemptions');
+  res.json({ success: true });
+});
+
+// ─── ONLINE BOOKINGS API ────────────────────────────────────────────────────
+app.get('/api/online-bookings', (req, res) => res.json(onlineBookingsStore.get()));
+app.post('/api/online-bookings', (req, res) => {
+  const count = onlineBookingsStore.upsert(req.body, 'online_bookings');
+  res.json({ success: true, count });
+});
+
 
 
 // ─── CENTRAL BOOKING & ATOMIC AVAILABILITY API ─────────────────────────────────
@@ -937,6 +969,9 @@ app.get('/api/sync/all', (req, res) => {
     purchaseItems: purchaseItemsStore.get(),
     dayExpenses: dayExpensesStore.get(),
     financeAuditLogs: financeAuditStore.get(),
+    comboPacks: comboPacksStore.get(),
+    comboRedemptions: comboRedemptionsStore.get(),
+    onlineBookings: onlineBookingsStore.get(),
     serverTime: new Date().toISOString()
   });
 });
@@ -987,7 +1022,13 @@ app.post('/api/sync/batch', (req, res) => {
       'dayExpenses': dayExpensesStore,
       'day_expenses': dayExpensesStore,
       'financeAuditLogs': financeAuditStore,
-      'finance_audit': financeAuditStore
+      'finance_audit': financeAuditStore,
+      'comboPacks': comboPacksStore,
+      'combo_packs': comboPacksStore,
+      'comboRedemptions': comboRedemptionsStore,
+      'combo_redemptions': comboRedemptionsStore,
+      'onlineBookings': onlineBookingsStore,
+      'online_bookings': onlineBookingsStore
     };
 
     let processedCount = 0;

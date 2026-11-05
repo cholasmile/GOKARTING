@@ -11,14 +11,15 @@ import {
   Kart, GoKartingSession, LapRecord, GoKartingWaiver, KartStatus, SessionStatus,
   ActivityPhoto, ActivityOffer, FoodStreetPurchaseRecord, StockMovement, MenuItemRecipe, StockMovementType,
   ShiftDefinition, LeaveRequestRecord, StaffAttendanceRecord, StaffSalaryPayment, AttendanceStatusType,
-  SupplierRecord, PurchaseItemRecord, ExpenseRecord, AuditLogEntry, EntryWorkflowStatus
+  SupplierRecord, PurchaseItemRecord, ExpenseRecord, AuditLogEntry, EntryWorkflowStatus,
+  ComboPack, ComboRedemptionRecord, ComboActivityItem, ComboRedemptionAuditEntry
 } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { db } from '../db/db';
 import { syncEngine, SyncStatus } from '../lib/syncEngine';
 import { generateOfflineId, requestPersistentStorage } from '../lib/deviceSetup';
 import { salesSummaryEngine } from '../lib/salesSummaryEngine';
-import { INITIAL_USERS, INITIAL_ACTIVITIES } from '../data/initialData';
+import { INITIAL_USERS, INITIAL_ACTIVITIES, INITIAL_COMBO_PACKS } from '../data/initialData';
 
 interface AppContextProps {
   // Authentication & Role
@@ -238,6 +239,27 @@ interface AppContextProps {
   updateSessionStatus: (sessionId: string, status: SessionStatus) => void;
   recordLapTime: (lapData: Omit<LapRecord, 'id'>) => void;
   submitWaiver: (waiverData: Omit<GoKartingWaiver, 'id'>) => void;
+
+  // Combo Packs & Redemptions
+  comboPacks: ComboPack[];
+  comboRedemptions: ComboRedemptionRecord[];
+  addComboPack: (comboData: Omit<ComboPack, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ComboPack>;
+  updateComboPack: (idOrPack: string | ComboPack, updates?: Partial<ComboPack>) => Promise<void>;
+  deleteComboPack: (id: string) => Promise<void>;
+  setComboPackActive: (id: string, isActive: boolean) => Promise<void>;
+  redeemComboActivity: (params: {
+    redemptionId: string;
+    quantityToRedeem?: number;
+    staffName: string;
+    station?: string;
+    note?: string;
+  }) => { success: boolean; message: string };
+  adjustComboRedemption: (params: {
+    redemptionId: string;
+    newRedeemedQuantity: number;
+    performedBy: string;
+    reason: string;
+  }) => { success: boolean; message: string };
 
   // Utility Actions
   sendMockNotification: (recipient: string, title: string, body: string, channel: 'email' | 'sms' | 'whatsapp') => void;
@@ -576,6 +598,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           if (eventType === 'DELETE') return prev.filter(l => l.id !== record.id);
           const exists = prev.some(l => l.id === record.id);
           return exists ? prev.map(l => l.id === record.id ? { ...l, ...record } : l) : [record, ...prev];
+        });
+      } else if (table === 'comboPacks' || table === 'combo_packs') {
+        setComboPacks(prev => {
+          if (eventType === 'DELETE') return prev.filter(c => c.id !== record.id);
+          const exists = prev.some(c => c.id === record.id);
+          return exists ? prev.map(c => c.id === record.id ? { ...c, ...record } : c) : [record, ...prev];
+        });
+      } else if (table === 'comboRedemptions' || table === 'combo_redemptions') {
+        setComboRedemptions(prev => {
+          if (eventType === 'DELETE') return prev.filter(r => r.id !== record.id);
+          const exists = prev.some(r => r.id === record.id);
+          return exists ? prev.map(r => r.id === record.id ? { ...r, ...record } : r) : [record, ...prev];
         });
       } else if (table === 'foodStreetPurchases' || table === 'food_purchases') {
         setFoodStreetPurchases(prev => {
@@ -942,6 +976,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [waivers, setWaivers] = useState<GoKartingWaiver[]>(() => {
     const cached = localStorage.getItem('ap_waivers');
     if (cached) { try { const p = JSON.parse(cached); if (Array.isArray(p)) return p; } catch {} }
+    return [];
+  });
+
+  // ── Combo Packs & Multi-Activity Redemptions State ──
+  const [comboPacks, setComboPacks] = useState<ComboPack[]>(() => {
+    const cached = localStorage.getItem('ap_combo_packs');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return INITIAL_COMBO_PACKS;
+  });
+
+  const [comboRedemptions, setComboRedemptions] = useState<ComboRedemptionRecord[]>(() => {
+    const cached = localStorage.getItem('ap_combo_redemptions');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
     return [];
   });
 
@@ -1551,6 +1608,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const merged = mergeEntitiesWithProtection(prev, data.financeAuditLogs);
             try { localStorage.setItem('ap_finance_audit_logs', JSON.stringify(merged)); } catch {}
             db.financeAuditLogs.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.comboPacks) && data.comboPacks.length > 0) {
+          setComboPacks(prev => {
+            const merged = mergeEntitiesWithProtection<ComboPack>(prev, data.comboPacks as ComboPack[]);
+            try { localStorage.setItem('ap_combo_packs', JSON.stringify(merged)); } catch {}
+            db.comboPacks.bulkPut(merged);
+            return merged;
+          });
+        }
+        if (Array.isArray(data.comboRedemptions) && data.comboRedemptions.length > 0) {
+          setComboRedemptions(prev => {
+            const merged = mergeEntitiesWithProtection<ComboRedemptionRecord>(prev, data.comboRedemptions as ComboRedemptionRecord[]);
+            try { localStorage.setItem('ap_combo_redemptions', JSON.stringify(merged)); } catch {}
+            db.comboRedemptions.bulkPut(merged);
             return merged;
           });
         }
@@ -2603,6 +2676,222 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+
+  // ── Combo Pack Helpers & Mutators ──
+  const createRedemptionRecordsForCombo = (
+    bookingId: string,
+    ticketId: string,
+    customerName: string,
+    customerPhone: string | undefined,
+    customerEmail: string | undefined,
+    comboPackId: string,
+    comboPackName: string,
+    comboItems: ComboActivityItem[],
+    staffName?: string
+  ): ComboRedemptionRecord[] => {
+    const now = new Date().toISOString();
+    return comboItems.map((item, idx) => ({
+      id: `redemp-${bookingId}-${item.activityId || idx}`,
+      ticketId,
+      bookingId,
+      customerName,
+      customerPhone,
+      customerEmail,
+      comboPackId,
+      comboPackName,
+      activityId: item.activityId,
+      activityName: item.activityName,
+      packageId: item.packageId,
+      packageName: item.packageName,
+      unitOrDuration: item.unitOrDuration,
+      totalQuantity: item.quantity,
+      redeemedQuantity: 0,
+      remainingQuantity: item.quantity,
+      status: 'pending' as const,
+      history: [],
+      auditTrail: [
+        {
+          action: 'CREATED',
+          performedBy: staffName || 'System',
+          timestamp: now,
+          details: `Combo ticket issued: ${item.quantity}x ${item.activityName} (${item.unitOrDuration})`,
+          newStatus: 'pending'
+        }
+      ],
+      createdAt: now,
+      updatedAt: now
+    }));
+  };
+
+  const addComboPack = async (comboData: Omit<ComboPack, 'id' | 'createdAt' | 'updatedAt'>): Promise<ComboPack> => {
+    const now = new Date().toISOString();
+    const newPack: ComboPack = {
+      ...comboData,
+      id: `combo-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      createdAt: now,
+      updatedAt: now
+    };
+    setComboPacks(prev => {
+      const next = [newPack, ...prev];
+      try { localStorage.setItem('ap_combo_packs', JSON.stringify(next)); } catch {}
+      return next;
+    });
+    db.comboPacks.put(newPack).catch(e => console.warn('Dexie comboPacks put error:', e));
+    writeToLocalAndSync('combo_packs', 'insert', newPack);
+    return newPack;
+  };
+
+  const updateComboPack = async (idOrPack: string | ComboPack, updates?: Partial<ComboPack>): Promise<void> => {
+    let id: string;
+    let patch: Partial<ComboPack>;
+    if (typeof idOrPack === 'object' && idOrPack !== null) {
+      id = idOrPack.id;
+      patch = { ...idOrPack, ...updates };
+    } else {
+      id = idOrPack;
+      patch = updates || {};
+    }
+    const now = new Date().toISOString();
+    setComboPacks(prev => {
+      const next = prev.map(p => p.id === id ? { ...p, ...patch, updatedAt: now } : p);
+      try { localStorage.setItem('ap_combo_packs', JSON.stringify(next)); } catch {}
+      const updated = next.find(p => p.id === id);
+      if (updated) {
+        db.comboPacks.put(updated).catch(e => console.warn('Dexie comboPacks put error:', e));
+        writeToLocalAndSync('combo_packs', 'update', updated);
+      }
+      return next;
+    });
+  };
+
+  const deleteComboPack = async (id: string): Promise<void> => {
+    setComboPacks(prev => {
+      const next = prev.filter(p => p.id !== id);
+      try { localStorage.setItem('ap_combo_packs', JSON.stringify(next)); } catch {}
+      return next;
+    });
+    db.comboPacks.delete(id).catch(e => console.warn('Dexie comboPacks delete error:', e));
+    writeToLocalAndSync('combo_packs', 'delete', { id });
+  };
+
+  const setComboPackActive = async (id: string, isActive: boolean): Promise<void> => {
+    return updateComboPack(id, { isActive });
+  };
+
+  const redeemComboActivity = (params: {
+    redemptionId: string;
+    quantityToRedeem?: number;
+    staffName: string;
+    station?: string;
+    note?: string;
+  }): { success: boolean; message: string } => {
+    const { redemptionId, quantityToRedeem = 1, staffName, station = 'Station Counter', note } = params;
+    const record = comboRedemptions.find(r => r.id === redemptionId);
+    if (!record) return { success: false, message: 'Redemption record not found.' };
+
+    if (record.remainingQuantity <= 0 || record.status === 'completed') {
+      return { success: false, message: `Activity entitlement for "${record.activityName}" has already been fully redeemed.` };
+    }
+
+    const toRedeem = Math.min(quantityToRedeem, record.remainingQuantity);
+    const newRedeemed = record.redeemedQuantity + toRedeem;
+    const newRemaining = record.totalQuantity - newRedeemed;
+    const newStatus: 'pending' | 'partially_redeemed' | 'completed' = newRemaining <= 0 ? 'completed' : 'partially_redeemed';
+    const now = new Date().toISOString();
+
+    const historyEntry = {
+      quantityRedeemed: toRedeem,
+      scannedAt: now,
+      scannedBy: staffName,
+      station
+    };
+
+    const auditEntry: ComboRedemptionAuditEntry = {
+      action: 'REDEEMED',
+      performedBy: staffName,
+      timestamp: now,
+      details: note || `Checked in ${toRedeem}x ${record.activityName} at ${station}`,
+      previousStatus: record.status,
+      newStatus
+    };
+
+    const updatedRecord: ComboRedemptionRecord = {
+      ...record,
+      redeemedQuantity: newRedeemed,
+      remainingQuantity: newRemaining,
+      status: newStatus,
+      scannedAt: now,
+      scannedBy: staffName,
+      history: [...(record.history || []), historyEntry],
+      auditTrail: [...(record.auditTrail || []), auditEntry],
+      updatedAt: now
+    };
+
+    setComboRedemptions(prev => {
+      const next = prev.map(r => r.id === record.id ? updatedRecord : r);
+      try { localStorage.setItem('ap_combo_redemptions', JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    db.comboRedemptions.put(updatedRecord).catch(e => console.warn('Dexie comboRedemptions put error:', e));
+    writeToLocalAndSync('combo_redemptions', 'update', updatedRecord);
+
+    return { 
+      success: true, 
+      message: `Successfully redeemed ${toRedeem}x ${record.activityName}. (${newRemaining} remaining)` 
+    };
+  };
+
+  const adjustComboRedemption = (params: {
+    redemptionId: string;
+    newRedeemedQuantity: number;
+    performedBy: string;
+    reason: string;
+  }): { success: boolean; message: string } => {
+    const { redemptionId, newRedeemedQuantity, performedBy, reason } = params;
+    if (!reason || reason.trim().length < 3) {
+      return { success: false, message: 'Mandatory audit reason is required for modification.' };
+    }
+
+    const record = comboRedemptions.find(r => r.id === redemptionId);
+    if (!record) return { success: false, message: 'Redemption record not found.' };
+
+    const targetRedeemed = Math.max(0, Math.min(newRedeemedQuantity, record.totalQuantity));
+    const newRemaining = record.totalQuantity - targetRedeemed;
+    const newStatus: 'pending' | 'partially_redeemed' | 'completed' = 
+      targetRedeemed === 0 ? 'pending' : newRemaining <= 0 ? 'completed' : 'partially_redeemed';
+    const now = new Date().toISOString();
+
+    const auditEntry: ComboRedemptionAuditEntry = {
+      action: 'ADMIN_CORRECTION',
+      performedBy,
+      timestamp: now,
+      details: `Adjusted redeemed qty from ${record.redeemedQuantity} to ${targetRedeemed}. Reason: ${reason}`,
+      previousStatus: record.status,
+      newStatus
+    };
+
+    const updatedRecord: ComboRedemptionRecord = {
+      ...record,
+      redeemedQuantity: targetRedeemed,
+      remainingQuantity: newRemaining,
+      status: newStatus,
+      auditTrail: [...(record.auditTrail || []), auditEntry],
+      updatedAt: now
+    };
+
+    setComboRedemptions(prev => {
+      const next = prev.map(r => r.id === record.id ? updatedRecord : r);
+      try { localStorage.setItem('ap_combo_redemptions', JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    db.comboRedemptions.put(updatedRecord).catch(e => console.warn('Dexie comboRedemptions put error:', e));
+    writeToLocalAndSync('combo_redemptions', 'update', updatedRecord);
+
+    return { success: true, message: 'Redemption corrected and recorded in audit log.' };
+  };
+
   const createBooking = (data: {
     customerName: string;
     customerEmail: string; customerPhone?: string;
@@ -2625,6 +2914,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     razorpayPaymentId?: string;
     gateway?: string;
     packageId?: string;
+    isComboPack?: boolean;
+    comboPackId?: string;
+    comboPackName?: string;
+    comboItems?: ComboActivityItem[];
+    isPackageBundle?: boolean;
+    packageBundleItems?: Array<{
+      packageId: string;
+      packageName: string;
+      quantity: number;
+      unitPrice: number;
+      subtotal: number;
+      unitOrDuration?: string;
+    }>;
   }) => {
     // Duplicate Protection: check if this Razorpay Order ID was already processed
     if (data.razorpayOrderId) {
@@ -2648,7 +2950,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let selectedPackageName = '';
     let selectedUnitPrice: number | undefined = undefined;
 
-    if (data.ticketType === 'package' || selectedPackageId) {
+    if (data.isComboPack) {
+      // Combo pack has its own custom pricing already calculated
+      enforcedTotalAmount = data.paymentMethod === 'complimentary' ? 0 : data.totalAmount;
+      selectedPackageName = data.comboPackName || data.details;
+    } else if (data.isPackageBundle) {
+      // Multi-package bundle from single activity preserves the combined package total
+      enforcedTotalAmount = data.paymentMethod === 'complimentary' ? 0 : data.totalAmount;
+      selectedPackageName = data.details;
+    } else if (data.ticketType === 'package' || selectedPackageId) {
       if (!targetActivity.packages || targetActivity.packages.length === 0) {
         return 'No packages are configured for this activity in the database. Ticket purchase is not allowed.';
       }
@@ -2706,9 +3016,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const statusVal = data.status || (isPending ? 'reserved' : 'confirmed');
     const paymentStatusVal = data.paymentStatus === 'processing' ? 'pending' : (data.paymentStatus || (isPending ? 'pending' : 'paid'));
 
-    const detailsStr = selectedPackageName 
-      ? `Package: ${selectedPackageName} | Price: ₹${selectedUnitPrice} | Qty: ${data.quantity}`
-      : data.details;
+    const detailsStr = (data.isPackageBundle || data.isComboPack)
+      ? (data.details || selectedPackageName || 'Multi-Item Package')
+      : (selectedPackageName 
+          ? (selectedUnitPrice !== undefined ? `Package: ${selectedPackageName} | Price: ₹${selectedUnitPrice} | Qty: ${data.quantity}` : (data.details || selectedPackageName))
+          : data.details);
 
     // 2. Create Booking (with snapshotted package price & discounts)
     const newBooking: Booking = {
@@ -2735,6 +3047,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       packageName: selectedPackageName,
       unitPrice: selectedUnitPrice,
       organizationId: 'org_deuce_default',
+      isComboPack: data.isComboPack,
+      comboPackId: data.comboPackId,
+      comboPackName: data.comboPackName,
+      comboItems: data.comboItems,
+      isPackageBundle: data.isPackageBundle,
+      packageBundleItems: data.packageBundleItems,
       updatedAt: timestamp
     };
 
@@ -2751,7 +3069,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         activityName: data.activityName,
         date: data.date,
         timeSlot: data.timeSlot,
-        ticketType: selectedPackageName || detailsStr,
+        ticketType: data.ticketType || selectedPackageName || detailsStr,
         quantity: data.quantity,
         qrCodeValue: `adventure-park-ticket-${bookingId}`,
         status: 'valid',
@@ -2759,8 +3077,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         packageName: selectedPackageName,
         unitPrice: selectedUnitPrice,
         organizationId: 'org_deuce_default',
+        isComboPack: data.isComboPack,
+        comboPackId: data.comboPackId,
+        comboPackName: data.comboPackName,
+        comboItems: data.comboItems,
+        isPackageBundle: data.isPackageBundle,
+        packageBundleItems: data.packageBundleItems,
         updatedAt: timestamp
       };
+
+      // Automatically generate Combo Redemption Records for confirmed combo tickets (1 per activity)
+      if (data.isComboPack && data.comboItems && data.comboItems.length > 0) {
+        const redemptionRecs = createRedemptionRecordsForCombo(
+          bookingId,
+          `tkt-${bookingId}`,
+          data.customerName,
+          data.customerPhone,
+          data.customerEmail,
+          data.comboPackId || 'combo',
+          data.comboPackName || data.activityName,
+          data.comboItems,
+          currentUser?.name || 'Staff'
+        );
+        setComboRedemptions(prev => {
+          const next = [...redemptionRecs, ...prev];
+          try { localStorage.setItem('ap_combo_redemptions', JSON.stringify(next)); } catch {}
+          return next;
+        });
+        db.comboRedemptions.bulkPut(redemptionRecs).catch(e => console.warn('Dexie comboRedemptions error:', e));
+        redemptionRecs.forEach(rec => writeToLocalAndSync('combo_redemptions', 'insert', rec));
+      }
     }
 
     // 4. Create Payment (with snapshotted package price)
@@ -2958,6 +3304,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const updatedTicket: Ticket = { ...newTicket, status: 'valid', updatedAt: now };
       setTickets(prev => prev.map(t => t.id === newTicket!.id ? updatedTicket : t));
       writeToLocalAndSync('tickets', 'update', updatedTicket);
+    }
+
+    // If confirmed booking is a Combo Pack, ensure redemption records exist (1 per activity)
+    if (finalStatus === 'paid' && booking.isComboPack && booking.comboItems && booking.comboItems.length > 0) {
+      setComboRedemptions(prev => {
+        if (prev.some(r => r.bookingId === params.bookingId)) return prev;
+        const redemptionRecs = createRedemptionRecordsForCombo(
+          params.bookingId,
+          `tkt-${params.bookingId}`,
+          booking.customerName,
+          booking.customerPhone,
+          booking.customerEmail,
+          booking.comboPackId || 'combo',
+          booking.comboPackName || booking.activityName,
+          booking.comboItems!,
+          currentUser?.name || params.staffId || 'Staff'
+        );
+        db.comboRedemptions.bulkPut(redemptionRecs).catch(e => console.warn('Dexie comboRedemptions error:', e));
+        redemptionRecs.forEach(rec => writeToLocalAndSync('combo_redemptions', 'insert', rec));
+        const next = [...redemptionRecs, ...prev];
+        try { localStorage.setItem('ap_combo_redemptions', JSON.stringify(next)); } catch {}
+        return next;
+      });
     }
 
     // Update existing payment record or insert a new one (using functional state updater to avoid closure staleness)
@@ -3172,6 +3541,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         success: false, 
         message: `Ticket already used! Checked in on ${new Date(foundTicket.scannedAt || '').toLocaleString()} by ${foundTicket.scannedBy}. Duplicate entry prohibited.`,
         ticket: foundTicket
+      };
+    }
+
+    // Check if this is a Multi-Activity Combo Ticket
+    const isCombo = foundTicket.isComboPack || booking?.isComboPack;
+    if (isCombo) {
+      const redRecord = comboRedemptions.find(r => r.ticketId === foundTicket.id || r.bookingId === foundTicket.bookingId);
+      return { 
+        success: true, 
+        message: 'Combo Ticket recognized. Entitlements are ready for station check-in.',
+        ticket: foundTicket,
+        isComboPack: true,
+        comboRedemption: redRecord
       };
     }
 
@@ -4245,6 +4627,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       sendMockNotification,
       resetAllData,
+
+      // Combo Packs & Redemptions
+      comboPacks,
+      comboRedemptions,
+      addComboPack,
+      updateComboPack,
+      deleteComboPack,
+      setComboPackActive,
+      redeemComboActivity,
+      adjustComboRedemption,
 
       // Go Karting Exports
       karts, sessions, lapRecords, waivers,

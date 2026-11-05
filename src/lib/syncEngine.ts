@@ -48,7 +48,11 @@ export const TABLE_MAP_TO_DEXIE: Record<string, string> = {
   'dayExpenses': 'dayExpenses',
   'day_expenses': 'dayExpenses',
   'financeAuditLogs': 'financeAuditLogs',
-  'finance_audit': 'financeAuditLogs'
+  'finance_audit': 'financeAuditLogs',
+  'comboPacks': 'comboPacks',
+  'combo_packs': 'comboPacks',
+  'comboRedemptions': 'comboRedemptions',
+  'combo_redemptions': 'comboRedemptions'
 };
 
 // Verified base schema columns physically existing in the Supabase database

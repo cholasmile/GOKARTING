@@ -5,7 +5,9 @@
     "type": "cafe",
     "image": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
     "ownerName": "Sarah Jenkins",
-    "stallNumber": "Stall F-01"
+    "stallNumber": "Stall F-01",
+    "updatedAt": "2026-11-03T04:02:35.986Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "vendor-adventure-grill",
@@ -13,7 +15,9 @@
     "type": "fast_food",
     "image": "https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=800&q=80",
     "ownerName": "Marcus Broadus",
-    "stallNumber": "Stall F-02"
+    "stallNumber": "Stall F-02",
+    "updatedAt": "2026-11-03T04:02:35.986Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "vendor-citrus-splash",
@@ -21,7 +25,9 @@
     "type": "juice",
     "image": "https://images.unsplash.com/photo-1534353436294-0dbd4bdac845?auto=format&fit=crop&w=800&q=80",
     "ownerName": "Elena Rostova",
-    "stallNumber": "Stall F-03"
+    "stallNumber": "Stall F-03",
+    "updatedAt": "2026-11-03T04:02:35.986Z",
+    "organizationId": "org_deuce_default"
   },
   {
     "id": "vendor-golden-scoop",
@@ -29,6 +35,8 @@
     "type": "ice_cream",
     "image": "https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=800&q=80",
     "ownerName": "Oliver Chen",
-    "stallNumber": "Stall F-04"
+    "stallNumber": "Stall F-04",
+    "updatedAt": "2026-11-03T04:02:35.986Z",
+    "organizationId": "org_deuce_default"
   }
 ]

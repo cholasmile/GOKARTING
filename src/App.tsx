@@ -290,7 +290,7 @@ import TicketingDashboard from './components/TicketingDashboard';
 
 // Wrapper for public layout with no explicit auth needed but some styling
 const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, setCurrentUser } = useAppContext();
+  const { currentUser, setCurrentUser, users } = useAppContext();
 
   return (
     <div className="min-h-screen flex flex-col text-[#FFFFFF] font-sans selection:bg-[#007B8B]/30 selection:text-white bg-transparent">
@@ -309,6 +309,7 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
               </div>
             </Link>
           </div>
+
 
           {/* Member Status & Guest Controls in Header */}
           <div className="flex items-center gap-3">

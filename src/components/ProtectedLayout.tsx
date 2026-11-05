@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { NotificationToast } from './NotificationToast';
-import { LogOut, X, HelpCircle } from 'lucide-react';
+import { LogOut, X, HelpCircle, ShieldCheck, Ticket, Banknote, Gauge, QrCode, Timer, ExternalLink } from 'lucide-react';
 
 export const ProtectedLayout: React.FC = () => {
   const { currentUser, setCurrentUser } = useAppContext();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showHelp, setShowHelp] = useState(true);
 
   if (!currentUser) return null;
@@ -24,15 +25,90 @@ export const ProtectedLayout: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           
           <div className="flex items-center gap-3">
-            <img 
-              src="/deuce-logo.jpg" 
-              alt="Deuce Logo" 
-              className="w-10 h-10 rounded-xl object-cover shadow-[0_4px_12px_rgba(20,241,217,0.3)] border border-[#14F1D9]/40 transform hover:scale-105 transition-transform"
-            />
-            <div>
-              <h1 className="font-black text-2xl leading-none tracking-tight text-gradient font-sans uppercase">Deuce</h1>
-              <p className="text-[9px] text-[#40E0D0] tracking-widest font-mono uppercase font-bold mt-1">Live The Rush • Yelagiri</p>
-            </div>
+            <Link to="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+              <img 
+                src="/deuce-logo.jpg" 
+                alt="Deuce Logo" 
+                className="w-10 h-10 rounded-xl object-cover shadow-[0_4px_12px_rgba(20,241,217,0.3)] border border-[#14F1D9]/40 transform hover:scale-105 transition-transform"
+              />
+              <div>
+                <h1 className="font-black text-2xl leading-none tracking-tight text-gradient font-sans uppercase">Deuce</h1>
+                <p className="text-[9px] text-[#40E0D0] tracking-widest font-mono uppercase font-bold mt-1">Live The Rush • Yelagiri</p>
+              </div>
+            </Link>
+          </div>
+
+          {/* Quick Portal Switcher Pills */}
+          <div className="hidden lg:flex items-center gap-1.5 bg-[#050816]/60 p-1 rounded-2xl border border-white/10">
+            {(currentUser.role === 'super_admin' || currentUser.role === 'ticket_counter_staff' || currentUser.role === 'activity_staff') && (
+              <Link
+                to="/staff/ticketing"
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  location.pathname.startsWith('/staff/ticketing')
+                    ? 'bg-[#14F1D9] text-[#050816] shadow-[0_0_15px_rgba(20,241,217,0.3)] font-black'
+                    : 'text-[#94A3B8] hover:text-[#14F1D9] hover:bg-white/5'
+                }`}
+              >
+                <Ticket className="w-3.5 h-3.5" />
+                <span>Sales POS</span>
+              </Link>
+            )}
+
+            {(currentUser.role === 'super_admin' || currentUser.role === 'finance_sub_admin') && (
+              <Link
+                to="/finance-portal"
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  location.pathname.startsWith('/finance-portal')
+                    ? 'bg-emerald-400 text-[#050816] shadow-[0_0_15px_rgba(52,211,153,0.3)] font-black'
+                    : 'text-[#94A3B8] hover:text-emerald-400 hover:bg-white/5'
+                }`}
+              >
+                <Banknote className="w-3.5 h-3.5" />
+                <span>Finance Portal</span>
+              </Link>
+            )}
+
+            {(currentUser.role === 'super_admin' || currentUser.role === 'go_karting_manager' || currentUser.role === 'go_karting_staff') && (
+              <Link
+                to="/staff/karting"
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  location.pathname.startsWith('/staff/karting')
+                    ? 'bg-amber-400 text-[#050816] shadow-[0_0_15px_rgba(251,191,36,0.3)] font-black'
+                    : 'text-[#94A3B8] hover:text-amber-400 hover:bg-white/5'
+                }`}
+              >
+                <Gauge className="w-3.5 h-3.5" />
+                <span>Karting Ops</span>
+              </Link>
+            )}
+
+            {(currentUser.role === 'super_admin' || currentUser.role === 'activity_staff') && (
+              <Link
+                to="/staff"
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  location.pathname === '/staff' || location.pathname === '/staff/'
+                    ? 'bg-purple-400 text-[#050816] shadow-[0_0_15px_rgba(192,132,252,0.3)] font-black'
+                    : 'text-[#94A3B8] hover:text-purple-400 hover:bg-white/5'
+                }`}
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>Gate Scanner</span>
+              </Link>
+            )}
+
+            {currentUser.role === 'super_admin' && (
+              <Link
+                to="/admin"
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  location.pathname.startsWith('/admin')
+                    ? 'bg-[#FFD700] text-[#050816] shadow-[0_0_15px_rgba(255,215,0,0.3)] font-black'
+                    : 'text-[#94A3B8] hover:text-[#FFD700] hover:bg-white/5'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Super Admin</span>
+              </Link>
+            )}
           </div>
 
           <div className="flex items-center gap-3">

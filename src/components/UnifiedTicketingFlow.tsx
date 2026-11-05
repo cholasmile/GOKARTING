@@ -135,6 +135,7 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
         packageName: pkg.name,
         unitPrice: pkg.price,
         description: pkg.description,
+        unitOrDuration: pkg.unitOrDuration || '',
         quantity: packageQuantities[pkg.id] || 0,
         subtotal: pkg.price * (packageQuantities[pkg.id] || 0)
       }))
@@ -330,7 +331,16 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
       discountPercentage: activeDiscountPct,
       discountAmount,
       originalAmount: subtotalAmount,
-      paymentMethod: 'cash'
+      paymentMethod: 'cash',
+      isPackageBundle: selectedPackageItems.length > 0,
+      packageBundleItems: selectedPackageItems.map(p => ({
+        packageId: p.packageId,
+        packageName: p.packageName,
+        quantity: p.quantity,
+        unitPrice: p.unitPrice,
+        subtotal: p.subtotal,
+        unitOrDuration: (p as any).unitOrDuration || ''
+      })),
     });
 
     if (typeof bookingResult === 'string') {
@@ -381,7 +391,16 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
       details: buildDetailsString(),
       quantity: totalQuantity,
       totalAmount: 0,
-      paymentMethod: 'complimentary'
+      paymentMethod: 'complimentary',
+      isPackageBundle: selectedPackageItems.length > 0,
+      packageBundleItems: selectedPackageItems.map(p => ({
+        packageId: p.packageId,
+        packageName: p.packageName,
+        quantity: p.quantity,
+        unitPrice: p.unitPrice,
+        subtotal: p.subtotal,
+        unitOrDuration: (p as any).unitOrDuration || ''
+      })),
     });
 
     if (typeof bookingResult === 'string') {
@@ -434,7 +453,16 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
       discountPercentage: activeDiscountPct,
       discountAmount,
       originalAmount: subtotalAmount,
-      paymentMethod: 'upi'
+      paymentMethod: 'upi',
+      isPackageBundle: selectedPackageItems.length > 0,
+      packageBundleItems: selectedPackageItems.map(p => ({
+        packageId: p.packageId,
+        packageName: p.packageName,
+        quantity: p.quantity,
+        unitPrice: p.unitPrice,
+        subtotal: p.subtotal,
+        unitOrDuration: (p as any).unitOrDuration || ''
+      })),
     });
 
     if (typeof bookingResult === 'string') {
@@ -485,7 +513,16 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
       discountPercentage: activeDiscountPct,
       discountAmount,
       originalAmount: subtotalAmount,
-      paymentMethod: 'upi'
+      paymentMethod: 'upi',
+      isPackageBundle: selectedPackageItems.length > 0,
+      packageBundleItems: selectedPackageItems.map(p => ({
+        packageId: p.packageId,
+        packageName: p.packageName,
+        quantity: p.quantity,
+        unitPrice: p.unitPrice,
+        subtotal: p.subtotal,
+        unitOrDuration: (p as any).unitOrDuration || ''
+      })),
     });
 
     if (typeof bookingResult === 'string') {

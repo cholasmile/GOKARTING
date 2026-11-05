@@ -410,6 +410,7 @@ export const CustomerDashboard: React.FC = () => {
         </div>
 
         <div className="relative z-10 px-6 sm:px-12 max-w-7xl mx-auto">
+
           <div className="text-center mb-6">
             <h2 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#F8FAFC] to-[#CBD5E1] tracking-tight mb-4">
               Select Your Next Thrill

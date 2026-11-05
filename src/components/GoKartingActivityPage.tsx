@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Calendar as CalendarIcon, Clock, Shield, Flag, Award, Gauge,
   ArrowRight, Check, X, CreditCard, AlertTriangle, Play, Minus, Plus,
-  Info, ChevronRight, Zap, Target, MapPin, Navigation, Compass, Radio, Wifi
+  Info, ChevronRight, Zap, Target, MapPin, Navigation, Compass, Radio, Wifi,
+  Printer, Percent, Tag, DollarSign, Trash2, PlusCircle, Ticket as TicketIcon, Eye, CheckCircle2
 } from 'lucide-react';
 import { printTicket } from '../lib/printTicket';
+import TicketPass from './TicketPass';
 import { ReservationCalendar } from './ReservationCalendar';
 import { getAvailableTimeSlots, getTodayDateString, isPastDate } from '../lib/slotUtils';
 
@@ -41,29 +43,56 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
     { id: 'kart-volt', name: 'Storm Volt Electric', engine: 'Dual Lithium High-Torque', topSpeed: 82, accel: 3.7, desc: 'Eco-friendly hyper-acceleration with boost buttons and computerized vectoring.', image: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=400&q=80' }
   ];
 
-  const packages: KartPackage[] = kartingActivity?.packages || [];
+  const defaultKartPackages: KartPackage[] = [
+    { id: 'pkg-kart-single', name: 'Single Kart (10 Mins)', price: 100, description: 'Single-seater pro-kart session with lap timing.' },
+    { id: 'pkg-kart-double', name: 'Double Kart (10 Mins)', price: 150, description: 'Twin-seater tandem kart for dual riders.' },
+    { id: 'pkg-kart-race', name: 'Grand Prix Tournament (30 Mins)', price: 250, description: 'Warm-up, qualifying session, and 8-lap medal race.' }
+  ];
+
+  const basePackages: KartPackage[] = (kartingActivity?.packages && kartingActivity.packages.length > 0)
+    ? kartingActivity.packages
+    : defaultKartPackages;
+
+  const [customPackages, setCustomPackages] = useState<KartPackage[]>([]);
+  const allPackages: KartPackage[] = [...basePackages, ...customPackages];
 
   const [selectedKart, setSelectedKart] = useState<KartType>(karts[0]);
-  const [selectedPackage, setSelectedPackage] = useState<KartPackage | null>(packages[0] || null);
-  const [secondaryPackage, setSecondaryPackage] = useState<KartPackage | null>(packages[1] || null);
-  const [enableSecondPkg, setEnableSecondPkg] = useState<boolean>(false);
 
-  React.useEffect(() => {
-    if (packages.length > 0) {
-      const match = packages.find(p => p.id === selectedPackage?.id);
-      if (match) {
-        setSelectedPackage(match);
-      } else {
-        setSelectedPackage(packages[0]);
-      }
-      if (packages.length > 1) {
-        setSecondaryPackage(packages[1]);
-      }
-    } else {
-      setSelectedPackage(null);
-      setSecondaryPackage(null);
+  // Quantities per package in this single ticket: { [packageId]: quantity }
+  const [packageQuantities, setPackageQuantities] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    const single = basePackages.find(p => p.id.includes('single') || p.name.toLowerCase().includes('single')) || basePackages[0];
+    if (single) {
+      initial[single.id] = 1;
     }
-  }, [packages]);
+    return initial;
+  });
+
+  // Provision for "Add Package Option" selector & custom package creator
+  const [selectedPkgToAdd, setSelectedPkgToAdd] = useState<string>('');
+  const [showAddCustomModal, setShowAddCustomModal] = useState<boolean>(false);
+  const [newCustomName, setNewCustomName] = useState<string>('');
+  const [newCustomPrice, setNewCustomPrice] = useState<number>(100);
+  const [newCustomDesc, setNewCustomDesc] = useState<string>('');
+
+  // ── Discount State: Custom % and Custom Cash ₹ ──
+  const [discountType, setDiscountType] = useState<'none' | 'percentage' | 'cash'>('none');
+  const [customDiscountPct, setCustomDiscountPct] = useState<number>(0);
+  const [customCashDiscount, setCustomCashDiscount] = useState<number>(0);
+
+  // Sync package changes if base packages change
+  useEffect(() => {
+    if (basePackages.length > 0) {
+      setPackageQuantities(prev => {
+        const hasAny = Object.values(prev).some(qty => qty > 0);
+        if (!hasAny) {
+          const single = basePackages.find(p => p.id.includes('single') || p.name.toLowerCase().includes('single')) || basePackages[0];
+          return { [single.id]: 1 };
+        }
+        return prev;
+      });
+    }
+  }, [kartingActivity?.packages]);
   const [bookingQuantity, setBookingQuantity] = useState<number>(1);
   const [customerName, setCustomerName] = useState<string>('');
   const [customerEmail, setCustomerEmail] = useState<string>('');
@@ -97,8 +126,82 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successBooking, setSuccessBooking] = useState<any | null>(null);
 
-  const combinedPerPersonPrice = (selectedPackage?.price || 0) + (enableSecondPkg && secondaryPackage ? secondaryPackage.price : 0);
-  const bookingTotal = (paymentMethod === 'complimentary' || !selectedPackage) ? 0 : combinedPerPersonPrice * bookingQuantity;
+  const [showPassModal, setShowPassModal] = useState<boolean>(false);
+
+  // ── Package manipulation handlers ──
+  const updatePackageQty = (pkgId: string, delta: number) => {
+    setPackageQuantities(prev => {
+      const current = prev[pkgId] || 0;
+      const next = Math.max(0, current + delta);
+      if (next === 0) {
+        const copy = { ...prev };
+        delete copy[pkgId];
+        return copy;
+      }
+      return { ...prev, [pkgId]: next };
+    });
+  };
+
+  const removePackage = (pkgId: string) => {
+    setPackageQuantities(prev => {
+      const copy = { ...prev };
+      delete copy[pkgId];
+      return copy;
+    });
+  };
+
+  const handleAddPackageOption = (pkgId: string, qty: number = 1) => {
+    if (!pkgId) return;
+    setPackageQuantities(prev => ({
+      ...prev,
+      [pkgId]: (prev[pkgId] || 0) + qty
+    }));
+  };
+
+  const handleCreateCustomPackage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustomName.trim()) return;
+    const newId = `pkg-custom-${Date.now()}`;
+    const newPkg: KartPackage = {
+      id: newId,
+      name: newCustomName.trim(),
+      price: Math.max(0, Number(newCustomPrice) || 0),
+      description: newCustomDesc.trim() || 'Custom Karting Package'
+    };
+    setCustomPackages(prev => [...prev, newPkg]);
+    setPackageQuantities(prev => ({ ...prev, [newId]: 1 }));
+    setNewCustomName('');
+    setNewCustomPrice(100);
+    setNewCustomDesc('');
+    setShowAddCustomModal(false);
+  };
+
+  // ── Compute Active Packages, Quantities, Subtotal, and Discounts ──
+  const activePackageItems = allPackages
+    .filter(pkg => (packageQuantities[pkg.id] || 0) > 0)
+    .map(pkg => ({
+      ...pkg,
+      quantity: packageQuantities[pkg.id] || 0,
+      subtotal: pkg.price * (packageQuantities[pkg.id] || 0)
+    }));
+
+  const totalRacers = activePackageItems.reduce((sum, item) => sum + item.quantity, 0);
+  const subtotalAmount = activePackageItems.reduce((sum, item) => sum + item.subtotal, 0);
+
+  // Discount calculation
+  let activeDiscountPct = 0;
+  let discountAmount = 0;
+  if (discountType === 'percentage') {
+    activeDiscountPct = Math.min(100, Math.max(0, Number(customDiscountPct) || 0));
+    discountAmount = Math.round((subtotalAmount * activeDiscountPct) / 100);
+  } else if (discountType === 'cash') {
+    discountAmount = Math.min(subtotalAmount, Math.max(0, Number(customCashDiscount) || 0));
+    activeDiscountPct = subtotalAmount > 0 ? Math.round((discountAmount / subtotalAmount) * 100) : 0;
+  }
+
+  const grandTotal = (paymentMethod === 'complimentary' || totalRacers === 0) 
+    ? 0 
+    : Math.max(0, subtotalAmount - discountAmount);
 
   const calculateTuningSpecs = () => {
     let topSpeed = selectedKart.topSpeed;
@@ -152,8 +255,8 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
     setErrorMessage(null);
     setSuccessBooking(null);
 
-    if (!selectedPackage) {
-      setErrorMessage('No package selected or package pricing unavailable.');
+    if (activePackageItems.length === 0 || totalRacers === 0) {
+      setErrorMessage('Please add at least one package (Single Kart, Double Kart, etc.) to your ticket.');
       return;
     }
 
@@ -172,10 +275,8 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
       return;
     }
 
-    const pkgText = enableSecondPkg && secondaryPackage 
-      ? `2 Packages [${selectedPackage.name} + ${secondaryPackage.name}]` 
-      : selectedPackage.name;
-    const details = `Setup: ${tireCompound.toUpperCase()} Tires, ${aeroWing.toUpperCase()} Wing | Pkg: ${pkgText}`;
+    const pkgText = activePackageItems.map(p => `${p.quantity}x ${p.name} (₹${p.subtotal})`).join(' + ');
+    const details = `Packages: ${pkgText} | Setup: ${tireCompound.toUpperCase()} Tires, ${aeroWing.toUpperCase()} Wing`;
 
     const finalizeBooking = () => {
       const result = createBooking({
@@ -184,12 +285,27 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
         activityName: 'High-Octane Go-Karting',
         date: bookingDate,
         timeSlot: selectedSlot,
-        ticketType: paymentMethod === 'complimentary' ? 'Complimentary VIP Pass' : 'package',
+        ticketType: paymentMethod === 'complimentary' 
+          ? 'Complimentary VIP Pass' 
+          : (activePackageItems.length > 1 ? 'Multi-Package Pass' : activePackageItems[0].name),
         details,
-        quantity: bookingQuantity,
-        totalAmount: paymentMethod === 'complimentary' ? 0 : bookingTotal,
+        quantity: totalRacers,
+        originalAmount: subtotalAmount,
+        discountType,
+        discountPercentage: activeDiscountPct,
+        discountAmount,
+        totalAmount: paymentMethod === 'complimentary' ? 0 : grandTotal,
         paymentMethod,
-        packageId: selectedPackage.id
+        packageId: activePackageItems[0]?.id,
+        isPackageBundle: activePackageItems.length > 1,
+        packageBundleItems: activePackageItems.map(p => ({
+          packageId: p.id,
+          packageName: p.name,
+          quantity: p.quantity,
+          unitPrice: p.price,
+          subtotal: p.subtotal,
+          unitOrDuration: p.description
+        }))
       });
   
       if (typeof result === 'string') {
@@ -199,7 +315,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
       }
     };
 
-    if (paymentMethod === 'complimentary' || (paymentMethod !== 'upi' && paymentMethod !== 'card' && paymentMethod !== 'net_banking')) {
+    if (paymentMethod === 'complimentary' || paymentMethod === 'cash' || (paymentMethod !== 'upi' && paymentMethod !== 'card' && paymentMethod !== 'net_banking')) {
       finalizeBooking();
       return;
     }
@@ -213,7 +329,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
       const orderResponse = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: bookingTotal, currency: 'INR' })
+        body: JSON.stringify({ amount: grandTotal, currency: 'INR' })
       });
       const order = await orderResponse.json();
 
@@ -564,109 +680,188 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
         {/* RIGHT COLUMN: BOOKING & PACKAGES */}
         <div className="flex-1 min-w-0 flex flex-col gap-5 h-full overflow-y-auto pr-2 custom-scrollbar">
             
-          {/* 5. PACKAGE SELECTION */}
+          {/* 5. PACKAGE SELECTION & ADD PACKAGE PROVISION */}
           <div className="glass-panel p-4 rounded-xl border border-white/10 shadow-lg flex-shrink-0">
-            <h3 className="font-black text-sm text-white mb-3 flex items-center gap-2 tracking-tight">
-              <Award className="w-4 h-4 text-[#FFB703]" /> Select Package
-            </h3>
-            <div className="space-y-2">
-              {packages.length === 0 ? (
-                <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs font-semibold text-center">
-                  No packages configured for this activity in the database.
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-black text-sm text-white flex items-center gap-2 tracking-tight">
+                <Award className="w-4 h-4 text-[#FFB703]" /> Packages in Ticket
+              </h3>
+              <span className="text-[10px] font-mono font-bold bg-[#14F1D9]/15 text-[#14F1D9] px-2.5 py-0.5 rounded-full border border-[#14F1D9]/30">
+                {totalRacers} {totalRacers === 1 ? 'Racer / Kart' : 'Racers / Karts'}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {activePackageItems.length === 0 ? (
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold text-center font-mono">
+                  No packages currently selected in this ticket. Please add Single Kart or Double Kart below.
                 </div>
               ) : (
-                <>
-                  <div className="space-y-2">
-                    <span className="text-[10px] font-mono text-[#9CA3AF] uppercase tracking-wider block">Package 1 (Primary)</span>
-                    {packages.map(pkg => (
-                      <button
-                        key={pkg.id}
-                        onClick={() => setSelectedPackage(pkg)}
-                        className={`w-full text-left p-3 rounded-xl transition-all duration-300 border relative overflow-hidden group cursor-pointer ${
-                          selectedPackage?.id === pkg.id 
-                            ? 'bg-[#FFB703]/10 border-[#FFB703]/50 shadow-[0_0_15px_rgba(255,183,3,0.15)]' 
-                            : 'bg-[#050816] border-white/5 hover:border-white/20'
-                        }`}
-                      >
-                        {selectedPackage?.id === pkg.id && (
-                          <div className="absolute top-0 right-0 w-16 h-16 bg-[#FFB703]/20 rounded-full blur-[20px] pointer-events-none"></div>
-                        )}
-                        <div className="flex justify-between items-start mb-1 relative z-10">
-                          <h4 className={`font-black text-[11px] tracking-tight pr-2 ${selectedPackage?.id === pkg.id ? 'text-[#FFB703]' : 'text-white'}`}>{pkg.name}</h4>
-                          <span className="font-black font-mono text-sm text-white">₹{pkg.price}</span>
-                        </div>
-                        <p className="text-[9px] text-[#9CA3AF] leading-snug relative z-10 pr-2 line-clamp-1">{pkg.description}</p>
-                      </button>
-                    ))}
-                  </div>
-
-                  {packages.length > 1 && (
-                    <div className="pt-3 border-t border-white/10 space-y-2">
-                      <label className="flex items-center gap-2 cursor-pointer text-xs font-mono font-bold text-[#14F1D9] hover:text-white transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={enableSecondPkg}
-                          onChange={e => setEnableSecondPkg(e.target.checked)}
-                          className="w-4 h-4 accent-[#14F1D9] rounded cursor-pointer"
-                        />
-                        <span>+ Add 2nd Package to Booking (2-Package Combo)</span>
-                      </label>
-
-                      {enableSecondPkg && (
-                        <div className="p-3 bg-[#050816] rounded-xl border border-[#14F1D9]/40 space-y-2 animate-fade-in">
-                          <span className="text-[10px] font-mono text-[#14F1D9] uppercase tracking-wider block font-bold">Package 2 (Second Package)</span>
-                          <select
-                            value={secondaryPackage?.id || ''}
-                            onChange={e => {
-                              const found = packages.find(p => p.id === e.target.value);
-                              if (found) setSecondaryPackage(found);
-                            }}
-                            className="w-full bg-[#0B1120] text-white border border-white/10 rounded-lg p-2 text-xs focus:border-[#14F1D9] outline-none font-mono"
-                          >
-                            {packages.map(pkg => (
-                              <option key={pkg.id} value={pkg.id} disabled={pkg.id === selectedPackage?.id}>
-                                {pkg.name} — ₹{pkg.price} {pkg.id === selectedPackage?.id ? '(Already Package 1)' : ''}
-                              </option>
-                            ))}
-                          </select>
-                          {secondaryPackage && (
-                            <p className="text-[10px] text-[#9CA3AF] italic">{secondaryPackage.description}</p>
+                <div className="space-y-2">
+                  {activePackageItems.map(item => (
+                    <div
+                      key={item.id}
+                      className="p-3 rounded-xl bg-[#050816] border border-[#14F1D9]/30 flex flex-col gap-2 hover:border-[#14F1D9]/50 transition-all shadow-inner"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-black text-xs text-white truncate">{item.name}</h4>
+                            <span className="font-black font-mono text-[11px] text-[#14F1D9] bg-[#14F1D9]/10 px-2 py-0.5 rounded border border-[#14F1D9]/30">
+                              ₹{item.price} / kart
+                            </span>
+                          </div>
+                          {item.description && (
+                            <p className="text-[9px] text-[#9CA3AF] line-clamp-1 mt-0.5">{item.description}</p>
                           )}
-                          <div className="text-xs font-mono text-[#14F1D9] font-bold">
-                            Combined Price: ₹{combinedPerPersonPrice} / person
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removePackage(item.id)}
+                          className="text-[#9CA3AF] hover:text-red-400 p-1 rounded transition-colors cursor-pointer"
+                          title="Remove from ticket"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-white/5 text-xs font-mono">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-[#9CA3AF] uppercase font-bold">Qty:</span>
+                          <div className="flex items-center gap-1.5 bg-[#0B1120] px-2 py-0.5 rounded-lg border border-white/10">
+                            <button
+                              type="button"
+                              onClick={() => updatePackageQty(item.id, -1)}
+                              className="w-5 h-5 flex items-center justify-center rounded bg-white/5 text-white hover:bg-white/20 transition-colors cursor-pointer"
+                              title="Decrease quantity"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="w-6 text-center font-black text-white">{item.quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() => updatePackageQty(item.id, 1)}
+                              className="w-5 h-5 flex items-center justify-center rounded bg-white/5 text-white hover:bg-[#14F1D9] hover:text-[#0B1120] transition-colors cursor-pointer"
+                              title="Increase quantity"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
                           </div>
                         </div>
-                      )}
+                        <div className="text-right">
+                          <span className="text-[10px] text-[#9CA3AF] mr-1.5">{item.quantity} × ₹{item.price} =</span>
+                          <span className="font-black text-[#14F1D9] text-sm">₹{item.subtotal}</span>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </>
+                  ))}
+                </div>
               )}
+
+              {/* ── PROVISION FOR ADD PACKAGE OPTION ── */}
+              <div className="pt-3 border-t border-white/10 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-[#14F1D9] uppercase tracking-wider block font-bold flex items-center gap-1">
+                    <PlusCircle className="w-3.5 h-3.5" /> Add Package Option
+                  </span>
+                  <span className="text-[9px] text-[#9CA3AF] font-mono">Book Single & Double Kart Together</span>
+                </div>
+
+                {/* Quick Add Buttons for Single Kart & Double Kart */}
+                <div className="grid grid-cols-2 gap-2 font-mono">
+                  {(() => {
+                    const singlePkg = allPackages.find(p => p.id.includes('single') || p.name.toLowerCase().includes('single'));
+                    const doublePkg = allPackages.find(p => p.id.includes('double') || p.name.toLowerCase().includes('double'));
+                    return (
+                      <>
+                        {singlePkg && (
+                          <button
+                            type="button"
+                            onClick={() => handleAddPackageOption(singlePkg.id, 1)}
+                            className="p-2.5 rounded-xl bg-[#050816] border border-[#14F1D9]/40 hover:border-[#14F1D9] text-left transition-all group cursor-pointer shadow-sm"
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="text-[11px] font-black text-[#14F1D9] block truncate">+ Single Kart</span>
+                              <span className="text-[9px] font-bold text-white bg-white/10 px-1 rounded font-mono">
+                                {packageQuantities[singlePkg.id] || 0} in tkt
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-[#9CA3AF]">₹{singlePkg.price} / kart</span>
+                          </button>
+                        )}
+                        {doublePkg && (
+                          <button
+                            type="button"
+                            onClick={() => handleAddPackageOption(doublePkg.id, 1)}
+                            className="p-2.5 rounded-xl bg-[#050816] border border-amber-500/40 hover:border-amber-400 text-left transition-all group cursor-pointer shadow-sm"
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="text-[11px] font-black text-[#FFB703] block truncate">+ Double Kart</span>
+                              <span className="text-[9px] font-bold text-white bg-white/10 px-1 rounded font-mono">
+                                {packageQuantities[doublePkg.id] || 0} in tkt
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-[#9CA3AF]">₹{doublePkg.price} / kart</span>
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* Dropdown to add any available or custom package */}
+                <div className="flex gap-2">
+                  <select
+                    value={selectedPkgToAdd}
+                    onChange={e => setSelectedPkgToAdd(e.target.value)}
+                    className="flex-1 bg-[#050816] text-white border border-white/10 rounded-xl px-3 py-2 text-xs focus:border-[#14F1D9] outline-none font-mono"
+                  >
+                    <option value="">-- Select Any Package to Add --</option>
+                    {allPackages.map(pkg => (
+                      <option key={pkg.id} value={pkg.id}>
+                        {pkg.name} — ₹{pkg.price} {(packageQuantities[pkg.id] || 0) > 0 ? `(Already ${packageQuantities[pkg.id]}x)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!selectedPkgToAdd}
+                    onClick={() => {
+                      if (selectedPkgToAdd) {
+                        handleAddPackageOption(selectedPkgToAdd, 1);
+                        setSelectedPkgToAdd('');
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-xs uppercase font-mono disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add
+                  </button>
+                </div>
+
+                <div className="flex justify-between items-center pt-1 text-[10px] font-mono">
+                  <span className="text-[#9CA3AF]">Package Subtotal:</span>
+                  <span className="text-[#14F1D9] font-black">₹{subtotalAmount.toFixed(2)}</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* 6. BOOKING PANEL */}
+          {/* 6. BOOKING & RESERVATION PANEL WITH CUSTOM CASH & PERCENT DISCOUNT */}
           <div className="glass-panel p-4 md:p-5 rounded-xl border border-[#14F1D9]/30 relative overflow-hidden shadow-[0_0_20px_rgba(20,241,217,0.1)] flex-1 flex flex-col">
             <div className="absolute -top-10 -right-10 w-24 h-24 bg-[#14F1D9]/20 rounded-full blur-[40px] pointer-events-none"></div>
             
-            <h3 className="font-black text-lg text-white mb-2 tracking-tight">Reservation</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-black text-lg text-white tracking-tight">Reservation</h3>
+              <div className="flex items-center gap-1.5 bg-[#050816] px-2.5 py-1 rounded-lg border border-white/10 font-mono text-[10px]">
+                <span className="text-[#9CA3AF]">Selected:</span>
+                <span className="text-[#14F1D9] font-black">{totalRacers} Racers ({activePackageItems.length} Pkgs)</span>
+              </div>
+            </div>
             
             <form className="flex-1 flex flex-col justify-between" onSubmit={(e) => e.preventDefault()}>
               
               <div className="space-y-3">
               
-              <div className="flex items-center justify-between p-3 bg-[#050816] rounded-xl border border-white/5 mb-1">
-                <span className="font-bold text-[#9CA3AF] text-[10px] uppercase tracking-wider font-mono">Racers</span>
-                <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => setBookingQuantity(Math.max(1, bookingQuantity - 1))} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-white hover:bg-white/20 transition-colors cursor-pointer border border-white/5">
-                    <Minus className="w-3 h-3" />
-                  </button>
-                  <span className="font-black font-mono text-sm text-white w-4 text-center">{bookingQuantity}</span>
-                  <button type="button" onClick={() => setBookingQuantity(bookingQuantity + 1)} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-white hover:bg-[#14F1D9] hover:text-[#0B1120] transition-colors cursor-pointer border border-white/5">
-                    <Plus className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-
               <div className="space-y-2">
                 <div className="relative">
                   <input type="text" required value={customerName} onChange={e => setCustomerName(e.target.value)} className="w-full bg-[#050816] border border-white/10 rounded-lg px-3 py-2 text-white placeholder-transparent peer focus:border-[#14F1D9] focus:ring-1 focus:ring-[#14F1D9]/50 focus:outline-none transition-all text-xs" placeholder="Name" id="name" />
@@ -714,12 +909,170 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                   )}
                 </div>
               </div>
+
+              {/* ── DISCOUNT PROVISION: CUSTOM CASH DISCOUNT & CUSTOM PERCENTAGE DISCOUNT ── */}
+              <div className="p-3 bg-[#050816] rounded-xl border border-white/10 space-y-2.5 font-mono">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] uppercase font-bold text-[#14F1D9] flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5" /> Discount Provision
+                  </label>
+                  {discountAmount > 0 && (
+                    <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+                      {discountType === 'cash' ? `₹${discountAmount} CASH OFF` : `${activeDiscountPct}% OFF (-₹${discountAmount})`}
+                    </span>
+                  )}
+                </div>
+
+                {/* Discount Type Selector Buttons */}
+                <div className="grid grid-cols-3 gap-1.5 text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType('none')}
+                    className={`py-1.5 px-1 rounded-lg border text-center transition-all cursor-pointer ${
+                      discountType === 'none'
+                        ? 'bg-white/10 text-white border-white/40 font-black'
+                        : 'bg-transparent text-[#9CA3AF] border-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    No Discount
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscountType('percentage');
+                      if (customDiscountPct === 0) setCustomDiscountPct(10);
+                    }}
+                    className={`py-1.5 px-1 rounded-lg border text-center transition-all cursor-pointer ${
+                      discountType === 'percentage'
+                        ? 'bg-[#14F1D9] text-[#0B1120] border-[#14F1D9] font-black shadow-[0_0_10px_rgba(20,241,217,0.3)]'
+                        : 'bg-transparent text-cyan-300 border-white/5 hover:border-cyan-500/30'
+                    }`}
+                  >
+                    % Custom Percent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscountType('cash');
+                      if (customCashDiscount === 0) setCustomCashDiscount(50);
+                    }}
+                    className={`py-1.5 px-1 rounded-lg border text-center transition-all cursor-pointer ${
+                      discountType === 'cash'
+                        ? 'bg-emerald-400 text-[#0B1120] border-emerald-400 font-black shadow-[0_0_10px_rgba(52,211,153,0.3)]'
+                        : 'bg-transparent text-emerald-300 border-white/5 hover:border-emerald-500/30'
+                    }`}
+                  >
+                    💵 Custom Cash (₹)
+                  </button>
+                </div>
+
+                {/* Percentage Discount Controls */}
+                {discountType === 'percentage' && (
+                  <div className="space-y-2 p-2.5 bg-[#0B1120] rounded-lg border border-[#14F1D9]/30 animate-fade-in">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[#9CA3AF]">Custom Percentage Discount:</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={customDiscountPct || ''}
+                          onChange={e => setCustomDiscountPct(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                          placeholder="10"
+                          className="w-16 bg-[#050816] text-[#14F1D9] font-black border border-white/20 rounded px-2 py-1 text-right text-xs outline-none focus:border-[#14F1D9]"
+                        />
+                        <span className="text-[#14F1D9] font-bold">%</span>
+                      </div>
+                    </div>
+                    {/* Quick percentage presets */}
+                    <div className="flex gap-1.5 text-[9px]">
+                      {[5, 10, 15, 20].map(pct => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setCustomDiscountPct(pct)}
+                          className={`flex-1 py-1 rounded transition-colors cursor-pointer ${
+                            customDiscountPct === pct
+                              ? 'bg-[#14F1D9] text-[#0B1120] font-black'
+                              : 'bg-white/5 text-[#9CA3AF] hover:text-white'
+                          }`}
+                        >
+                          {pct}% Off
+                        </button>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-cyan-300 flex justify-between pt-1 border-t border-white/5">
+                      <span>{activeDiscountPct}% Off on ₹{subtotalAmount}:</span>
+                      <span className="font-black">-₹{discountAmount.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cash Discount Controls */}
+                {discountType === 'cash' && (
+                  <div className="space-y-2 p-2.5 bg-[#0B1120] rounded-lg border border-emerald-500/30 animate-fade-in">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[#9CA3AF]">Custom Cash Discount (₹):</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-emerald-400 font-bold">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={subtotalAmount}
+                          value={customCashDiscount || ''}
+                          onChange={e => setCustomCashDiscount(Math.min(subtotalAmount, Math.max(0, parseFloat(e.target.value) || 0)))}
+                          placeholder="50"
+                          className="w-20 bg-[#050816] text-emerald-400 font-black border border-white/20 rounded px-2 py-1 text-right text-xs outline-none focus:border-emerald-400"
+                        />
+                      </div>
+                    </div>
+                    {/* Quick cash presets */}
+                    <div className="flex gap-1.5 text-[9px]">
+                      {[20, 50, 100, 200].map(amt => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setCustomCashDiscount(amt)}
+                          className={`flex-1 py-1 rounded transition-colors cursor-pointer ${
+                            customCashDiscount === amt
+                              ? 'bg-emerald-400 text-[#0B1120] font-black'
+                              : 'bg-white/5 text-[#9CA3AF] hover:text-white'
+                          }`}
+                        >
+                          ₹{amt} Off
+                        </button>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-emerald-300 flex justify-between pt-1 border-t border-white/5">
+                      <span>Flat Cash Amount Deducted:</span>
+                      <span className="font-black">-₹{discountAmount.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="pt-4 mt-4 border-t border-white/10">
-                <div className="flex justify-between items-end mb-4">
-                  <span className="text-[#9CA3AF] font-bold text-[10px] uppercase tracking-widest">Total</span>
-                  <span className="text-2xl font-black font-mono text-white tracking-tighter">₹{bookingTotal.toFixed(2)}</span>
+              </div>
+
+              <div className="pt-4 mt-4 border-t border-white/10 font-mono">
+                <div className="space-y-1 mb-4">
+                  <div className="flex justify-between items-center text-xs text-[#9CA3AF]">
+                    <span>Subtotal ({totalRacers} Racers):</span>
+                    <span>₹{subtotalAmount.toFixed(2)}</span>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between items-center text-xs text-emerald-400">
+                      <span>
+                        Discount {discountType === 'cash' ? '(Cash)' : `(${activeDiscountPct}%)`}:
+                      </span>
+                      <span>-₹{discountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-end pt-2 border-t border-white/10">
+                    <span className="text-white font-bold text-xs uppercase tracking-widest">Grand Total</span>
+                    <span className="text-2xl font-black text-[#14F1D9] tracking-tighter">
+                      ₹{grandTotal.toFixed(2)}
+                    </span>
+                  </div>
                 </div>
                 
                 <button
@@ -727,14 +1080,15 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                   onClick={() => {
                     setErrorMessage(null);
                     setSuccessBooking(null);
+                    setShowPassModal(false);
                     setIsPaymentOpen(true);
                   }}
-                  disabled={bookingTotal <= 0}
+                  disabled={totalRacers <= 0 || grandTotal < 0}
                   className="w-full py-3 rounded-lg bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 overflow-hidden relative group shadow-[0_0_20px_rgba(20,241,217,0.3)] cursor-pointer"
                 >
                   <div className="absolute inset-0 w-full h-full animate-[shine_2s_ease-out_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent -skew-x-12"></div>
                   <span className="relative flex items-center justify-center gap-2">
-                    Reserve <ArrowRight className="w-4 h-4" />
+                    Reserve Ticket (₹{grandTotal.toFixed(2)}) <ArrowRight className="w-4 h-4" />
                   </span>
                 </button>
               </div>
@@ -772,30 +1126,81 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
             {successBooking ? (
               <div className="text-center py-2 relative z-10" id="printable-ticket">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-black text-2xl text-white tracking-tight text-left">
-                    {successBooking.booking.paymentStatus === 'pending' ? 'Payment Pending' : 'Booking Confirmed!'}
-                  </h4>
+                  <div>
+                    <h4 className="font-black text-2xl text-white tracking-tight text-left">
+                      {successBooking.booking.paymentStatus === 'pending' ? 'Reservation Confirmed!' : 'Ticket Pass Issued!'}
+                    </h4>
+                    <span className="text-[10px] text-[#14F1D9] font-mono uppercase tracking-wider block text-left">
+                      Single & Double Kart Combined Ticket
+                    </span>
+                  </div>
                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.5 }} className={`w-12 h-12 rounded-full flex items-center justify-center ${successBooking.booking.paymentStatus === 'pending' ? 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]' : 'bg-gradient-to-br from-[#14F1D9] to-[#00B4FF] shadow-[0_0_20px_rgba(20,241,217,0.4)]'}`}>
                     {successBooking.booking.paymentStatus === 'pending' ? <AlertTriangle className="h-6 w-6 text-[#0B1120]" /> : <Check className="h-6 w-6 text-[#0B1120]" />}
                   </motion.div>
                 </div>
                 
-                <p className="text-sm text-[#9CA3AF] mb-6 font-medium leading-relaxed text-left border-b border-white/10 pb-4">
-                  {successBooking.booking.paymentStatus === 'pending' ? 'Your booking has been reserved successfully. Please arrive at least 30 minutes before your activity and complete your payment at the ticket counter. Your reservation will remain valid until the scheduled reporting time.' : 'Your paddock pass is ready. Please present the QR code below at the entry gates.'}
+                <p className="text-xs text-[#9CA3AF] mb-4 font-medium leading-relaxed text-left border-b border-white/10 pb-3">
+                  {successBooking.booking.paymentStatus === 'pending' 
+                    ? 'Your single ticket with selected kart packages is reserved. Please pay at the ticket counter upon arrival.' 
+                    : 'Your single ticket with selected kart packages is paid and active for turnstile gate access.'}
                 </p>
                 
-                <div className="flex flex-col md:flex-row gap-6 mb-6">
-                  <div className="flex-1 p-5 bg-[#050816] rounded-xl border border-white/10 text-xs text-white text-left space-y-3 font-mono shadow-inner">
-                    <div className="flex justify-between items-center border-b border-white/5 pb-2"><span className="text-[#9CA3AF] font-bold">Ticket ID</span> <span className="font-black text-[#14F1D9]">TKT-{successBooking.booking.id}</span></div>
-                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Activity</span> <span className="font-bold">Pro Go-Karting</span></div>
-                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Racers</span> <span className="font-bold">{bookingQuantity}</span></div>
-                    <div className="flex justify-between items-center"><span className="text-[#9CA3AF] font-bold">Session</span> <span className="font-bold">{bookingDate} @ {selectedSlot}</span></div>
-                    {successBooking.booking.paymentStatus === 'pending' && (
-                      <div className="flex justify-between items-center border-t border-white/5 pt-2"><span className="text-[#9CA3AF] font-bold">Amount Due</span> <span className="font-black text-amber-400">₹{bookingTotal.toFixed(2)} (Cash)</span></div>
-                    )}
+                <div className="flex flex-col md:flex-row gap-4 mb-5">
+                  <div className="flex-1 p-4 bg-[#050816] rounded-xl border border-white/10 text-xs text-white text-left space-y-2.5 font-mono shadow-inner">
+                    <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                      <span className="text-[#9CA3AF] font-bold">Ticket Token</span> 
+                      <span className="font-black text-[#14F1D9]">TKT-{successBooking.booking.id}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#9CA3AF] font-bold">Customer</span> 
+                      <span className="font-bold">{customerName} ({customerPhone})</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#9CA3AF] font-bold">Total Racers</span> 
+                      <span className="font-bold text-[#14F1D9]">{totalRacers} Pax</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#9CA3AF] font-bold">Date & Slot</span> 
+                      <span className="font-bold">{bookingDate} @ {selectedSlot}</span>
+                    </div>
+
+                    {/* Itemized Packages Breakdown */}
+                    <div className="pt-2 border-t border-white/10 space-y-1">
+                      <span className="text-[10px] text-[#9CA3AF] uppercase font-bold block">Packages Breakdown:</span>
+                      {activePackageItems.map(item => (
+                        <div key={item.id} className="flex justify-between items-center text-[11px] text-gray-300">
+                          <span>{item.quantity}x {item.name}</span>
+                          <span className="font-black text-white">₹{item.subtotal.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Subtotal and Discount */}
+                    <div className="pt-2 border-t border-white/10 space-y-1 text-[11px]">
+                      <div className="flex justify-between items-center text-[#9CA3AF]">
+                        <span>Subtotal:</span>
+                        <span>₹{subtotalAmount.toFixed(2)}</span>
+                      </div>
+                      {discountAmount > 0 && (
+                        <div className="flex justify-between items-center text-emerald-400 font-bold">
+                          <span>
+                            Discount {discountType === 'cash' ? '(Custom Cash)' : `(${activeDiscountPct}% Custom)`}:
+                          </span>
+                          <span>-₹{discountAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center border-t border-white/10 pt-1.5 text-sm font-black">
+                        <span className="text-white">
+                          {successBooking.booking.paymentStatus === 'pending' ? 'Amount Due (Counter):' : 'Amount Paid:'}
+                        </span>
+                        <span className={successBooking.booking.paymentStatus === 'pending' ? 'text-amber-400' : 'text-[#14F1D9]'}>
+                          ₹{grandTotal.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="w-full md:w-32 flex flex-col justify-center items-center p-4 bg-white rounded-xl shadow-lg border-2 border-solid border-gray-300">
-                    {/* Simulated QR Code for print view */}
+
+                  <div className="w-full md:w-32 flex flex-col justify-center items-center p-4 bg-white rounded-xl shadow-lg border-2 border-solid border-gray-300 flex-shrink-0">
                     <svg className="w-full h-auto text-black" viewBox="0 0 100 100">
                        <path d="M5 5h30v30H5V5zm5 5v20h20V10H10zm55-5h30v30H65V5zm5 5v20h20V10H70zM5 65h30v30H5V65zm5 5v20h20V70H10z" fill="currentColor"/>
                        <path d="M45 10h10v10H45V10zm20 45h10v10H65V55zm15 15h15v15H80V70zm-15 15h10v10H65V85zm-20-20h10v10H45V65zm20-20h10v10H65V45zm-10 10h10v10H55V55z" fill="currentColor"/>
@@ -804,14 +1209,101 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3">
-                  <button onClick={() => { setIsPaymentOpen(false); onSuccessClose?.(); }} className="w-full py-3 rounded-xl bg-[#14F1D9] text-[#0B1120] font-black uppercase tracking-widest text-xs hover:bg-[#00B4FF] transition-colors cursor-pointer shadow-lg shadow-[#14F1D9]/20">
+                {/* Printable Ticket Pass Modal Preview */}
+                {showPassModal && (
+                  <div className="mb-4 p-3 bg-[#0B1120] rounded-xl border border-white/20 animate-fade-in max-h-96 overflow-y-auto">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-bold text-white font-mono">Official Paddock Ticket Pass</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassModal(false)}
+                        className="text-xs text-[#9CA3AF] hover:text-white"
+                      >
+                        ✕ Close Preview
+                      </button>
+                    </div>
+                    <TicketPass
+                      ticket={successBooking.ticket || {
+                        id: successBooking.booking.id,
+                        bookingId: successBooking.booking.id,
+                        customerName,
+                        customerPhone,
+                        customerEmail,
+                        activityId: 'act-go-karting',
+                        activityName: 'High-Octane Go-Karting',
+                        date: bookingDate,
+                        timeSlot: selectedSlot,
+                        ticketType: successBooking.booking.ticketType,
+                        quantity: totalRacers,
+                        qrCodeValue: `adventure-park-ticket-${successBooking.booking.id}`,
+                        status: 'valid',
+                        isPackageBundle: activePackageItems.length > 1,
+                        packageBundleItems: activePackageItems.map(p => ({
+                          packageId: p.id,
+                          packageName: p.name,
+                          quantity: p.quantity,
+                          unitPrice: p.price,
+                          subtotal: p.subtotal,
+                          unitOrDuration: p.description
+                        }))
+                      }}
+                      booking={successBooking.booking}
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2 font-mono">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        printTicket({
+                          receiptId: `TKT-${successBooking.booking.id}`,
+                          tokenNumber: successBooking.booking.id,
+                          activityName: 'High-Octane Go-Karting',
+                          packageName: activePackageItems.map(p => `${p.quantity}x ${p.name}`).join(' + '),
+                          customerName,
+                          customerPhone,
+                          date: bookingDate,
+                          slot: selectedSlot,
+                          items: activePackageItems.map(item => ({
+                            label: `${item.name} (${item.quantity}x)`,
+                            value: `₹${item.subtotal.toFixed(2)}`
+                          })),
+                          subtotalAmount,
+                          discountPercentage: activeDiscountPct,
+                          discountAmount,
+                          totalAmount: grandTotal,
+                          paymentStatus: successBooking.booking.paymentStatus === 'paid' ? 'paid' : 'pending',
+                          quantity: totalRacers,
+                          paymentMethod: paymentMethod.toUpperCase()
+                        });
+                      }}
+                      className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-white/20 transition-all cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4 text-[#14F1D9]" /> Print Ticket
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPassModal(!showPassModal)}
+                      className="py-2.5 px-3 rounded-xl bg-[#00B4FF]/20 hover:bg-[#00B4FF]/30 text-[#00B4FF] font-bold text-xs flex items-center justify-center gap-1.5 border border-[#00B4FF]/40 transition-all cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4" /> {showPassModal ? 'Hide Pass' : 'View Pass'}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => { setIsPaymentOpen(false); onSuccessClose?.(); }}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] font-black uppercase tracking-widest text-xs hover:opacity-90 transition-opacity cursor-pointer shadow-lg shadow-[#14F1D9]/20"
+                  >
                     Done & Return to Dashboard
                   </button>
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleBookingSubmit} className="space-y-4 relative z-10">
+              <form onSubmit={handleBookingSubmit} className="space-y-4 relative z-10 font-mono">
                 {errorMessage && (
                   <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl flex items-center gap-2 text-xs font-bold">
                     <AlertTriangle className="h-4 w-4 flex-shrink-0" />
@@ -820,49 +1312,186 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                 )}
 
                 <div className="space-y-2">
-                  <div className="space-y-2">
-                    <label className="text-[#9CA3AF] font-black text-[9px] uppercase tracking-widest font-mono block text-center">Payment / Pass Option</label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      <button type="button" onClick={() => setPaymentMethod('upi')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'upi' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
-                        <span className="font-black text-[10px] font-mono uppercase tracking-wider">UPI</span>
-                      </button>
-                      <button type="button" onClick={() => setPaymentMethod('card')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'card' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
-                        <CreditCard className="w-4 h-4" />
-                      </button>
-                      <button type="button" onClick={() => setPaymentMethod('net_banking')} className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${paymentMethod === 'net_banking' ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]' : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'}`}>
-                        <span className="font-black text-[10px] font-mono uppercase tracking-wider">Bank</span>
-                      </button>
+                  <label className="text-[#9CA3AF] font-black text-[9px] uppercase tracking-widest block text-center">
+                    Select Payment Method
+                  </label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('upi')}
+                      className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                        paymentMethod === 'upi'
+                          ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]'
+                          : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'
+                      }`}
+                    >
+                      <span className="font-black text-[10px] uppercase">UPI</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('card')}
+                      className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                        paymentMethod === 'card'
+                          ? 'bg-[#14F1D9]/10 border-[#14F1D9]/50 text-[#14F1D9] shadow-[0_0_15px_rgba(20,241,217,0.15)]'
+                          : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'
+                      }`}
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span className="text-[9px] uppercase font-bold">Card</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('cash')}
+                      className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                        paymentMethod === 'cash'
+                          ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                          : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'
+                      }`}
+                    >
+                      <DollarSign className="w-3.5 h-3.5" />
+                      <span className="text-[9px] uppercase font-bold">Cash</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('complimentary')}
+                      className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                        paymentMethod === 'complimentary'
+                          ? 'bg-purple-500/15 border-purple-500/50 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                          : 'bg-[#050816] border-white/10 text-[#9CA3AF] hover:border-white/30 hover:text-white'
+                      }`}
+                    >
+                      <TicketIcon className="w-3.5 h-3.5" />
+                      <span className="text-[9px] uppercase font-bold">VIP Pass</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bill Summary */}
+                <div className="p-3.5 bg-[#050816] rounded-xl border border-white/10 space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center text-[#9CA3AF]">
+                    <span>Packages Subtotal ({totalRacers} Racers):</span>
+                    <span>₹{subtotalAmount.toFixed(2)}</span>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between items-center text-emerald-400">
+                      <span>Discount ({discountType === 'cash' ? 'Cash Discount' : `${activeDiscountPct}% Discount`}):</span>
+                      <span>-₹{discountAmount.toFixed(2)}</span>
                     </div>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-[#050816] rounded-xl border border-white/10 space-y-2 mt-4 font-mono">
-                  <div className="flex justify-between items-center text-xs text-[#9CA3AF]">
-                    <span>Subtotal:</span>
-                    <span>₹{bookingTotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs text-[#40E0D0]">
-                    <span>Razorpay Fee (2.36%):</span>
-                    <span>+ ₹{(bookingTotal * 0.0236).toFixed(2)}</span>
-                  </div>
+                  )}
+                  {paymentMethod !== 'cash' && paymentMethod !== 'complimentary' && grandTotal > 0 && (
+                    <div className="flex justify-between items-center text-[#40E0D0] text-[11px]">
+                      <span>Razorpay Online Gateway Fee (2.36%):</span>
+                      <span>+ ₹{(grandTotal * 0.0236).toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center border-t border-white/10 pt-2">
-                    <span className="text-white font-black text-[10px] uppercase tracking-widest">
-                      Total Payable
+                    <span className="text-white font-black text-xs uppercase tracking-widest">
+                      {paymentMethod === 'cash' ? 'Payable at Counter' : 'Total Payable'}
                     </span>
-                    <span className="text-2xl font-black tracking-tighter text-[#14F1D9]">
-                      ₹{(bookingTotal * 1.0236).toFixed(2)}
+                    <span className="text-xl font-black tracking-tighter text-[#14F1D9]">
+                      ₹{(paymentMethod === 'cash' || paymentMethod === 'complimentary' ? grandTotal : grandTotal * 1.0236).toFixed(2)}
                     </span>
                   </div>
                 </div>
 
-                <button type="submit" className="w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-lg mt-4 bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] shadow-[0_0_20px_rgba(20,241,217,0.3)]">
-                  Pay with Razorpay (₹{(bookingTotal * 1.0236).toFixed(2)})
+                <button
+                  type="submit"
+                  className="w-full py-3.5 rounded-xl font-black text-xs uppercase tracking-widest hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer shadow-lg mt-2 bg-gradient-to-r from-[#14F1D9] to-[#00B4FF] text-[#0B1120] shadow-[0_0_20px_rgba(20,241,217,0.3)]"
+                >
+                  {paymentMethod === 'cash' 
+                    ? `Confirm & Pay Cash at Counter (₹${grandTotal.toFixed(2)})`
+                    : paymentMethod === 'complimentary'
+                    ? 'Issue Free Complimentary Pass'
+                    : `Pay Online (₹${(grandTotal * 1.0236).toFixed(2)})`}
                 </button>
               </form>
             )}
           </motion.div>
         </motion.div>
       )}
+      </AnimatePresence>
+
+      {/* ── CUSTOM PACKAGE CREATOR MODAL ── */}
+      <AnimatePresence>
+        {showAddCustomModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              className="glass-panel border border-[#14F1D9]/40 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl font-mono"
+            >
+              <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                <h4 className="font-black text-sm text-white flex items-center gap-2">
+                  <PlusCircle className="w-4 h-4 text-[#14F1D9]" /> Add Custom Kart Package
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomModal(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateCustomPackage} className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-[#9CA3AF] mb-1 font-bold">Package Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newCustomName}
+                    onChange={e => setNewCustomName(e.target.value)}
+                    placeholder="e.g. VIP Sprint Kart (15 Mins)"
+                    className="w-full bg-[#050816] text-white border border-white/15 rounded-lg px-3 py-2 outline-none focus:border-[#14F1D9]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#9CA3AF] mb-1 font-bold">Price per Kart (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={newCustomPrice}
+                    onChange={e => setNewCustomPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-[#050816] text-[#14F1D9] font-black border border-white/15 rounded-lg px-3 py-2 outline-none focus:border-[#14F1D9]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#9CA3AF] mb-1 font-bold">Description</label>
+                  <input
+                    type="text"
+                    value={newCustomDesc}
+                    onChange={e => setNewCustomDesc(e.target.value)}
+                    placeholder="e.g. Dual motor tuning, exclusive track lane"
+                    className="w-full bg-[#050816] text-white border border-white/15 rounded-lg px-3 py-2 outline-none focus:border-[#14F1D9]"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCustomModal(false)}
+                    className="flex-1 py-2 rounded-lg bg-white/10 text-white font-bold hover:bg-white/20 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 rounded-lg bg-[#14F1D9] text-[#0B1120] font-black hover:bg-[#00B4FF] transition-colors"
+                  >
+                    Add to Ticket
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
       </div>
     </>

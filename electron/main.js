@@ -96,7 +96,7 @@ async function createWindow() {
 
   mainWindow.maximize();
 
-  // Try connecting to Vite dev server or load preview / fallback to dist
+  // Try connecting to Vite dev server or load preview / fallback to local backend or dist
   const devUrl = 'http://localhost:3000';
   const isDevRunning = await waitForServer(devUrl, 3000);
 
@@ -104,12 +104,18 @@ async function createWindow() {
     console.log('[Electron] Loading from local web server:', devUrl);
     mainWindow.loadURL(devUrl);
   } else {
-    const distPath = path.join(rootDir, 'dist', 'index.html');
-    console.log('[Electron] Loading from dist index file:', distPath);
-    mainWindow.loadFile(distPath).catch(() => {
-      // Fallback to local preview URL if available
-      mainWindow.loadURL(devUrl);
-    });
+    const apiServerUrl = 'http://localhost:5000';
+    const isApiRunning = await waitForServer(apiServerUrl, 4000);
+    if (isApiRunning) {
+      console.log('[Electron] Loading from backend server:', apiServerUrl);
+      mainWindow.loadURL(apiServerUrl);
+    } else {
+      const distPath = path.join(rootDir, 'dist', 'index.html');
+      console.log('[Electron] Loading from dist index file:', distPath);
+      mainWindow.loadFile(distPath).catch(() => {
+        mainWindow.loadURL(devUrl);
+      });
+    }
   }
 
   mainWindow.once('ready-to-show', () => {

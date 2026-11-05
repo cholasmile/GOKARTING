@@ -160,6 +160,80 @@ export interface ActivityPackage {
   price: number;
   description: string;
   shots?: number;
+  laps?: number;
+  duration?: string;
+  unitOrDuration?: string;
+}
+
+// ==========================================
+// COMBO PACK & REDEMPTION TYPES
+// ==========================================
+
+export interface ComboActivityItem {
+  activityId: string;
+  activityName: string;
+  packageId?: string;
+  packageName?: string;
+  quantity: number; // e.g. 1 ride, 2 karts
+  unitOrDuration: string; // e.g. "5 laps", "10 shots", "5 minutes", "1 ride"
+  originalPrice: number; // individual activity price
+}
+
+export interface ComboPack {
+  id: string;
+  name: string; // e.g., "DEUCE Ultimate Adventure Pack", "Family Fun Pack"
+  description: string;
+  items: ComboActivityItem[];
+  originalPrice: number; // total calculated original price
+  comboPrice: number; // special selling price
+  validityDays?: number; // validity in days, default 30
+  isActive: boolean;
+  image?: string;
+  badge?: string;
+  createdAt: string;
+  updatedAt?: string;
+  organizationId?: string;
+}
+
+export interface ComboRedemptionAuditEntry {
+  action: string;
+  performedBy: string;
+  timestamp: string;
+  details: string;
+  previousStatus?: string;
+  newStatus?: string;
+}
+
+export interface ComboRedemptionRecord {
+  id: string;
+  ticketId: string;
+  bookingId: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  comboPackId?: string;
+  comboPackName: string;
+  activityId: string;
+  activityName: string;
+  packageId?: string;
+  packageName?: string;
+  unitOrDuration?: string;
+  totalQuantity: number;
+  redeemedQuantity: number;
+  remainingQuantity: number;
+  status: 'pending' | 'partially_redeemed' | 'completed';
+  scannedAt?: string;
+  scannedBy?: string;
+  history?: Array<{
+    quantityRedeemed: number;
+    scannedAt: string;
+    scannedBy: string;
+    station?: string;
+    note?: string;
+  }>;
+  auditLogs?: ComboRedemptionAuditEntry[];
+  createdAt: string;
+  updatedAt?: string;
 }
 
 // ==========================================
@@ -245,6 +319,19 @@ export interface Booking {
   unitPrice?: number;
   organizationId?: string;
   updatedAt?: string;
+  isComboPack?: boolean;
+  comboPackId?: string;
+  comboPackName?: string;
+  comboItems?: ComboActivityItem[];
+  isPackageBundle?: boolean;
+  packageBundleItems?: Array<{
+    packageId: string;
+    packageName: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    unitOrDuration?: string;
+  }>;
 }
 
 export interface Ticket {
@@ -271,6 +358,19 @@ export interface Ticket {
   unitPrice?: number;
   organizationId?: string;
   updatedAt?: string;
+  isComboPack?: boolean;
+  comboPackId?: string;
+  comboPackName?: string;
+  comboItems?: ComboActivityItem[];
+  isPackageBundle?: boolean;
+  packageBundleItems?: Array<{
+    packageId: string;
+    packageName: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    unitOrDuration?: string;
+  }>;
 }
 
 export interface FoodVendor {

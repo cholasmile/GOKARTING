@@ -4,11 +4,12 @@ import {
   Utensils, Plus, Minus, ShoppingBag, Trash2, ArrowRight, XCircle, RotateCcw, AlertTriangle, 
   Check, X, QrCode, Calendar, TrendingUp, Clock, Coins, Receipt, Wallet, ArrowUpRight,
   Flame, Store, Coffee, ChevronRight, Layers, Tag, Edit, Eye, Filter, Package, Upload,
-  Sparkles, RefreshCw
+  Sparkles, RefreshCw, Boxes, Globe
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Activity, Payment, FoodOrder, MenuItem } from '../types';
 import { UnifiedTicketingFlow } from './UnifiedTicketingFlow';
+import { ComboPackSalesCounter } from './ComboPackSalesCounter';
 import { printTicket } from '../lib/printTicket';
 import { BulkAddMenuModal } from './BulkAddMenuModal';
 import { FoodStreetInventoryPanel } from './admin/FoodStreetInventoryPanel';
@@ -20,11 +21,11 @@ export const TicketingDashboard: React.FC = () => {
     activities, currentUser, payments, orders, menuItems, vendors, inventory,
     foodCart, addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder,
     addMenuItem, updateMenuItem, deleteMenuItem, adjustMenuItemStock, updateMenuItemStock,
-    cancelAndRefundTicket, counterUpiId
+    cancelAndRefundTicket, counterUpiId, comboPacks
   } = useAppContext();
 
   // Active top-level subtab
-  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'online_bookings' | 'cafe_pos' | 'cafe_menu' | 'history'>('new_booking');
+  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'combo_pos' | 'online_bookings' | 'cafe_pos' | 'cafe_menu' | 'history'>('new_booking');
   
   // ── 1. Activity Booking State ───────────────────────────────────────────
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
@@ -468,6 +469,33 @@ export const TicketingDashboard: React.FC = () => {
         </button>
 
         <button 
+          onClick={() => setActiveSubTab('combo_pos')}
+          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeSubTab === 'combo_pos' 
+              ? 'border-[#FFD700] text-[#FFD700] bg-amber-500/10 rounded-t-xl' 
+              : 'border-transparent text-[#94A3B8] hover:text-[#FFD700]'
+          }`}
+        >
+          <Boxes className="w-4 h-4 text-[#FFD700]" /> Multi-Activity Combo Packs
+          {comboPacks && comboPacks.filter(p => p.isActive).length > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-[#FFD700] text-[#0A0A0A] text-xs font-black">
+              {comboPacks.filter(p => p.isActive).length}
+            </span>
+          )}
+        </button>
+
+        <button 
+          onClick={() => setActiveSubTab('online_bookings')}
+          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeSubTab === 'online_bookings' 
+              ? 'border-sky-400 text-sky-400 bg-sky-500/10 rounded-t-xl' 
+              : 'border-transparent text-[#94A3B8] hover:text-sky-400'
+          }`}
+        >
+          <Globe className="w-4 h-4 text-sky-400" /> Online Bookings & Slots
+        </button>
+
+        <button 
           onClick={() => setActiveSubTab('cafe_pos')}
           className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeSubTab === 'cafe_pos' 
@@ -536,6 +564,25 @@ export const TicketingDashboard: React.FC = () => {
                 Proceed to Checkout ({selectedActivities.length})
               </button>
             </div>
+          </div>
+
+          {/* Quick link banner to Combo Packs */}
+          <div className="p-3.5 bg-gradient-to-r from-amber-950/40 via-[#0A0A0A] to-cyan-950/20 border border-[#FFD700]/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="p-2 rounded-xl bg-amber-400/10 text-amber-300 border border-amber-400/30">
+                <Boxes className="w-5 h-5" />
+              </span>
+              <div>
+                <p className="text-xs font-bold text-white">Guest wants a multi-activity package deal?</p>
+                <p className="text-[10px] text-[#94A3B8]">Curated combo packs offer huge savings across Go-Karting, Shooting, Simulators & more.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('combo_pos')}
+              className="px-4 py-1.5 bg-[#FFD700] text-[#0A0A0A] rounded-xl font-black text-xs uppercase tracking-wider hover:bg-white transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Boxes className="w-3.5 h-3.5" /> Open Combo Packs Counter <ArrowRight className="w-3 h-3" />
+            </button>
           </div>
 
           {/* Quick link banner to Cafe POS */}
@@ -660,6 +707,22 @@ export const TicketingDashboard: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 1.5 MULTI-ACTIVITY COMBO PACKS POS                                 */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeSubTab === 'combo_pos' && (
+        <ComboPackSalesCounter />
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 1.8 ONLINE BOOKINGS & CENTRAL CAPACITY MANAGER                     */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeSubTab === 'online_bookings' && (
+        <div className="animate-fade-in">
+          <OnlineBookingsManager staffName={currentUser?.name || 'Counter Staff'} />
         </div>
       )}
 
