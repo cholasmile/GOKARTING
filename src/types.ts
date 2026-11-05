@@ -292,6 +292,7 @@ export interface Activity {
 
 export interface Booking {
   id: string;
+  tokenNumber?: string | number;
   customerName: string; customerPhone?: string;
   customerEmail: string;
   activityId: string;
@@ -337,6 +338,7 @@ export interface Booking {
 export interface Ticket {
   id: string;
   bookingId: string;
+  tokenNumber?: string | number;
   customerName: string; customerPhone?: string;
   customerEmail: string;
   activityId: string;

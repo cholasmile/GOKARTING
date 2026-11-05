@@ -169,7 +169,8 @@ export const ComboPackSalesCounter: React.FC = () => {
     try {
       printTicket({
         receiptId: confirmedT?.id || `tkt-${confirmedB.id}`,
-        tokenNumber: confirmedT?.id || confirmedB.id,
+        tokenNumber: confirmedT?.tokenNumber || confirmedB.tokenNumber || confirmedT?.id || confirmedB.id,
+        timestamp: confirmedB.bookingDate || confirmedT?.updatedAt || confirmedB.updatedAt,
         activityName: checkoutPack.name,
         packageName: `Combo Pack (${checkoutQuantity} Pass${checkoutQuantity > 1 ? 'es' : ''})`,
         customerName: guestName.trim(),
@@ -627,7 +628,8 @@ export const ComboPackSalesCounter: React.FC = () => {
                   try {
                     printTicket({
                       receiptId: confirmedTicket?.id || `tkt-${confirmedBooking.id}`,
-                      tokenNumber: confirmedTicket?.id || confirmedBooking.id,
+                      tokenNumber: confirmedTicket?.tokenNumber || confirmedBooking.tokenNumber || confirmedTicket?.id || confirmedBooking.id,
+                      timestamp: confirmedBooking.bookingDate || confirmedTicket?.updatedAt || confirmedBooking.updatedAt,
                       activityName: confirmedBooking.activityName,
                       packageName: confirmedBooking.details,
                       customerName: confirmedBooking.customerName,

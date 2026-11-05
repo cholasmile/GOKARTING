@@ -1259,7 +1259,8 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                       onClick={() => {
                         printTicket({
                           receiptId: `TKT-${successBooking.booking.id}`,
-                          tokenNumber: successBooking.booking.id,
+                          tokenNumber: successBooking.ticket?.tokenNumber || successBooking.booking.tokenNumber || successBooking.booking.id,
+                          timestamp: successBooking.booking.bookingDate || successBooking.booking.updatedAt,
                           activityName: 'High-Octane Go-Karting',
                           packageName: activePackageItems.map(p => `${p.quantity}x ${p.name}`).join(' + '),
                           customerName,

@@ -50,7 +50,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
 
     printTicket({
       receiptId: `TKT-${receiptId}`,
-      tokenNumber: booking?.id || order?.id || receiptId,
+      tokenNumber: booking?.tokenNumber || order?.tokenNumber || booking?.id || order?.id || receiptId,
+      timestamp: booking?.bookingDate || order?.createdAt || payment?.timestamp,
       activityName,
       packageName: booking ? (booking.details || 'Standard Package') : undefined,
       customerName,

@@ -3009,6 +3009,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const bookingId = generateOfflineId('bk');
     const txId = generateOfflineId('tx');
     const timestamp = new Date().toISOString();
+    const todayStr = timestamp.split('T')[0];
+
+    // Daily sequential token number for tickets: 101, 102, 103...
+    const todayBookingsCount = bookings.filter(b => {
+      const bDate = b.bookingDate ? b.bookingDate.split('T')[0] : b.date;
+      return bDate === todayStr || bDate === data.date;
+    }).length;
+    const tokenNumber = (data as any).tokenNumber || (101 + todayBookingsCount);
 
     const isPending = data.paymentStatus === 'pending' || 
                       (data.paymentStatus === undefined && (data.paymentMethod === 'cash' || data.paymentMethod === 'upi'));
@@ -3025,6 +3033,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // 2. Create Booking (with snapshotted package price & discounts)
     const newBooking: Booking = {
       id: bookingId,
+      tokenNumber,
       customerName: data.customerName,
       customerEmail: data.customerEmail,
       customerPhone: data.customerPhone,
@@ -3062,6 +3071,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       newTicket = {
         id: `tkt-${bookingId}`,
         bookingId: bookingId,
+        tokenNumber,
         customerName: data.customerName,
         customerEmail: data.customerEmail,
         customerPhone: data.customerPhone,
@@ -3201,6 +3211,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       newTicket = {
         id: `tkt-${bookingId}`,
         bookingId: bookingId,
+        tokenNumber: booking.tokenNumber,
         customerName: booking.customerName,
         customerEmail: booking.customerEmail,
         customerPhone: booking.customerPhone,
@@ -3285,6 +3296,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       newTicket = {
         id: `tkt-${params.bookingId}`,
         bookingId: params.bookingId,
+        tokenNumber: booking.tokenNumber,
         customerName: booking.customerName,
         customerEmail: booking.customerEmail,
         customerPhone: booking.customerPhone,

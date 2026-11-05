@@ -17,6 +17,7 @@ export interface PrintTicketOptions {
   paymentMethod?: string;
   transactionId?: string;
   counterStaff?: string;
+  timestamp?: string;
 }
 
 export function printTicket(opts: PrintTicketOptions) {
@@ -38,12 +39,14 @@ export function printTicket(opts: PrintTicketOptions) {
     quantity,
     paymentMethod = 'CASH',
     transactionId,
-    counterStaff = 'Staff'
+    counterStaff = 'Staff',
+    timestamp
   } = opts;
 
-  const token = tokenNumber 
-    ? String(tokenNumber)
+  const rawToken = tokenNumber != null && String(tokenNumber).trim() !== ''
+    ? String(tokenNumber).trim()
     : (receiptId.startsWith('TKT-') ? receiptId.replace(/^TKT-/, '') : receiptId);
+  const token = rawToken.startsWith('#') ? rawToken : `#${rawToken}`;
 
   const displayPackage = packageName || (items.length > 0 && items[0].label !== activityName ? items[0].label : 'Standard Package');
 
@@ -79,6 +82,22 @@ export function printTicket(opts: PrintTicketOptions) {
     minute: '2-digit',
     hour12: true
   });
+
+  let timeStamp = now;
+  if (timestamp) {
+    try {
+      timeStamp = new Date(timestamp).toLocaleString('en-IN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      timeStamp = now;
+    }
+  }
 
   let visitDate = date;
   try {
@@ -326,13 +345,18 @@ export function printTicket(opts: PrintTicketOptions) {
 
       ${isFood ? `
       <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 5px 0; margin: 5px 0; text-align: center;">
-        <div style="font-size: 13px; font-weight: 800; letter-spacing: 0.5px;">TOKEN NO: <span style="font-size: 16px;">${token}</span></div>
-        <div style="font-size: 10px; font-weight: 700; margin-top: 2px;">INVOICE: ${receiptId} &bull; ${visitDate}</div>
+        <div style="font-size: 14px; font-weight: 800; letter-spacing: 0.5px;">TOKEN NO: <span style="font-size: 18px; font-family: monospace;">${token}</span></div>
+        <div style="font-size: 10px; font-weight: 700; margin-top: 2px;">TIME STAMP: <strong>${timeStamp}</strong></div>
+        <div style="font-size: 9.5px; font-weight: 600; color: #222; margin-top: 2px;">INVOICE: ${receiptId} &bull; ${visitDate}</div>
       </div>
       ` : `
       <div class="info-bar">
-        <span>TOKEN: <strong>${token}</strong></span>
+        <span>TOKEN NO: <strong>${token}</strong></span>
         <span class="status-tag ${statusBadgeClass}">${statusText}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 9.5px; font-weight: 700; margin-top: -3px; margin-bottom: 6px; padding-bottom: 3px; border-bottom: 1px solid #000; color: #111;">
+        <span>RECEIPT: ${receiptId}</span>
+        <span>TIME STAMP: ${timeStamp}</span>
       </div>
 
       <div class="pass-box">
@@ -340,7 +364,8 @@ export function printTicket(opts: PrintTicketOptions) {
           <div class="act-title">${activityName}</div>
           <div>Customer Name: <strong>${customerName}</strong></div>
           <div>Phone Number: <strong>${customerPhone || 'N/A'}</strong></div>
-          <div>Token Number: <strong>${token}</strong></div>
+          <div>Token No: <strong>${token}</strong></div>
+          <div>Time Stamp: <strong>${timeStamp}</strong></div>
           <div>Package: <strong>${displayPackage}</strong></div>
           <div>Passes: <strong>${quantity} Pax</strong></div>
           <div>Date/Slot: <strong>${visitDate}</strong> (${slot})</div>
@@ -390,7 +415,7 @@ export function printTicket(opts: PrintTicketOptions) {
       </div>
 
       <div class="footer-note">
-        ${isFood ? '<strong>Thank you for visiting DEUCE SPORTS GROUP!</strong>' : 'Valid for date/slot printed above. Non-refundable.<br/><strong>Thank you for visiting DEUCE SPORTS GROUP!</strong>'}
+        ${isFood ? `<strong>Thank you for visiting DEUCE SPORTS GROUP!</strong><div style="font-size: 8.5px; color: #555; margin-top: 3px;">Printed: ${timeStamp}</div>` : `Valid for date/slot printed above. Non-refundable.<br/><strong>Thank you for visiting DEUCE SPORTS GROUP!</strong><div style="font-size: 8.5px; color: #555; margin-top: 3px;">Printed: ${timeStamp}</div>`}
       </div>
     </div>
   </div>

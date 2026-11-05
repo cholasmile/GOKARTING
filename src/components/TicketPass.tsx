@@ -29,6 +29,33 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
   const sgst = Math.round((booking.totalAmount || 0) * 0.09 * 100) / 100;
   const totalAmount = booking.totalAmount || 0;
 
+  const rawToken = ticket.tokenNumber || booking.tokenNumber || ticket.id;
+  const tokenDisplay = typeof rawToken === 'string' && rawToken.startsWith('#') ? rawToken : `#${rawToken}`;
+
+  const rawTimestamp = booking.bookingDate || ticket.updatedAt || booking.updatedAt;
+  const formattedTimestamp = (() => {
+    if (rawTimestamp) {
+      try {
+        return new Date(rawTimestamp).toLocaleString('en-IN', {
+          day: '2-digit',
+          month: '2-digit',
+          year: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+      } catch {}
+    }
+    return new Date().toLocaleString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  })();
+
   return (
     <div className="bg-[#0B1120] rounded-3xl overflow-hidden border border-[#14F1D9]/30 shadow-2xl max-w-md mx-auto">
       
@@ -68,8 +95,11 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
               className="print:w-14 print:h-14 mx-auto"
             />
           </div>
-          <p className="text-xs font-sans font-bold text-black tracking-wider uppercase print:text-[10px]">
-            TOKEN NUMBER: {ticket.id}
+          <p className="text-xs font-sans font-black text-black tracking-wider uppercase print:text-[11px]">
+            TOKEN NO: {tokenDisplay}
+          </p>
+          <p className="text-[10px] font-sans font-semibold text-gray-700 tracking-tight print:text-[9px]">
+            TIME STAMP: {formattedTimestamp}
           </p>
         </div>
 
@@ -84,8 +114,12 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
             <span className="font-mono font-bold text-black truncate block">{ticket.customerPhone || booking.customerPhone || 'N/A'}</span>
           </div>
           <div>
-            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Token Number</span>
-            <span className="font-mono font-bold text-black truncate block">{ticket.id}</span>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Token No</span>
+            <span className="font-mono font-bold text-black truncate block">{tokenDisplay}</span>
+          </div>
+          <div>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Time Stamp</span>
+            <span className="font-mono font-bold text-black truncate block">{formattedTimestamp}</span>
           </div>
           <div>
             <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Activity</span>
@@ -98,6 +132,10 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
           <div>
             <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Passes / Date</span>
             <span className="font-bold text-black">{ticket.quantity} Pax &bull; {ticket.date}</span>
+          </div>
+          <div>
+            <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Time Slot</span>
+            <span className="font-bold text-black">{ticket.timeSlot || booking.timeSlot || 'Standard Session'}</span>
           </div>
         </div>
 
@@ -179,8 +217,9 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
         </div>
 
         {/* ── TERMS & GATE INSTRUCTIONS FOOTER ── */}
-        <div className="text-center text-xs text-black leading-tight space-y-1 print:text-[10px] font-bold">
+        <div className="text-center text-xs text-black leading-tight space-y-0.5 print:text-[10px] font-bold">
           <p className="font-black text-black">Valid only for date printed. Present QR code at gate scanner.</p>
+          <p className="text-[9px] text-gray-600 font-normal">Printed: {formattedTimestamp}</p>
         </div>
 
       </div>

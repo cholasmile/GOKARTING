@@ -3,6 +3,7 @@ import React from 'react';
 interface PrintReceiptProps {
   receiptId: string;
   tokenNumber?: string | number;
+  timestamp?: string;
   type: 'booking' | 'food';
   date: string;
   customerName: string;
@@ -16,6 +17,7 @@ interface PrintReceiptProps {
 export const PrintReceipt: React.FC<PrintReceiptProps> = ({ 
   receiptId, 
   tokenNumber,
+  timestamp,
   type, 
   date, 
   customerName, 
@@ -26,7 +28,33 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
   transactionId
 }) => {
   const totalQty = items.reduce((acc, item) => acc + item.qty, 0);
-  const token = tokenNumber ? String(tokenNumber) : receiptId;
+  const rawToken = tokenNumber != null && String(tokenNumber).trim() !== ''
+    ? String(tokenNumber).trim()
+    : receiptId;
+  const token = rawToken.startsWith('#') ? rawToken : `#${rawToken}`;
+
+  const formattedTimestamp = (() => {
+    const raw = timestamp || date;
+    try {
+      return new Date(raw).toLocaleString('en-IN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return new Date().toLocaleString('en-IN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    }
+  })();
 
   return (
     <div 
@@ -42,23 +70,20 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
         </div>
       </div>
 
-      {/* Meta Bar - Only for Bookings */}
-      {type !== 'food' && (
-        <>
-          <div className="flex justify-between items-center mb-1.5 text-[11px] font-semibold border-b border-solid border-black pb-1">
-            <span>TOKEN: <strong className="font-bold">{token}</strong></span>
-            <span>{new Date(date).toLocaleDateString()}</span>
-          </div>
+      {/* Meta Bar */}
+      <div className="flex justify-between items-center mb-1.5 text-[11px] font-semibold border-b border-solid border-black pb-1">
+        <span>TOKEN NO: <strong className="font-bold">{token}</strong></span>
+        <span>TIME STAMP: <strong className="font-bold">{formattedTimestamp}</strong></span>
+      </div>
 
-          <div className="mb-1.5 text-[11px] font-semibold space-y-0.5">
-            <p>Customer Name: <strong className="font-bold">{customerName}</strong> ({totalQty} Pax)</p>
-            <p>Customer Phone: <strong className="font-bold">{customerPhone || 'N/A'}</strong></p>
-            <p>Token Number: <strong className="font-bold">{token}</strong></p>
-            {items[0] && <p>Package: <strong className="font-bold">{items[0].name}</strong></p>}
-            <p>Type: <strong className="uppercase font-bold">{type}</strong></p>
-          </div>
-        </>
-      )}
+      <div className="mb-1.5 text-[11px] font-semibold space-y-0.5">
+        <p>Customer Name: <strong className="font-bold">{customerName}</strong> {type !== 'food' ? `(${totalQty} Pax)` : ''}</p>
+        {customerPhone && <p>Customer Phone: <strong className="font-bold">{customerPhone}</strong></p>}
+        <p>Token No: <strong className="font-bold">{token}</strong></p>
+        <p>Time Stamp: <strong className="font-bold">{formattedTimestamp}</strong></p>
+        {items[0] && type !== 'food' && <p>Package: <strong className="font-bold">{items[0].name}</strong></p>}
+        <p>Type: <strong className="uppercase font-bold">{type}</strong></p>
+      </div>
 
       {/* Table */}
       <table className="w-full text-[11px] mb-1.5 border-collapse">
@@ -101,7 +126,8 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
           <div className="text-[10px] font-semibold">
             <p className="font-bold text-[11px] uppercase">ENTRY PASS</p>
             <p>Passes: <strong>{totalQty} Pax</strong></p>
-            <p>Token: <strong>{token}</strong></p>
+            <p>Token No: <strong>{token}</strong></p>
+            <p className="text-[9px] text-gray-700">Time Stamp: <strong>{formattedTimestamp}</strong></p>
           </div>
           <div className="w-10 h-10 text-center flex-shrink-0">
             <svg className="w-full h-full text-black" viewBox="0 0 100 100">
@@ -117,6 +143,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
       <div className="text-center mt-1.5 pt-1.5 border-t border-solid border-black text-[9.5px] font-semibold space-y-0.5">
         {type !== 'food' && <p>Valid for date printed above. Non-refundable.</p>}
         <p className="font-bold">Thank you for visiting DEUCE SPORTS GROUP!</p>
+        <p className="text-[8.5px] text-gray-600 font-normal">Printed: {formattedTimestamp}</p>
       </div>
     </div>
   );

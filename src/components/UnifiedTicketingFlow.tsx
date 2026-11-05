@@ -1513,7 +1513,8 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
                     printTicket({
                       receiptId: `TKT-${confirmedBooking.id}`,
-                      tokenNumber: confirmedTicket?.id || confirmedBooking.id,
+                      tokenNumber: confirmedTicket?.tokenNumber || confirmedBooking.tokenNumber || confirmedTicket?.id || confirmedBooking.id,
+                      timestamp: confirmedBooking.bookingDate || confirmedTicket?.updatedAt || confirmedBooking.updatedAt,
                       activityName: combinedActivityNames || confirmedBooking.activityName,
                       packageName: confirmedBooking.details || 'Standard Package',
                       customerName: confirmedBooking.customerName,
@@ -1580,7 +1581,8 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
 
                 printTicket({
                   receiptId: `TKT-${confirmedBooking.id}`,
-                  tokenNumber: confirmedTicket?.id || confirmedBooking.id,
+                  tokenNumber: confirmedTicket?.tokenNumber || confirmedBooking.tokenNumber || confirmedTicket?.id || confirmedBooking.id,
+                  timestamp: confirmedBooking.bookingDate || confirmedTicket?.updatedAt || confirmedBooking.updatedAt,
                   activityName: combinedActivityNames || confirmedBooking.activityName,
                   packageName: confirmedBooking.details || 'Standard Package',
                   customerName: confirmedBooking.customerName,

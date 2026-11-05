@@ -160,6 +160,7 @@ export const TicketingDashboard: React.FC = () => {
       printTicket({
         receiptId: order.invoiceNumber || order.id,
         tokenNumber: order.tokenNumber || order.id,
+        timestamp: order.createdAt,
         activityName: 'DEUCE CAFE & FOOD STREET',
         packageName: 'Food Street Dining',
         customerName: foodCustomerName || 'Walk-in Guest',
@@ -342,7 +343,8 @@ export const TicketingDashboard: React.FC = () => {
       
       printTicket({
         receiptId: p.orderId || p.id,
-        tokenNumber: p.orderId || p.id,
+        tokenNumber: matchingOrder?.tokenNumber || p.orderId || p.id,
+        timestamp: p.timestamp || matchingOrder?.createdAt,
         activityName: 'DEUCE CAFE & FOOD STREET',
         packageName: 'Food Street Dining',
         customerName: p.customerName || 'Walk-in Guest',
@@ -358,9 +360,13 @@ export const TicketingDashboard: React.FC = () => {
       return;
     }
 
+    const matchingTicket = tickets.find(t => t.id === p.ticketId || t.bookingId === p.bookingId);
+    const matchingBooking = bookings.find(b => b.id === p.bookingId);
+
     printTicket({
       receiptId: p.ticketId || `TKT-${p.bookingId}`,
-      tokenNumber: p.ticketId || p.bookingId,
+      tokenNumber: matchingTicket?.tokenNumber || matchingBooking?.tokenNumber || p.ticketId || p.bookingId,
+      timestamp: p.timestamp || matchingBooking?.bookingDate || matchingTicket?.updatedAt,
       activityName: p.activityName || 'Adventure Activity',
       packageName: p.packageName || p.details || p.activityName || 'Standard Package',
       customerName: p.customerName || 'Walk-in Guest',
@@ -1796,6 +1802,7 @@ export const TicketingDashboard: React.FC = () => {
                   printTicket({
                     receiptId: generatedBillOrder.invoiceNumber || generatedBillOrder.id,
                     tokenNumber: generatedBillOrder.tokenNumber || generatedBillOrder.id,
+                    timestamp: generatedBillOrder.createdAt,
                     activityName: 'DEUCE CAFE & FOOD STREET',
                     packageName: 'Food Street Dining',
                     customerName: generatedBillOrder.customerName,
@@ -1867,6 +1874,7 @@ export const TicketingDashboard: React.FC = () => {
                       printTicket({
                         receiptId: refundSuccessReceipt.receiptId,
                         tokenNumber: refundSuccessReceipt.receiptId,
+                        timestamp: new Date().toISOString(),
                         activityName: selectedRefundPayment.activityName || 'Cancelled Activity',
                         packageName: 'REFUND VOUCHER',
                         customerName: selectedRefundPayment.customerName || 'Walk-in Guest',
