@@ -332,7 +332,14 @@ export interface Booking {
     unitPrice: number;
     subtotal: number;
     unitOrDuration?: string;
+    duration?: string;
+    laps?: number;
+    shots?: number;
   }>;
+  unitOrDuration?: string;
+  duration?: string;
+  laps?: number;
+  shots?: number;
 }
 
 export interface Ticket {
@@ -372,7 +379,14 @@ export interface Ticket {
     unitPrice: number;
     subtotal: number;
     unitOrDuration?: string;
+    duration?: string;
+    laps?: number;
+    shots?: number;
   }>;
+  unitOrDuration?: string;
+  duration?: string;
+  laps?: number;
+  shots?: number;
 }
 
 export interface FoodVendor {

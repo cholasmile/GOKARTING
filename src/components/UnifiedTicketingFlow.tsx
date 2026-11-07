@@ -128,17 +128,25 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
   const selectedPackageItems = activities.flatMap(act => {
     if (!act.packages || act.packages.length === 0) return [];
     return act.packages
-      .map(pkg => ({
-        activityId: act.id,
-        activityName: act.name,
-        packageId: pkg.id,
-        packageName: pkg.name,
-        unitPrice: pkg.price,
-        description: pkg.description,
-        unitOrDuration: pkg.unitOrDuration || '',
-        quantity: packageQuantities[pkg.id] || 0,
-        subtotal: pkg.price * (packageQuantities[pkg.id] || 0)
-      }))
+      .map(pkg => {
+        const lapsMatch = pkg.unitOrDuration?.match(/(?:^|[^\w])(\d+)\s*laps?\b/i);
+        const shotsMatch = pkg.unitOrDuration?.match(/(?:^|[^\w])(\d+)\s*(?:shots?|pellets?)\b/i);
+        const durMatch = pkg.unitOrDuration?.match(/(?:^|[^\w])(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i);
+        return {
+          activityId: act.id,
+          activityName: act.name,
+          packageId: pkg.id,
+          packageName: pkg.name,
+          unitPrice: pkg.price,
+          description: pkg.description,
+          unitOrDuration: pkg.unitOrDuration || '',
+          laps: pkg.laps ?? (lapsMatch ? Number(lapsMatch[1]) : undefined),
+          shots: pkg.shots ?? (shotsMatch ? Number(shotsMatch[1]) : undefined),
+          duration: pkg.duration || (durMatch ? durMatch[1].trim() : undefined),
+          quantity: packageQuantities[pkg.id] || 0,
+          subtotal: pkg.price * (packageQuantities[pkg.id] || 0)
+        };
+      })
       .filter(item => item.quantity > 0);
   });
 
@@ -339,7 +347,10 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
         quantity: p.quantity,
         unitPrice: p.unitPrice,
         subtotal: p.subtotal,
-        unitOrDuration: (p as any).unitOrDuration || ''
+        unitOrDuration: (p as any).unitOrDuration || '',
+        laps: p.laps,
+        shots: p.shots,
+        duration: p.duration
       })),
     });
 
@@ -399,7 +410,10 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
         quantity: p.quantity,
         unitPrice: p.unitPrice,
         subtotal: p.subtotal,
-        unitOrDuration: (p as any).unitOrDuration || ''
+        unitOrDuration: (p as any).unitOrDuration || '',
+        laps: p.laps,
+        shots: p.shots,
+        duration: p.duration
       })),
     });
 
@@ -461,7 +475,10 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
         quantity: p.quantity,
         unitPrice: p.unitPrice,
         subtotal: p.subtotal,
-        unitOrDuration: (p as any).unitOrDuration || ''
+        unitOrDuration: (p as any).unitOrDuration || '',
+        laps: p.laps,
+        shots: p.shots,
+        duration: p.duration
       })),
     });
 
@@ -521,7 +538,10 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
         quantity: p.quantity,
         unitPrice: p.unitPrice,
         subtotal: p.subtotal,
-        unitOrDuration: (p as any).unitOrDuration || ''
+        unitOrDuration: (p as any).unitOrDuration || '',
+        laps: p.laps,
+        shots: p.shots,
+        duration: p.duration
       })),
     });
 
@@ -1505,11 +1525,30 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   <button onClick={() => {
                     const pd = getPaymentDetails(confirmedBooking.id);
                     const receiptItems = selectedPackageItems.length > 0
-                      ? selectedPackageItems.map(item => ({
-                          label: `${item.quantity}x ${item.packageName}`,
-                          value: `₹${item.subtotal.toFixed(2)}`
-                        }))
+                      ? selectedPackageItems.map(item => {
+                          const itemSpecs = [
+                            item.laps ? `${item.laps} Laps` : '',
+                            item.shots ? `${item.shots} Shots` : '',
+                            item.duration || '',
+                            item.unitOrDuration || ''
+                          ].filter(Boolean);
+                          const spec = itemSpecs.length > 0 ? Array.from(new Set(itemSpecs)).join(' • ') : undefined;
+                          return {
+                            label: `${item.quantity}x ${item.packageName}`,
+                            value: `₹${item.subtotal.toFixed(2)}`,
+                            spec,
+                            unitOrDuration: item.unitOrDuration,
+                            laps: item.laps,
+                            shots: item.shots,
+                            duration: item.duration
+                          };
+                        })
                       : [{ label: confirmedBooking.details || confirmedBooking.activityName, value: `₹${confirmedBooking.totalAmount.toFixed(2)}` }];
+
+                    const totalLaps = selectedPackageItems.reduce((acc, i) => acc + ((i.laps || 0) * i.quantity), 0);
+                    const totalShots = selectedPackageItems.reduce((acc, i) => acc + ((i.shots || 0) * i.quantity), 0);
+                    const mainDuration = selectedPackageItems.find(i => i.duration)?.duration;
+                    const mainUnit = selectedPackageItems.find(i => i.unitOrDuration)?.unitOrDuration;
 
                     printTicket({
                       receiptId: `TKT-${confirmedBooking.id}`,
@@ -1530,7 +1569,11 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                       quantity: totalQuantity,
                       paymentMethod: pd.paymentMethod || 'CASH',
                       transactionId: pd.transactionId,
-                      counterStaff: currentUser?.name || 'Counter Staff'
+                      counterStaff: currentUser?.name || 'Counter Staff',
+                      laps: totalLaps > 0 ? totalLaps : (confirmedBooking.laps || confirmedTicket?.laps),
+                      shots: totalShots > 0 ? totalShots : (confirmedBooking.shots || confirmedTicket?.shots),
+                      duration: mainDuration || confirmedBooking.duration || confirmedTicket?.duration,
+                      unitOrDuration: mainUnit || confirmedBooking.unitOrDuration || confirmedTicket?.unitOrDuration
                     });
                   }} className="btn-glow px-6 py-3 rounded-xl font-bold flex items-center gap-2">
                     <Printer className="w-4 h-4" /> Print Gate Pass & Receipt
@@ -1573,11 +1616,30 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
               <button onClick={() => {
                 const pd = getPaymentDetails(confirmedBooking.id);
                 const receiptItems = selectedPackageItems.length > 0
-                  ? selectedPackageItems.map(item => ({
-                      label: `${item.quantity}x ${item.packageName}`,
-                      value: `₹${item.subtotal.toFixed(2)}`
-                    }))
+                  ? selectedPackageItems.map(item => {
+                      const itemSpecs = [
+                        item.laps ? `${item.laps} Laps` : '',
+                        item.shots ? `${item.shots} Shots` : '',
+                        item.duration || '',
+                        item.unitOrDuration || ''
+                      ].filter(Boolean);
+                      const spec = itemSpecs.length > 0 ? Array.from(new Set(itemSpecs)).join(' • ') : undefined;
+                      return {
+                        label: `${item.quantity}x ${item.packageName}`,
+                        value: `₹${item.subtotal.toFixed(2)}`,
+                        spec,
+                        unitOrDuration: item.unitOrDuration,
+                        laps: item.laps,
+                        shots: item.shots,
+                        duration: item.duration
+                      };
+                    })
                   : [{ label: confirmedBooking.details || confirmedBooking.activityName, value: `₹${confirmedBooking.totalAmount.toFixed(2)}` }];
+
+                const totalLaps = selectedPackageItems.reduce((acc, i) => acc + ((i.laps || 0) * i.quantity), 0);
+                const totalShots = selectedPackageItems.reduce((acc, i) => acc + ((i.shots || 0) * i.quantity), 0);
+                const mainDuration = selectedPackageItems.find(i => i.duration)?.duration;
+                const mainUnit = selectedPackageItems.find(i => i.unitOrDuration)?.unitOrDuration;
 
                 printTicket({
                   receiptId: `TKT-${confirmedBooking.id}`,
@@ -1598,7 +1660,11 @@ export const UnifiedTicketingFlow: React.FC<Props> = ({ activities, onCancel }) 
                   quantity: totalQuantity,
                   paymentMethod: pd.paymentMethod || 'CASH',
                   transactionId: pd.transactionId,
-                  counterStaff: currentUser?.name || 'Counter Staff'
+                  counterStaff: currentUser?.name || 'Counter Staff',
+                  laps: totalLaps > 0 ? totalLaps : (confirmedBooking.laps || confirmedTicket?.laps),
+                  shots: totalShots > 0 ? totalShots : (confirmedBooking.shots || confirmedTicket?.shots),
+                  duration: mainDuration || confirmedBooking.duration || confirmedTicket?.duration,
+                  unitOrDuration: mainUnit || confirmedBooking.unitOrDuration || confirmedTicket?.unitOrDuration
                 });
               }} className="btn-glow px-6 py-3 rounded-xl font-bold flex items-center gap-2">
                 <Printer className="w-4 h-4" /> Print Single Gate Pass & Receipt

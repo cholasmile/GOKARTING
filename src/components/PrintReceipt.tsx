@@ -9,9 +9,13 @@ interface PrintReceiptProps {
   customerName: string;
   customerPhone?: string;
   totalAmount: number;
-  items: { name: string; qty: number; price: number }[];
+  items: { name: string; qty: number; price: number; spec?: string; laps?: number | string; shots?: number | string; duration?: string }[];
   paymentMethod?: string;
   transactionId?: string;
+  laps?: number | string;
+  shots?: number | string;
+  duration?: string;
+  unitOrDuration?: string;
 }
 
 export const PrintReceipt: React.FC<PrintReceiptProps> = ({ 
@@ -25,7 +29,11 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
   totalAmount, 
   items,
   paymentMethod,
-  transactionId
+  transactionId,
+  laps,
+  shots,
+  duration,
+  unitOrDuration
 }) => {
   const totalQty = items.reduce((acc, item) => acc + item.qty, 0);
   const rawToken = tokenNumber != null && String(tokenNumber).trim() !== ''
@@ -56,6 +64,27 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
     }
   })();
 
+  // Extract specs from text if not explicitly provided
+  const combinedText = [
+    unitOrDuration,
+    duration,
+    ...items.map(i => `${i.name} ${i.spec || ''}`)
+  ].filter(Boolean).join(' | ');
+
+  const lapsMatch = combinedText.match(/(?:^|[^\w])(\d+)\s*(?:-\s*)?laps?\b/i) || combinedText.match(/\blaps?\s*[:=-]?\s*(\d+)\b/i);
+  const shotsMatch = combinedText.match(/(?:^|[^\w])(\d+)\s*(?:-\s*)?(?:shots?|pellets?|rounds?)\b/i) || combinedText.match(/\b(?:shots?|pellets?|rounds?)\s*[:=-]?\s*(\d+)\b/i);
+  const durMatch = combinedText.match(/(?:^|[^\w])(\d+\s*(?:-\s*)?(?:mins?|minutes?|hrs?|hours?))\b/i) || combinedText.match(/\b(?:duration|time)\s*[:=-]?\s*(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i);
+  const rideMatch = combinedText.match(/(?:^|[^\w])(\d+\s*(?:-\s*)?rides?)\b/i);
+
+  const rawLaps = laps != null ? laps : (lapsMatch ? Number(lapsMatch[1] || lapsMatch[2]) : undefined);
+  const lapsDisplay = rawLaps != null ? `${rawLaps} Lap${Number(rawLaps) !== 1 ? 's' : ''}` : undefined;
+
+  const rawShots = shots != null ? shots : (shotsMatch ? Number(shotsMatch[1] || shotsMatch[2]) : undefined);
+  const shotsDisplay = rawShots != null ? `${rawShots} Shot${Number(rawShots) !== 1 ? 's' : ''}` : undefined;
+
+  const durationDisplay = duration?.trim() || (durMatch ? durMatch[1].trim() : undefined);
+  const unitDisplay = unitOrDuration?.trim() || (rideMatch ? rideMatch[1].trim() : undefined);
+
   return (
     <div 
       id={`print-receipt-${receiptId}`} 
@@ -82,6 +111,10 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
         <p>Token No: <strong className="font-bold">{token}</strong></p>
         <p>Time Stamp: <strong className="font-bold">{formattedTimestamp}</strong></p>
         {items[0] && type !== 'food' && <p>Package: <strong className="font-bold">{items[0].name}</strong></p>}
+        {type !== 'food' && lapsDisplay && <p>No. of Laps: <strong className="font-bold">{lapsDisplay}</strong></p>}
+        {type !== 'food' && durationDisplay && <p>Time / Duration: <strong className="font-bold">{durationDisplay}</strong></p>}
+        {type !== 'food' && shotsDisplay && <p>No. of Shots: <strong className="font-bold">{shotsDisplay}</strong></p>}
+        {type !== 'food' && (!lapsDisplay && !durationDisplay && !shotsDisplay && unitDisplay) && <p>Entitlement: <strong className="font-bold">{unitDisplay}</strong></p>}
         <p>Type: <strong className="uppercase font-bold">{type}</strong></p>
       </div>
 
@@ -89,7 +122,7 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
       <table className="w-full text-[11px] mb-1.5 border-collapse">
         <thead>
           <tr className="border-b border-black text-left font-bold">
-            <th className="py-0.5">{type === 'food' ? 'Item Name' : 'Ticket Split Up'}</th>
+            <th className="py-0.5">{type === 'food' ? 'Item Name' : 'Ticket Split Up & Specs'}</th>
             <th className="text-center py-0.5">Qty</th>
             <th className="text-right py-0.5">Price</th>
           </tr>
@@ -97,7 +130,10 @@ export const PrintReceipt: React.FC<PrintReceiptProps> = ({
         <tbody>
           {items.map((item, idx) => (
             <tr key={idx} className="border-b border-gray-200">
-              <td className="py-0.5 truncate max-w-[1.2in] font-semibold">{item.name}</td>
+              <td className="py-0.5 max-w-[1.4in] font-semibold">
+                <div>{item.name}</div>
+                {item.spec && <div className="text-[9px] text-gray-700 font-normal">▪ {item.spec}</div>}
+              </td>
               <td className="text-center py-0.5 font-semibold">{item.qty}</td>
               <td className="text-right py-0.5 font-mono font-bold">₹{item.price.toFixed(2)}</td>
             </tr>

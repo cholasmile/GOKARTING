@@ -1,3 +1,13 @@
+export interface PrintTicketItem {
+  label: string;
+  value: string;
+  spec?: string;
+  unitOrDuration?: string;
+  laps?: number | string;
+  shots?: number | string;
+  duration?: string;
+}
+
 export interface PrintTicketOptions {
   receiptId: string;
   tokenNumber?: string | number;
@@ -7,7 +17,7 @@ export interface PrintTicketOptions {
   customerPhone?: string;
   date: string;
   slot: string;
-  items: { label: string; value: string }[];
+  items: PrintTicketItem[];
   subtotalAmount?: number;
   discountPercentage?: number;
   discountAmount?: number;
@@ -18,6 +28,43 @@ export interface PrintTicketOptions {
   transactionId?: string;
   counterStaff?: string;
   timestamp?: string;
+  unitOrDuration?: string;
+  duration?: string;
+  laps?: number | string;
+  shots?: number | string;
+}
+
+function extractSpecFromText(text: string) {
+  if (!text) return {};
+  const res: { laps?: string; shots?: string; duration?: string; unit?: string } = {};
+
+  // Laps: e.g. "5 Laps", "5-lap", "Laps: 10"
+  const lapsMatch = text.match(/(?:^|[^\w])(\d+)\s*(?:-\s*)?laps?\b/i) || text.match(/\blaps?\s*[:=-]?\s*(\d+)\b/i);
+  if (lapsMatch) {
+    const n = lapsMatch[1] || lapsMatch[2];
+    res.laps = `${n} Lap${Number(n) !== 1 ? 's' : ''}`;
+  }
+
+  // Shots: e.g. "15 shots", "10 Shots", "50 pellets", "Shots: 30"
+  const shotsMatch = text.match(/(?:^|[^\w])(\d+)\s*(?:-\s*)?(?:shots?|pellets?|rounds?)\b/i) || text.match(/\b(?:shots?|pellets?|rounds?)\s*[:=-]?\s*(\d+)\b/i);
+  if (shotsMatch) {
+    const n = shotsMatch[1] || shotsMatch[2];
+    res.shots = `${n} Shot${Number(n) !== 1 ? 's' : ''}`;
+  }
+
+  // Duration / Time: e.g. "10 mins", "15 Mins", "30 minutes", "1 hour", "1 hr", "Duration: 15 Mins"
+  const durMatch = text.match(/(?:^|[^\w])(\d+\s*(?:-\s*)?(?:mins?|minutes?|hrs?|hours?))\b/i) || text.match(/\b(?:duration|time)\s*[:=-]?\s*(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i);
+  if (durMatch) {
+    res.duration = durMatch[1].trim();
+  }
+
+  // Ride unit: e.g. "1 ride", "2 rides"
+  const rideMatch = text.match(/(?:^|[^\w])(\d+\s*(?:-\s*)?rides?)\b/i);
+  if (rideMatch) {
+    res.unit = rideMatch[1].trim();
+  }
+
+  return res;
 }
 
 export function printTicket(opts: PrintTicketOptions) {
@@ -40,7 +87,11 @@ export function printTicket(opts: PrintTicketOptions) {
     paymentMethod = 'CASH',
     transactionId,
     counterStaff = 'Staff',
-    timestamp
+    timestamp,
+    unitOrDuration,
+    duration,
+    laps,
+    shots
   } = opts;
 
   const rawToken = tokenNumber != null && String(tokenNumber).trim() !== ''
@@ -126,8 +177,101 @@ export function printTicket(opts: PrintTicketOptions) {
     </svg>
   `;
 
-  const itemRows = items.length > 0 
-    ? items.map(it => `<tr><td class="td-name">${it.label}</td><td class="td-val">${it.value}</td></tr>`).join('')
+  // Combine all sources of specs:
+  const combinedText = [
+    unitOrDuration,
+    duration,
+    packageName,
+    displayPackage,
+    ...items.map(i => `${i.label} ${i.spec || ''} ${i.unitOrDuration || ''}`)
+  ].filter(Boolean).join(' | ');
+
+  const textSpecs = extractSpecFromText(combinedText);
+
+  // Determine laps:
+  let lapsText: string | undefined = undefined;
+  if (laps != null && String(laps).trim() !== '') {
+    const num = Number(laps);
+    if (!isNaN(num)) {
+      lapsText = quantity > 1 && num < 100
+        ? `${num} Laps / Pax (${num * quantity} Total)`
+        : `${num} Lap${num !== 1 ? 's' : ''}`;
+    } else {
+      lapsText = String(laps).trim();
+    }
+  } else if (textSpecs.laps) {
+    const num = Number(textSpecs.laps.replace(/\D/g, ''));
+    if (!isNaN(num) && quantity > 1 && num < 100) {
+      lapsText = `${num} Laps / Pax (${num * quantity} Total)`;
+    } else {
+      lapsText = textSpecs.laps;
+    }
+  }
+
+  // Determine shots:
+  let shotsText: string | undefined = undefined;
+  if (shots != null && String(shots).trim() !== '') {
+    const num = Number(shots);
+    if (!isNaN(num)) {
+      shotsText = quantity > 1
+        ? `${num} Shots / Shooter (${num * quantity} Total)`
+        : `${num} Shot${num !== 1 ? 's' : ''}`;
+    } else {
+      shotsText = String(shots).trim();
+    }
+  } else if (textSpecs.shots) {
+    const num = Number(textSpecs.shots.replace(/\D/g, ''));
+    if (!isNaN(num) && quantity > 1) {
+      shotsText = `${num} Shots / Shooter (${num * quantity} Total)`;
+    } else {
+      shotsText = textSpecs.shots;
+    }
+  }
+
+  // Determine time / duration:
+  const durationText: string | undefined = duration?.trim() || textSpecs.duration;
+
+  // Determine custom unit:
+  const unitText: string | undefined = unitOrDuration?.trim() || textSpecs.unit;
+
+  // Build high-visibility spec pills for the session specifications bar:
+  const specsList: string[] = [];
+  if (lapsText) specsList.push(`🏁 LAPS: ${lapsText}`);
+  if (durationText) specsList.push(`⏱ TIME: ${durationText}`);
+  if (shotsText) specsList.push(`🎯 SHOTS: ${shotsText}`);
+  if (!lapsText && !durationText && !shotsText && unitText) specsList.push(`⭐ SPEC: ${unitText}`);
+
+  const formattedItems = items.map(it => {
+    let spec = it.spec;
+    if (!spec) {
+      const itText = `${it.label} ${it.unitOrDuration || ''}`;
+      const ispecs = extractSpecFromText(itText);
+      const parts = [
+        it.laps ? `${it.laps} Laps` : ispecs.laps,
+        it.duration || ispecs.duration,
+        it.shots ? `${it.shots} Shots` : ispecs.shots,
+        it.unitOrDuration || ispecs.unit
+      ].filter(Boolean);
+      if (parts.length > 0) {
+        spec = Array.from(new Set(parts)).join(' • ');
+      }
+    }
+    return {
+      ...it,
+      spec
+    };
+  });
+
+  const itemRows = formattedItems.length > 0 
+    ? formattedItems.map(it => `
+        <tr>
+          <td class="td-name">
+            <div>${it.label}</div>
+            ${it.spec ? `<div style="font-size: 9.5px; font-weight: 700; color: #222; margin-top: 1px;">▪ ${it.spec}</div>` : ''}
+          </td>
+          <td class="td-val">${it.value}</td>
+        </tr>
+      `).join('')
     : `<tr><td class="td-name">${activityName} (${quantity} Pax)</td><td class="td-val">₹${netTaxable.toFixed(2)}</td></tr>`;
 
   const html = `<!DOCTYPE html>
@@ -275,6 +419,43 @@ export function printTicket(opts: PrintTicketOptions) {
       margin: 0 auto;
     }
 
+    /* ── SESSION SPECIFICATIONS / ENTITLEMENTS ── */
+    .specs-bar {
+      border: 1.5px solid #000;
+      border-radius: 4px;
+      padding: 3px 6px;
+      margin-bottom: 6px;
+      background: #fafafa;
+      text-align: center;
+    }
+    .specs-bar-title {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px dashed #000;
+      padding-bottom: 2px;
+      margin-bottom: 3px;
+      color: #000;
+    }
+    .specs-bar-content {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 4px;
+      font-size: 10.5px;
+      font-weight: 800;
+    }
+    .spec-tag {
+      display: inline-block;
+      padding: 1px 6px;
+      border: 1px solid #000;
+      border-radius: 3px;
+      background: #ffffff;
+      color: #000000;
+      font-family: monospace;
+    }
+
     /* ── ITEMS & SUMMARY TABLE ── */
     .items-table {
       width: 100%;
@@ -369,26 +550,36 @@ export function printTicket(opts: PrintTicketOptions) {
           <div>Package: <strong>${displayPackage}</strong></div>
           <div>Passes: <strong>${quantity} Pax</strong></div>
           <div>Date/Slot: <strong>${visitDate}</strong> (${slot})</div>
+          ${lapsText ? `<div style="margin-top: 2px;">No. of Laps: <strong style="font-size: 11.5px; font-weight: 800;">${lapsText}</strong></div>` : ''}
+          ${durationText ? `<div style="margin-top: 2px;">Time / Duration: <strong style="font-size: 11.5px; font-weight: 800;">${durationText}</strong></div>` : ''}
+          ${shotsText ? `<div style="margin-top: 2px;">No. of Shots: <strong style="font-size: 11.5px; font-weight: 800;">${shotsText}</strong></div>` : ''}
+          ${(!lapsText && !durationText && !shotsText && unitText) ? `<div style="margin-top: 2px;">Entitlement: <strong style="font-size: 11.5px; font-weight: 800;">${unitText}</strong></div>` : ''}
         </div>
         <div class="qr-box">
           ${qrSvg}
         </div>
       </div>
+
+      ${(!isFood && specsList.length > 0) ? `
+      <div class="specs-bar">
+        <div class="specs-bar-title">SESSION SPECIFICATIONS &amp; ENTITLEMENTS</div>
+        <div class="specs-bar-content">
+          ${specsList.map(s => `<span class="spec-tag">${s}</span>`).join(' ')}
+        </div>
+      </div>
+      ` : ''}
       `}
 
       <!-- Menu Items and Price Table -->
       <table class="items-table">
         <thead>
           <tr>
-            <th>${isFood ? 'Item Name' : 'Ticket Split Up'}</th>
+            <th>${isFood ? 'Item Name' : 'Ticket Split Up &amp; Specs'}</th>
             <th style="text-align: right;">Price</th>
           </tr>
         </thead>
         <tbody>
-          ${items.length > 0 
-            ? items.map(it => `<tr><td class="td-name">${it.label}</td><td class="td-val">${it.value}</td></tr>`).join('')
-            : `<tr><td class="td-name">${activityName}</td><td class="td-val">₹${totalAmount.toFixed(2)}</td></tr>`
-          }
+          ${itemRows}
         </tbody>
       </table>
     </div>

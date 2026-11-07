@@ -56,6 +56,43 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
     });
   })();
 
+  // Extract Laps, Shots, Duration/Time, and Entitlements
+  const combinedSpecsText = [
+    ticket.unitOrDuration,
+    booking?.unitOrDuration,
+    ticket.duration,
+    booking?.duration,
+    ticket.packageName,
+    booking?.packageName,
+    ticket.ticketType,
+    booking?.details,
+    ticket.activityName
+  ].filter(Boolean).join(' | ');
+
+  const lapsMatch = combinedSpecsText.match(/(?:^|[^\w])(\d+)\s*(?:-\s*)?laps?\b/i) || combinedSpecsText.match(/\blaps?\s*[:=-]?\s*(\d+)\b/i);
+  const shotsMatch = combinedSpecsText.match(/(?:^|[^\w])(\d+)\s*(?:-\s*)?(?:shots?|pellets?|rounds?)\b/i) || combinedSpecsText.match(/\b(?:shots?|pellets?|rounds?)\s*[:=-]?\s*(\d+)\b/i);
+  const durMatch = combinedSpecsText.match(/(?:^|[^\w])(\d+\s*(?:-\s*)?(?:mins?|minutes?|hrs?|hours?))\b/i) || combinedSpecsText.match(/\b(?:duration|time)\s*[:=-]?\s*(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i);
+  const rideMatch = combinedSpecsText.match(/(?:^|[^\w])(\d+\s*(?:-\s*)?rides?)\b/i);
+
+  const rawLaps = ticket.laps != null ? ticket.laps : (booking?.laps != null ? booking.laps : (lapsMatch ? Number(lapsMatch[1] || lapsMatch[2]) : undefined));
+  const lapsDisplay = rawLaps != null 
+    ? (ticket.quantity > 1 && rawLaps < 100 ? `${rawLaps} Laps / Pax (${rawLaps * ticket.quantity} Total)` : `${rawLaps} Lap${rawLaps !== 1 ? 's' : ''}`)
+    : undefined;
+
+  const rawShots = ticket.shots != null ? ticket.shots : (booking?.shots != null ? booking.shots : (shotsMatch ? Number(shotsMatch[1] || shotsMatch[2]) : undefined));
+  const shotsDisplay = rawShots != null
+    ? (ticket.quantity > 1 ? `${rawShots} Shots / Shooter (${rawShots * ticket.quantity} Total)` : `${rawShots} Shot${rawShots !== 1 ? 's' : ''}`)
+    : undefined;
+
+  const durationDisplay = ticket.duration?.trim() || booking?.duration?.trim() || (durMatch ? durMatch[1].trim() : undefined);
+  const unitDisplay = ticket.unitOrDuration?.trim() || booking?.unitOrDuration?.trim() || (rideMatch ? rideMatch[1].trim() : undefined);
+
+  const specsList: string[] = [];
+  if (lapsDisplay) specsList.push(`🏁 LAPS: ${lapsDisplay}`);
+  if (durationDisplay) specsList.push(`⏱ TIME: ${durationDisplay}`);
+  if (shotsDisplay) specsList.push(`🎯 SHOTS: ${shotsDisplay}`);
+  if (!lapsDisplay && !durationDisplay && !shotsDisplay && unitDisplay) specsList.push(`⭐ SPEC: ${unitDisplay}`);
+
   return (
     <div className="bg-[#0B1120] rounded-3xl overflow-hidden border border-[#14F1D9]/30 shadow-2xl max-w-md mx-auto">
       
@@ -137,14 +174,54 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
             <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Time Slot</span>
             <span className="font-bold text-black">{ticket.timeSlot || booking.timeSlot || 'Standard Session'}</span>
           </div>
+          {lapsDisplay && (
+            <div>
+              <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">No. of Laps</span>
+              <span className="font-bold text-black">{lapsDisplay}</span>
+            </div>
+          )}
+          {durationDisplay && (
+            <div>
+              <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Time / Duration</span>
+              <span className="font-bold text-black">{durationDisplay}</span>
+            </div>
+          )}
+          {shotsDisplay && (
+            <div>
+              <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">No. of Shots</span>
+              <span className="font-bold text-black">{shotsDisplay}</span>
+            </div>
+          )}
+          {(!lapsDisplay && !durationDisplay && !shotsDisplay && unitDisplay) && (
+            <div>
+              <span className="text-[10px] text-gray-800 font-semibold uppercase block print:text-[9px]">Entitlement</span>
+              <span className="font-bold text-black">{unitDisplay}</span>
+            </div>
+          )}
         </div>
+
+        {/* ── SESSION SPECIFICATIONS / ENTITLEMENTS BANNER ── */}
+        {specsList.length > 0 && (
+          <div className="bg-gray-50 border border-black rounded p-1.5 mb-2 print:p-1 print:mb-1.5 text-center">
+            <div className="text-[9.5px] font-black uppercase tracking-wider text-black border-b border-dashed border-black pb-0.5 mb-1 print:text-[8.5px]">
+              Session Specifications &amp; Entitlements
+            </div>
+            <div className="flex flex-wrap justify-center gap-1.5 text-xs font-bold text-black print:text-[10px]">
+              {specsList.map((spec, i) => (
+                <span key={i} className="px-1.5 py-0.5 border border-black rounded bg-white font-mono">
+                  {spec}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── COMBINED RECEIPT / TAX BREAKDOWN SECTION ── */}
         <div className="mb-2 pb-2 border-b border-solid border-black print:mb-1.5 print:pb-1.5">
           <table className="w-full text-xs font-sans print:text-[11px]">
             <thead>
               <tr className="border-b border-black text-left font-bold">
-                <th className="py-0.5">Ticket Split Up</th>
+                <th className="py-0.5">Ticket Split Up &amp; Specs</th>
                 <th className="py-0.5 text-right">Amount</th>
               </tr>
             </thead>
@@ -166,18 +243,38 @@ export const TicketPass: React.FC<Props> = ({ ticket, booking }) => {
                 </>
               ) : booking.isPackageBundle && booking.packageBundleItems && booking.packageBundleItems.length > 0 ? (
                 <>
-                  {booking.packageBundleItems.map((pi, idx) => (
-                    <tr key={idx} className="border-b border-gray-200">
-                      <td className="py-0.5 font-semibold text-black">
-                        {pi.packageName} {pi.unitOrDuration ? `(${pi.unitOrDuration})` : ''} ({pi.quantity}x)
-                      </td>
-                      <td className="py-0.5 text-right font-mono font-bold text-black">₹{pi.subtotal.toFixed(2)}</td>
-                    </tr>
-                  ))}
+                  {booking.packageBundleItems.map((pi, idx) => {
+                    const piSpec = [
+                      pi.laps ? `${pi.laps} Laps` : '',
+                      pi.shots ? `${pi.shots} Shots` : '',
+                      pi.duration || '',
+                      pi.unitOrDuration || ''
+                    ].filter(Boolean).join(' • ');
+                    return (
+                      <tr key={idx} className="border-b border-gray-200">
+                        <td className="py-0.5 font-semibold text-black">
+                          <div>{pi.packageName} ({pi.quantity}x)</div>
+                          {piSpec && (
+                            <div className="text-[9.5px] text-gray-700 font-normal">
+                              ▪ {piSpec}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-0.5 text-right font-mono font-bold text-black">₹{pi.subtotal.toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
                 </>
               ) : (
                 <tr className="border-b border-gray-200">
-                  <td className="py-0.5 font-semibold text-black">{ticket.activityName} ({ticket.quantity}x)</td>
+                  <td className="py-0.5 font-semibold text-black">
+                    <div>{ticket.activityName} ({ticket.quantity}x)</div>
+                    {(lapsDisplay || durationDisplay || shotsDisplay || unitDisplay) && (
+                      <div className="text-[9.5px] text-gray-700 font-normal">
+                        ▪ {[lapsDisplay, durationDisplay, shotsDisplay, unitDisplay].filter(Boolean).join(' • ')}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-0.5 text-right font-mono font-bold text-black">₹{totalAmount.toFixed(2)}</td>
                 </tr>
               )}

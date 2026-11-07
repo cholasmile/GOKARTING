@@ -6,6 +6,7 @@ import {
   ChevronRight, ArrowRight, Check, X, CreditCard, AlertTriangle, Play, Minus, Plus, MapPin, Star
 } from 'lucide-react';
 import { printTicket } from '../lib/printTicket';
+import { Printer } from 'lucide-react';
 import { ReservationCalendar } from './ReservationCalendar';
 import { getAvailableTimeSlots, getTodayDateString, isPastDate } from '../lib/slotUtils';
 
@@ -176,7 +177,9 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
         quantity: packageQuantity,
         totalAmount: paymentMethod === 'complimentary' ? 0 : bookingTotal,
         paymentMethod,
-        packageId: selectedPackage.id
+        packageId: selectedPackage.id,
+        duration: selectedPackage.duration || (selectedPackage.name.match(/(?:^|[^\w])(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i)?.[1]) || selectedRoute?.duration,
+        unitOrDuration: selectedPackage.unitOrDuration || selectedPackage.duration || selectedRoute?.duration
       });
   
       if (typeof result === 'string') {
@@ -537,6 +540,38 @@ export const HorseRidingActivityPage: React.FC<ActivityPageProps> = ({ onSuccess
                 </div>
 
                 <div className="flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const dur = selectedPackage.duration || (selectedPackage.name.match(/(?:^|[^\w])(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i)?.[1]) || selectedRoute?.duration || '15 Mins';
+                      printTicket({
+                        receiptId: `TKT-${successBooking.booking.id}`,
+                        tokenNumber: successBooking.ticket?.tokenNumber || successBooking.booking.tokenNumber || successBooking.booking.id,
+                        timestamp: successBooking.booking.bookingDate || successBooking.booking.updatedAt,
+                        activityName: horseActivity?.name || 'Royal Horse Riding',
+                        packageName: `${selectedPackage.name} (${selectedRoute.name})`,
+                        customerName,
+                        customerPhone,
+                        date: bookingDate,
+                        slot: selectedSlot,
+                        items: [{
+                          label: `${selectedPackage.name} - ${selectedRoute.name} (${packageQuantity}x)`,
+                          value: `₹${bookingTotal.toFixed(2)}`,
+                          spec: `${dur} Ride`,
+                          duration: dur
+                        }],
+                        totalAmount: bookingTotal,
+                        paymentStatus: successBooking.booking.paymentStatus === 'paid' ? 'paid' : 'pending',
+                        quantity: packageQuantity,
+                        paymentMethod: paymentMethod.toUpperCase(),
+                        duration: dur,
+                        unitOrDuration: `${dur} Ride`
+                      });
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-white/20 transition-all cursor-pointer font-mono"
+                  >
+                    <Printer className="w-4 h-4 text-[#14F1D9]" /> Print Horse Riding Gate Pass
+                  </button>
                   <button onClick={() => { setIsPaymentOpen(false); onSuccessClose?.(); }} className="w-full py-3 rounded-xl bg-[#14F1D9] text-[#0B1120] font-black uppercase tracking-widest text-xs hover:bg-[#00B4FF] transition-colors cursor-pointer shadow-lg shadow-[#14F1D9]/20">
                     Done & Return to Dashboard
                   </button>

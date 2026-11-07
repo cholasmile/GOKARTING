@@ -297,15 +297,24 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
         totalAmount: paymentMethod === 'complimentary' ? 0 : grandTotal,
         paymentMethod,
         packageId: activePackageItems[0]?.id,
+        unitOrDuration: (activePackageItems[0] as any)?.unitOrDuration || '10 Mins',
+        duration: (activePackageItems[0] as any)?.duration || '10 Mins',
+        laps: (activePackageItems[0] as any)?.laps,
         isPackageBundle: activePackageItems.length > 1,
-        packageBundleItems: activePackageItems.map(p => ({
-          packageId: p.id,
-          packageName: p.name,
-          quantity: p.quantity,
-          unitPrice: p.price,
-          subtotal: p.subtotal,
-          unitOrDuration: p.description
-        }))
+        packageBundleItems: activePackageItems.map(p => {
+          const lapsMatch = (p as any).unitOrDuration?.match(/(?:^|[^\w])(\d+)\s*laps?\b/i) || p.name.match(/(?:^|[^\w])(\d+)\s*laps?\b/i);
+          const durMatch = (p as any).unitOrDuration?.match(/(?:^|[^\w])(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i) || p.name.match(/(?:^|[^\w])(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i);
+          return {
+            packageId: p.id,
+            packageName: p.name,
+            quantity: p.quantity,
+            unitPrice: p.price,
+            subtotal: p.subtotal,
+            unitOrDuration: (p as any).unitOrDuration || durMatch?.[1] || '10 Mins',
+            duration: (p as any).duration || durMatch?.[1] || '10 Mins',
+            laps: (p as any).laps ?? (lapsMatch ? Number(lapsMatch[1]) : undefined)
+          };
+        })
       });
   
       if (typeof result === 'string') {
@@ -1257,6 +1266,13 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                     <button
                       type="button"
                       onClick={() => {
+                        const totalLaps = activePackageItems.reduce((acc, p) => {
+                          const lapsFromUnit = (p as any).unitOrDuration?.match(/(?:^|[^\w])(\d+)\s*laps?\b/i)?.[1];
+                          const lapsFromName = p.name.match(/(?:^|[^\w])(\d+)\s*laps?\b/i)?.[1];
+                          const singleLaps = (p as any).laps || (lapsFromUnit ? Number(lapsFromUnit) : (lapsFromName ? Number(lapsFromName) : 0));
+                          return acc + (singleLaps * p.quantity);
+                        }, 0);
+
                         printTicket({
                           receiptId: `TKT-${successBooking.booking.id}`,
                           tokenNumber: successBooking.ticket?.tokenNumber || successBooking.booking.tokenNumber || successBooking.booking.id,
@@ -1267,17 +1283,33 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
                           customerPhone,
                           date: bookingDate,
                           slot: selectedSlot,
-                          items: activePackageItems.map(item => ({
-                            label: `${item.name} (${item.quantity}x)`,
-                            value: `₹${item.subtotal.toFixed(2)}`
-                          })),
+                          items: activePackageItems.map(item => {
+                            const lapsMatch = (item as any).unitOrDuration?.match(/(?:^|[^\w])(\d+)\s*laps?\b/i) || item.name.match(/(?:^|[^\w])(\d+)\s*laps?\b/i);
+                            const durMatch = (item as any).unitOrDuration?.match(/(?:^|[^\w])(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i) || item.name.match(/(?:^|[^\w])(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i);
+                            const itemSpecs = [
+                              (item as any).laps ? `${(item as any).laps} Laps` : (lapsMatch ? `${lapsMatch[1]} Laps` : ''),
+                              durMatch ? durMatch[1].trim() : ((item as any).duration || ''),
+                              (item as any).unitOrDuration || ''
+                            ].filter(Boolean);
+                            const spec = itemSpecs.length > 0 ? Array.from(new Set(itemSpecs)).join(' • ') : undefined;
+                            return {
+                              label: `${item.name} (${item.quantity}x)`,
+                              value: `₹${item.subtotal.toFixed(2)}`,
+                              spec,
+                              unitOrDuration: (item as any).unitOrDuration,
+                              laps: (item as any).laps || (lapsMatch ? Number(lapsMatch[1]) : undefined),
+                              duration: (item as any).duration || durMatch?.[1]?.trim()
+                            };
+                          }),
                           subtotalAmount,
                           discountPercentage: activeDiscountPct,
                           discountAmount,
                           totalAmount: grandTotal,
                           paymentStatus: successBooking.booking.paymentStatus === 'paid' ? 'paid' : 'pending',
                           quantity: totalRacers,
-                          paymentMethod: paymentMethod.toUpperCase()
+                          paymentMethod: paymentMethod.toUpperCase(),
+                          laps: totalLaps > 0 ? totalLaps : undefined,
+                          duration: '10 Mins'
                         });
                       }}
                       className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-white/20 transition-all cursor-pointer"

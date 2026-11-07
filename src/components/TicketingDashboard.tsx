@@ -363,6 +363,45 @@ export const TicketingDashboard: React.FC = () => {
     const matchingTicket = tickets.find(t => t.id === p.ticketId || t.bookingId === p.bookingId);
     const matchingBooking = bookings.find(b => b.id === p.bookingId);
 
+    const lapsVal = matchingBooking?.laps || matchingTicket?.laps;
+    const shotsVal = matchingBooking?.shots || matchingTicket?.shots;
+    const durVal = matchingBooking?.duration || matchingTicket?.duration;
+    const unitVal = matchingBooking?.unitOrDuration || matchingTicket?.unitOrDuration;
+
+    const receiptItems = matchingBooking?.packageBundleItems && matchingBooking.packageBundleItems.length > 0
+      ? matchingBooking.packageBundleItems.map(pi => {
+          const spec = [
+            pi.laps ? `${pi.laps} Laps` : '',
+            pi.shots ? `${pi.shots} Shots` : '',
+            pi.duration || '',
+            pi.unitOrDuration || ''
+          ].filter(Boolean).join(' • ');
+          return {
+            label: `${pi.quantity}x ${pi.packageName}`,
+            value: `₹${pi.subtotal.toFixed(2)}`,
+            spec,
+            laps: pi.laps,
+            shots: pi.shots,
+            duration: pi.duration,
+            unitOrDuration: pi.unitOrDuration
+          };
+        })
+      : matchingBooking?.comboItems && matchingBooking.comboItems.length > 0
+        ? matchingBooking.comboItems.map(ci => ({
+            label: `${ci.activityName}`,
+            value: `${ci.quantity * (matchingBooking.quantity || 1)} Entitlements`,
+            spec: ci.unitOrDuration
+          }))
+        : [{ 
+            label: p.packageName || p.details || p.activityName || 'Activity Package', 
+            value: `₹${p.amount}`,
+            spec: [lapsVal ? `${lapsVal} Laps` : '', shotsVal ? `${shotsVal} Shots` : '', durVal, unitVal].filter(Boolean).join(' • ') || undefined,
+            laps: lapsVal,
+            shots: shotsVal,
+            duration: durVal,
+            unitOrDuration: unitVal
+          }];
+
     printTicket({
       receiptId: p.ticketId || `TKT-${p.bookingId}`,
       tokenNumber: matchingTicket?.tokenNumber || matchingBooking?.tokenNumber || p.ticketId || p.bookingId,
@@ -372,12 +411,16 @@ export const TicketingDashboard: React.FC = () => {
       customerName: p.customerName || 'Walk-in Guest',
       customerPhone: p.customerPhone,
       date: p.timestamp ? p.timestamp.split('T')[0] : new Date().toISOString().split('T')[0],
-      slot: 'Standard Session',
-      items: [{ label: p.packageName || p.details || p.activityName || 'Activity Package', value: `₹${p.amount}` }],
+      slot: matchingBooking?.timeSlot || 'Standard Session',
+      items: receiptItems,
       totalAmount: p.amount,
       paymentStatus: (p.status === 'refunded' || p.status === 'cancelled') ? 'refunded' : 'paid',
-      quantity: 1,
-      paymentMethod: p.method
+      quantity: matchingBooking?.quantity || 1,
+      paymentMethod: p.method,
+      laps: lapsVal,
+      shots: shotsVal,
+      duration: durVal,
+      unitOrDuration: unitVal
     });
   };
 

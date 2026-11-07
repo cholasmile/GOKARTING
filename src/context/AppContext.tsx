@@ -142,6 +142,26 @@ interface AppContextProps {
     razorpayPaymentId?: string;
     gateway?: string;
     packageId?: string;
+    unitOrDuration?: string;
+    duration?: string;
+    laps?: number;
+    shots?: number;
+    isComboPack?: boolean;
+    comboPackId?: string;
+    comboPackName?: string;
+    comboItems?: ComboActivityItem[];
+    isPackageBundle?: boolean;
+    packageBundleItems?: Array<{
+      packageId: string;
+      packageName: string;
+      quantity: number;
+      unitPrice: number;
+      subtotal: number;
+      unitOrDuration?: string;
+      duration?: string;
+      laps?: number;
+      shots?: number;
+    }>;
   }) => { booking: Booking; ticket?: Ticket; payment: Payment } | string;
 
   markBookingAsPaid: (bookingId: string, staffName: string) => { success: boolean; message: string; ticket?: Ticket };
@@ -2914,6 +2934,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     razorpayPaymentId?: string;
     gateway?: string;
     packageId?: string;
+    unitOrDuration?: string;
+    duration?: string;
+    laps?: number;
+    shots?: number;
     isComboPack?: boolean;
     comboPackId?: string;
     comboPackName?: string;
@@ -2926,6 +2950,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       unitPrice: number;
       subtotal: number;
       unitOrDuration?: string;
+      duration?: string;
+      laps?: number;
+      shots?: number;
     }>;
   }) => {
     // Duplicate Protection: check if this Razorpay Order ID was already processed
@@ -2987,6 +3014,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const appliedDiscount = data.discountAmount || 0;
       enforcedTotalAmount = data.paymentMethod === 'complimentary' ? 0 : Math.max(0, pkgSubtotal - appliedDiscount);
     }
+
+    // Resolve entitlement specs (laps, shots, duration, unit)
+    const pkgLaps = data.laps ?? (selectedPkg?.laps ?? (selectedPkg?.unitOrDuration?.match(/(?:^|[^\w])(\d+)\s*laps?\b/i)?.[1] ? Number(selectedPkg.unitOrDuration.match(/(?:^|[^\w])(\d+)\s*laps?\b/i)![1]) : undefined));
+    const pkgShots = data.shots ?? (selectedPkg?.shots ?? (selectedPkg?.unitOrDuration?.match(/(?:^|[^\w])(\d+)\s*(?:shots?|pellets?)\b/i)?.[1] ? Number(selectedPkg.unitOrDuration.match(/(?:^|[^\w])(\d+)\s*(?:shots?|pellets?)\b/i)![1]) : undefined));
+    const pkgDuration = data.duration ?? (selectedPkg?.duration ?? (selectedPkg?.unitOrDuration?.match(/(?:^|[^\w])(\d+\s*(?:mins?|minutes?|hrs?|hours?))\b/i)?.[1]) ?? undefined);
+    const pkgUnitOrDuration = data.unitOrDuration ?? (selectedPkg?.unitOrDuration ?? undefined);
 
     // Count existing confirmed/reserved bookings for this date only (daily limit, not per-slot)
     const existingDailyCount = bookings
@@ -3055,6 +3088,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       packageId: selectedPackageId,
       packageName: selectedPackageName,
       unitPrice: selectedUnitPrice,
+      unitOrDuration: pkgUnitOrDuration,
+      duration: pkgDuration,
+      laps: pkgLaps,
+      shots: pkgShots,
       organizationId: 'org_deuce_default',
       isComboPack: data.isComboPack,
       comboPackId: data.comboPackId,
@@ -3086,6 +3123,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         packageId: selectedPackageId,
         packageName: selectedPackageName,
         unitPrice: selectedUnitPrice,
+        unitOrDuration: pkgUnitOrDuration,
+        duration: pkgDuration,
+        laps: pkgLaps,
+        shots: pkgShots,
         organizationId: 'org_deuce_default',
         isComboPack: data.isComboPack,
         comboPackId: data.comboPackId,
@@ -3223,6 +3264,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         quantity: booking.quantity,
         qrCodeValue: `adventure-park-ticket-${bookingId}`,
         status: 'valid',
+        packageId: booking.packageId,
+        packageName: booking.packageName,
+        unitPrice: booking.unitPrice,
+        unitOrDuration: booking.unitOrDuration,
+        duration: booking.duration,
+        laps: booking.laps,
+        shots: booking.shots,
+        isComboPack: booking.isComboPack,
+        comboPackId: booking.comboPackId,
+        comboPackName: booking.comboPackName,
+        comboItems: booking.comboItems,
+        isPackageBundle: booking.isPackageBundle,
+        packageBundleItems: booking.packageBundleItems,
+        organizationId: booking.organizationId || 'org_deuce_default',
         updatedAt: now
       };
       setTickets(prev => [newTicket!, ...prev]);
@@ -3308,6 +3363,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         quantity: booking.quantity,
         qrCodeValue: `adventure-park-ticket-${params.bookingId}`,
         status: 'valid',
+        packageId: booking.packageId,
+        packageName: booking.packageName,
+        unitPrice: booking.unitPrice,
+        unitOrDuration: booking.unitOrDuration,
+        duration: booking.duration,
+        laps: booking.laps,
+        shots: booking.shots,
+        isComboPack: booking.isComboPack,
+        comboPackId: booking.comboPackId,
+        comboPackName: booking.comboPackName,
+        comboItems: booking.comboItems,
+        isPackageBundle: booking.isPackageBundle,
+        packageBundleItems: booking.packageBundleItems,
+        organizationId: booking.organizationId || 'org_deuce_default',
         updatedAt: now
       };
       setTickets(prev => [newTicket!, ...prev]);

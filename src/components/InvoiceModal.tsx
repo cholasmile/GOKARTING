@@ -42,7 +42,28 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
     const slot = booking ? booking.timeSlot : 'N/A';
     const quantity = booking ? booking.quantity : order?.items.reduce((sum, item) => sum + item.quantity, 0) || 1;
     const itemList = booking
-      ? [{ label: booking.details || booking.activityName, value: `₹${booking.totalAmount.toFixed(2)}` }]
+      ? (booking.packageBundleItems && booking.packageBundleItems.length > 0
+          ? booking.packageBundleItems.map(pi => ({
+              label: `${pi.quantity}x ${pi.packageName}`,
+              value: `₹${pi.subtotal.toFixed(2)}`,
+              spec: [
+                pi.laps ? `${pi.laps} Laps` : '',
+                pi.shots ? `${pi.shots} Shots` : '',
+                pi.duration || '',
+                pi.unitOrDuration || ''
+              ].filter(Boolean).join(' • ') || undefined,
+              laps: pi.laps,
+              shots: pi.shots,
+              duration: pi.duration,
+              unitOrDuration: pi.unitOrDuration
+            }))
+          : booking.comboItems && booking.comboItems.length > 0
+            ? booking.comboItems.map(ci => ({
+                label: `${ci.activityName}`,
+                value: `${ci.quantity * (booking.quantity || 1)} Entitlements`,
+                spec: ci.unitOrDuration
+              }))
+            : [{ label: booking.details || booking.activityName, value: `₹${booking.totalAmount.toFixed(2)}`, laps: booking.laps, shots: booking.shots, duration: booking.duration, unitOrDuration: booking.unitOrDuration }])
       : order?.items.map(item => ({
           label: item.name,
           value: `₹${(item.price * item.quantity).toFixed(2)}`
@@ -66,7 +87,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ booking, order, paym
       paymentStatus: isPaid ? 'paid' : 'pending',
       quantity,
       paymentMethod,
-      transactionId
+      transactionId,
+      laps: booking?.laps,
+      shots: booking?.shots,
+      duration: booking?.duration,
+      unitOrDuration: booking?.unitOrDuration
     });
   };
 

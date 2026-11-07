@@ -13,3 +13,5 @@ scratch/
 data/
 *.sqlite*
 api/*_store.json
+!api/combo_packs_store.json
+!api/combo_redemptions_store.json

@@ -49,7 +49,7 @@
     "name": "Karting Manager",
     "email": "kartingmanager@deucepark.com",
     "role": "go_karting_manager",
-    "updatedAt": "2026-11-05T04:41:57.597Z",
+    "updatedAt": "2026-11-05T14:18:06.942Z",
     "organizationId": "org_deuce_default",
     "password": "manager"
   },
@@ -58,7 +58,7 @@
     "name": "Karting Staff",
     "email": "kartingstaff@deucepark.com",
     "role": "go_karting_staff",
-    "updatedAt": "2026-11-05T04:41:57.597Z",
+    "updatedAt": "2026-11-05T14:18:06.942Z",
     "organizationId": "org_deuce_default",
     "password": "staff"
   },
@@ -67,7 +67,7 @@
     "name": "Ticket Counter Staff",
     "email": "ticketing@deucepark.com",
     "role": "ticket_counter_staff",
-    "updatedAt": "2026-11-05T04:41:57.597Z",
+    "updatedAt": "2026-11-05T14:18:06.942Z",
     "organizationId": "org_deuce_default",
     "password": "staff"
   },

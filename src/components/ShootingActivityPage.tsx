@@ -6,6 +6,7 @@ import {
   ArrowRight, Check, X, CreditCard, AlertTriangle, RotateCcw, Minus, Plus, Zap
 } from 'lucide-react';
 import { printTicket } from '../lib/printTicket';
+import { Printer } from 'lucide-react';
 import { ReservationCalendar } from './ReservationCalendar';
 import { getAvailableTimeSlots, getTodayDateString, isPastDate } from '../lib/slotUtils';
 
@@ -172,7 +173,9 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
         quantity: packageQuantity,
         totalAmount: paymentMethod === 'complimentary' ? 0 : bookingTotal,
         paymentMethod,
-        packageId: selectedPackage.id
+        packageId: selectedPackage.id,
+        shots: selectedPackage.shots || (selectedPackage.name.match(/(?:^|[^\w])(\d+)\s*shots?\b/i)?.[1] ? Number(selectedPackage.name.match(/(?:^|[^\w])(\d+)\s*shots?\b/i)![1]) : 15),
+        unitOrDuration: `${selectedPackage.shots || 15} Shots`
       });
   
       if (typeof result === 'string') {
@@ -572,6 +575,37 @@ export const ShootingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessClo
                 </div>
 
                 <div className="flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const numShots = (selectedPackage.shots || (selectedPackage.name.match(/(?:^|[^\w])(\d+)\s*shots?\b/i)?.[1] ? Number(selectedPackage.name.match(/(?:^|[^\w])(\d+)\s*shots?\b/i)![1]) : 15));
+                      printTicket({
+                        receiptId: `TKT-${successBooking.booking.id}`,
+                        tokenNumber: successBooking.ticket?.tokenNumber || successBooking.booking.tokenNumber || successBooking.booking.id,
+                        timestamp: successBooking.booking.bookingDate || successBooking.booking.updatedAt,
+                        activityName: 'Precision Air Gun Shooting',
+                        packageName: selectedPackage.name,
+                        customerName,
+                        customerPhone,
+                        date: bookingDate,
+                        slot: selectedSlot,
+                        items: [{
+                          label: `${selectedPackage.name} (${packageQuantity}x)`,
+                          value: `₹${bookingTotal.toFixed(2)}`,
+                          spec: `${numShots} Shots / Shooter (${numShots * packageQuantity} Total)`,
+                          shots: numShots
+                        }],
+                        totalAmount: bookingTotal,
+                        paymentStatus: successBooking.booking.paymentStatus === 'paid' ? 'paid' : 'pending',
+                        quantity: packageQuantity,
+                        paymentMethod: paymentMethod.toUpperCase(),
+                        shots: numShots * packageQuantity
+                      });
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-white/20 transition-all cursor-pointer font-mono"
+                  >
+                    <Printer className="w-4 h-4 text-[#14F1D9]" /> Print Shooting Range Pass
+                  </button>
                   <button onClick={() => { setIsPaymentOpen(false); onSuccessClose?.(); }} className="w-full py-3 rounded-xl bg-[#14F1D9] text-[#0B1120] font-black uppercase tracking-widest text-xs hover:bg-[#00B4FF] transition-colors cursor-pointer shadow-lg shadow-[#14F1D9]/20">
                     Done & Return to Dashboard
                   </button>
