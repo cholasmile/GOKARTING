@@ -26,6 +26,7 @@ import { SalesAnalyticsDashboard } from './admin/SalesAnalyticsDashboard';
 import { DataSafetyBackupModal } from './admin/DataSafetyBackupModal';
 import { OnlineBookingsManager } from './OnlineBookingsManager';
 import { compressImageFile } from '../lib/imageUtils';
+import { INITIAL_COMBO_PACKS } from '../data/initialData';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -36,7 +37,7 @@ export const AdminDashboard: React.FC = () => {
     addActivity, updateActivity, deleteActivity,
     addVendor, updateVendor, deleteVendor, addUser,
     counterUpiId, setCounterUpiId,
-    staffSalaryPayments, foodStreetPurchases
+    staffSalaryPayments, foodStreetPurchases, comboPacks
   } = useAppContext();
 
   const activeActivities = activities.filter(a => !a.id.toLowerCase().includes('gaming') && !(a.type as string)?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('gaming') && !a.name?.toLowerCase().includes('arena'));
@@ -964,7 +965,14 @@ export const AdminDashboard: React.FC = () => {
           >
             {tab === 'sales_analytics' && <BarChart3 className="h-4 w-4 text-[#14F1D9]" />}
             {tab === 'analytics' && <TrendingUp className="h-4 w-4" />}
-            {tab === 'combo_packs' && <Boxes className="h-4 w-4 text-[#FFD700]" />}
+            {tab === 'combo_packs' && (
+              <>
+                <Boxes className="h-4 w-4 text-[#FFD700]" />
+                <span className="px-1.5 py-0.2 rounded-full bg-[#FFD700] text-black text-[9px] font-black">
+                  {((comboPacks && comboPacks.length > 0) ? comboPacks : INITIAL_COMBO_PACKS).length}
+                </span>
+              </>
+            )}
             {tab === 'online_bookings' && <Globe className="h-4 w-4 text-sky-400" />}
             {tab === 'activities' && <Award className="h-4 w-4" />}
             {tab === 'activity_mgmt' && <ImageIcon className="h-4 w-4" />}

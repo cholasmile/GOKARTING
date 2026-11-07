@@ -7,6 +7,7 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { ComboPack, ComboActivityItem, ComboRedemptionRecord, Activity } from '../../types';
+import { INITIAL_COMBO_PACKS } from '../../data/initialData';
 import { 
   Package, Plus, Edit, Trash2, CheckCircle, XCircle, AlertTriangle, 
   Search, Filter, Calendar, TrendingUp, IndianRupee, Layers, 
@@ -301,22 +302,25 @@ export const ComboPackManagementPanel: React.FC = () => {
     }
   };
 
+  const catalogPacks = (comboPacks && comboPacks.length > 0) ? comboPacks : INITIAL_COMBO_PACKS;
+
   // ── Filtered Catalog ──
   const filteredCatalog = useMemo(() => {
-    return comboPacks.filter(pack => {
+    return catalogPacks.filter(pack => {
+      const term = (catalogSearch || '').toLowerCase();
       const matchesSearch = 
-        pack.name.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-        pack.description.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-        pack.items.some(i => i.activityName.toLowerCase().includes(catalogSearch.toLowerCase()));
+        (pack.name || '').toLowerCase().includes(term) ||
+        (pack.description || '').toLowerCase().includes(term) ||
+        (pack.items || []).some(i => (i.activityName || '').toLowerCase().includes(term));
 
       const matchesStatus = 
         statusFilter === 'all' || 
-        (statusFilter === 'active' && pack.isActive) ||
-        (statusFilter === 'inactive' && !pack.isActive);
+        (statusFilter === 'active' && pack.isActive !== false) ||
+        (statusFilter === 'inactive' && pack.isActive === false);
 
       return matchesSearch && matchesStatus;
     });
-  }, [comboPacks, catalogSearch, statusFilter]);
+  }, [catalogPacks, catalogSearch, statusFilter]);
 
   // ── Filtered Redemptions ──
   const filteredRedemptions = useMemo(() => {
@@ -474,7 +478,7 @@ export const ComboPackManagementPanel: React.FC = () => {
               : 'text-[#94A3B8] hover:text-white hover:bg-white/5'
           }`}
         >
-          <Package className="w-4 h-4" /> Active Combo Packs ({comboPacks.length})
+          <Package className="w-4 h-4" /> Active Combo Packs ({catalogPacks.length})
         </button>
 
         <button
@@ -539,9 +543,9 @@ export const ComboPackManagementPanel: React.FC = () => {
                 onChange={e => setStatusFilter(e.target.value as any)}
                 className="px-3 py-1.5 bg-[#0A0A0A] border border-white/10 rounded-xl text-xs text-white focus:border-[#14F1D9] outline-none"
               >
-                <option value="all">All ({comboPacks.length})</option>
-                <option value="active">Active Only ({comboPacks.filter(p => p.isActive).length})</option>
-                <option value="inactive">Disabled ({comboPacks.filter(p => !p.isActive).length})</option>
+                <option value="all">All ({catalogPacks.length})</option>
+                <option value="active">Active Only ({catalogPacks.filter(p => p.isActive !== false).length})</option>
+                <option value="inactive">Disabled ({catalogPacks.filter(p => p.isActive === false).length})</option>
               </select>
             </div>
           </div>

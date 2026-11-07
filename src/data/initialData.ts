@@ -155,7 +155,7 @@ export const INITIAL_BOOKINGS: Booking[] = [];
 export const INITIAL_TICKETS: Ticket[] = [];
 export const INITIAL_FOOD_ORDERS: FoodOrder[] = [];
 
-// ── Default Curated Combo Pack ──
+// ── Default Curated Combo Packs ──
 export const INITIAL_COMBO_PACKS: ComboPack[] = [
   {
     id: 'combo-adventure-pack-1',
@@ -193,6 +193,99 @@ export const INITIAL_COMBO_PACKS: ComboPack[] = [
     ],
     originalPrice: 900,
     comboPrice: 699,
+    validityDays: 30,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'combo-speed-target-2',
+    name: 'Speed & Target Duo',
+    description: 'Fast laps on the race track combined with precision air rifle target shooting! High energy and extreme focus.',
+    badge: 'BESTSELLER',
+    items: [
+      {
+        activityId: 'act-go-karting',
+        activityName: 'High-Octane Go-Karting',
+        packageId: 'pkg-kart-single',
+        packageName: 'Single Rider Experience',
+        unitOrDuration: '5 laps',
+        quantity: 1,
+        originalPrice: 350
+      },
+      {
+        activityId: 'act-air-gun',
+        activityName: 'Precision Air Gun Shooting',
+        packageId: 'pkg-shoot-1',
+        packageName: 'Starter Aim',
+        unitOrDuration: '10 shots',
+        quantity: 1,
+        originalPrice: 250
+      }
+    ],
+    originalPrice: 600,
+    comboPrice: 499,
+    validityDays: 30,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'combo-royal-speed-3',
+    name: 'Royal Speed Combo',
+    description: 'Unleash your inner racer on the go-kart circuit, then take a graceful Royal Horse Riding experience through the trails.',
+    badge: 'WEEKEND SPECIAL',
+    items: [
+      {
+        activityId: 'act-go-karting',
+        activityName: 'High-Octane Go-Karting',
+        packageId: 'pkg-kart-single',
+        packageName: 'Single Rider Experience',
+        unitOrDuration: '5 laps',
+        quantity: 1,
+        originalPrice: 350
+      },
+      {
+        activityId: 'act-horse-riding',
+        activityName: 'Royal Horse Riding',
+        packageId: 'pkg-horse-pony',
+        packageName: 'Pony Walk',
+        unitOrDuration: '1 ride (15 Mins)',
+        quantity: 1,
+        originalPrice: 300
+      }
+    ],
+    originalPrice: 650,
+    comboPrice: 549,
+    validityDays: 30,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'combo-target-trail-4',
+    name: 'Target & Trail Explorer',
+    description: 'Calm precision with air rifle shooting coupled with a scenic guided horse trail ride across Yelagiri hills.',
+    badge: 'GREAT VALUE',
+    items: [
+      {
+        activityId: 'act-air-gun',
+        activityName: 'Precision Air Gun Shooting',
+        packageId: 'pkg-shoot-1',
+        packageName: 'Starter Aim',
+        unitOrDuration: '10 shots',
+        quantity: 1,
+        originalPrice: 250
+      },
+      {
+        activityId: 'act-horse-riding',
+        activityName: 'Royal Horse Riding',
+        packageId: 'pkg-horse-pony',
+        packageName: 'Pony Walk',
+        unitOrDuration: '1 ride (15 Mins)',
+        quantity: 1,
+        originalPrice: 300
+      }
+    ],
+    originalPrice: 550,
+    comboPrice: 449,
     validityDays: 30,
     isActive: true,
     createdAt: new Date().toISOString()

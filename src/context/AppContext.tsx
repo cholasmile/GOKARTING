@@ -1005,7 +1005,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((p: any) => p.id));
+          const missing = INITIAL_COMBO_PACKS.filter(p => !existingIds.has(p.id));
+          return missing.length > 0 ? [...parsed, ...missing] : parsed;
+        }
       } catch {}
     }
     return INITIAL_COMBO_PACKS;
@@ -1068,6 +1072,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       })
       .catch(err => console.error('[frontend] Failed to fetch payment config:', err));
   }, []);
+
+  // -----------------------------------------------------------------
+  // DIRECT FETCH OF COMBO PACKS ON STARTUP (ENSURE TICKETING & ADMIN SYNC)
+  // -----------------------------------------------------------------
+  useEffect(() => {
+    fetch('/api/combo-packs')
+      .then(res => res.json())
+      .then(serverPacks => {
+        if (Array.isArray(serverPacks) && serverPacks.length > 0) {
+          setComboPacks(prev => {
+            const merged = mergeEntitiesWithProtection<ComboPack>(prev, serverPacks);
+            try { localStorage.setItem('ap_combo_packs', JSON.stringify(merged)); } catch {}
+            db.comboPacks.bulkPut(merged).catch(() => {});
+            return merged;
+          });
+        }
+      })
+      .catch(err => console.warn('[frontend] Failed to fetch /api/combo-packs:', err));
+  }, []);
+
+  useEffect(() => {
+    if (comboPacks && comboPacks.length > 0) {
+      try { localStorage.setItem('ap_combo_packs', JSON.stringify(comboPacks)); } catch {}
+    }
+  }, [comboPacks]);
 
   // -----------------------------------------------------------------
   // REFETCH ACTIVITIES FROM DATABASE (SINGLE SOURCE OF TRUTH)
@@ -2768,7 +2797,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       id = idOrPack.id;
       patch = { ...idOrPack, ...updates };
     } else {
-      id = idOrPack;
+      id = String(idOrPack);
       patch = updates || {};
     }
     const now = new Date().toISOString();
@@ -2976,6 +3005,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let selectedPackageId = data.packageId;
     let selectedPackageName = '';
     let selectedUnitPrice: number | undefined = undefined;
+    let selectedPkg: ActivityPackage | undefined;
 
     if (data.isComboPack) {
       // Combo pack has its own custom pricing already calculated
@@ -2990,7 +3020,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return 'No packages are configured for this activity in the database. Ticket purchase is not allowed.';
       }
 
-      let selectedPkg: ActivityPackage | undefined;
       if (selectedPackageId) {
         selectedPkg = targetActivity.packages.find(p => p.id === selectedPackageId);
       }

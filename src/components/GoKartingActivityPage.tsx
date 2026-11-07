@@ -84,7 +84,7 @@ export const GoKartingActivityPage: React.FC<ActivityPageProps> = ({ onSuccessCl
   useEffect(() => {
     if (basePackages.length > 0) {
       setPackageQuantities(prev => {
-        const hasAny = Object.values(prev).some(qty => qty > 0);
+        const hasAny = Object.values(prev).some((qty: any) => Number(qty) > 0);
         if (!hasAny) {
           const single = basePackages.find(p => p.id.includes('single') || p.name.toLowerCase().includes('single')) || basePackages[0];
           return { [single.id]: 1 };

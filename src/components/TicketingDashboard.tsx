@@ -15,14 +15,18 @@ import { BulkAddMenuModal } from './BulkAddMenuModal';
 import { FoodStreetInventoryPanel } from './admin/FoodStreetInventoryPanel';
 import { OnlineBookingsManager } from './OnlineBookingsManager';
 import { compressImageFile } from '../lib/imageUtils';
+import { INITIAL_COMBO_PACKS } from '../data/initialData';
 
 export const TicketingDashboard: React.FC = () => {
   const { 
-    activities, currentUser, payments, orders, menuItems, vendors, inventory,
+    activities, currentUser, payments, orders, menuItems, vendors, inventory, tickets, bookings,
     foodCart, addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder,
     addMenuItem, updateMenuItem, deleteMenuItem, adjustMenuItemStock, updateMenuItemStock,
     cancelAndRefundTicket, counterUpiId, comboPacks
   } = useAppContext();
+
+  const effectiveComboPacks = (comboPacks && comboPacks.length > 0) ? comboPacks : INITIAL_COMBO_PACKS;
+  const activeComboPacks = effectiveComboPacks.filter(p => p.isActive !== false);
 
   // Active top-level subtab
   const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'combo_pos' | 'online_bookings' | 'cafe_pos' | 'cafe_menu' | 'history'>('new_booking');
@@ -526,9 +530,9 @@ export const TicketingDashboard: React.FC = () => {
           }`}
         >
           <Boxes className="w-4 h-4 text-[#FFD700]" /> Multi-Activity Combo Packs
-          {comboPacks && comboPacks.filter(p => p.isActive).length > 0 && (
+          {activeComboPacks.length > 0 && (
             <span className="px-2 py-0.5 rounded-full bg-[#FFD700] text-[#0A0A0A] text-xs font-black">
-              {comboPacks.filter(p => p.isActive).length}
+              {activeComboPacks.length}
             </span>
           )}
         </button>
@@ -689,6 +693,90 @@ export const TicketingDashboard: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+
+          {/* ── MULTI-ACTIVITY COMBO PACKS ON TICKETING POS ── */}
+          <div className="mt-8 pt-6 border-t border-[#1C1C1C] space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-[#FFD700]/15 border border-[#FFD700]/40 text-[#FFD700]">
+                  <Boxes className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    Multi-Activity Combo Packs ({activeComboPacks.length} Active Bundles)
+                  </h3>
+                  <p className="text-xs text-[#94A3B8]">
+                    Curated adventure passes combining Go-Karting, Air Rifle, and Horse Riding with high discounts.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveSubTab('combo_pos')}
+                className="px-4 py-2 bg-[#FFD700] hover:bg-white text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-[0_0_15px_rgba(255,215,0,0.3)]"
+              >
+                <Boxes className="w-4 h-4" /> Open Full Combo POS Counter <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {activeComboPacks.map(pack => {
+                const savings = Math.max(0, pack.originalPrice - pack.comboPrice);
+                const savingsPct = pack.originalPrice > 0 ? Math.round((savings / pack.originalPrice) * 100) : 0;
+                return (
+                  <div
+                    key={pack.id}
+                    className="glass-panel rounded-2xl border border-[#FFD700]/30 hover:border-[#FFD700] bg-[#0A0A0A] p-4 flex flex-col justify-between transition-all hover:shadow-[0_0_25px_rgba(255,215,0,0.15)] group"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-2">
+                        <span className="px-2 py-0.5 rounded-full bg-[#FFD700] text-black text-[9px] font-black uppercase tracking-wider">
+                          {pack.badge || 'COMBO DEAL'}
+                        </span>
+                        <span className="text-[10px] text-emerald-400 font-bold font-mono">
+                          Save ₹{savings} ({savingsPct}%)
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-black text-white group-hover:text-[#FFD700] transition-colors line-clamp-1">
+                        {pack.name}
+                      </h4>
+                      <p className="text-[11px] text-[#94A3B8] mt-1 line-clamp-2">
+                        {pack.description}
+                      </p>
+
+                      <div className="mt-3 space-y-1 bg-black/40 p-2.5 rounded-xl border border-white/5">
+                        <span className="text-[9px] font-mono font-bold text-[#FFD700] uppercase block">
+                          Included In Pass:
+                        </span>
+                        {(pack.items || []).map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-[10px] text-white/90">
+                            <span className="truncate pr-1">• {item.activityName}</span>
+                            <span className="text-[#14F1D9] font-mono font-bold shrink-0">{item.unitOrDuration}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[9px] text-[#94A3B8] line-through font-mono block">
+                          ₹{pack.originalPrice}
+                        </span>
+                        <span className="text-base font-black text-[#FFD700] font-mono">
+                          ₹{pack.comboPrice}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setActiveSubTab('combo_pos')}
+                        className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#FFD700] to-[#FFAA00] hover:from-white hover:to-white text-black font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        Sell Pass <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Today's Combined Counter Summary */}

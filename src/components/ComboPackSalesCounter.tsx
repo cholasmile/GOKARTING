@@ -7,6 +7,7 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { ComboPack, Booking, Ticket } from '../types';
+import { INITIAL_COMBO_PACKS } from '../data/initialData';
 import {
   Boxes, Sparkles, Tag, CheckCircle2, ShoppingCart, CreditCard,
   Banknote, QrCode, Search, Printer, ArrowRight, X, Clock,
@@ -44,19 +45,23 @@ export const ComboPackSalesCounter: React.FC = () => {
   const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(null);
   const [confirmedTicket, setConfirmedTicket] = useState<Ticket | null>(null);
 
-  // Active combo packs only
+  // Active combo packs only with fallback to default packs if empty
+  const packsSource = (comboPacks && comboPacks.length > 0) ? comboPacks : INITIAL_COMBO_PACKS;
   const activePacks = useMemo(() => {
-    return comboPacks.filter(p => p.isActive);
-  }, [comboPacks]);
+    return packsSource.filter(p => p.isActive !== false);
+  }, [packsSource]);
 
-  // Filtered by search
+  // Filtered by search with safe optional chaining
   const filteredPacks = useMemo(() => {
     if (!searchTerm.trim()) return activePacks;
     const term = searchTerm.toLowerCase();
     return activePacks.filter(p => 
-      p.name.toLowerCase().includes(term) ||
-      p.description.toLowerCase().includes(term) ||
-      p.items.some(i => i.activityName.toLowerCase().includes(term) || (i.packageName && i.packageName.toLowerCase().includes(term)))
+      (p.name || '').toLowerCase().includes(term) ||
+      (p.description || '').toLowerCase().includes(term) ||
+      (p.items || []).some(i => 
+        (i.activityName || '').toLowerCase().includes(term) || 
+        (i.packageName && i.packageName.toLowerCase().includes(term))
+      )
     );
   }, [activePacks, searchTerm]);
 
