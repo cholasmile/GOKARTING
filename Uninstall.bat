@@ -18,39 +18,17 @@ if /i not "%CONFIRM%"=="Y" (
 
 echo.
 echo [*] Stopping running background processes...
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "Get-NetTCPConnection -LocalPort 3000, 5000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\stop-servers.ps1" >nul 2>&1
 
 echo [*] Removing Desktop Shortcut...
-if exist "%USERPROFILE%\Desktop\Deuce Adventure Park OS.lnk" (
-    del "%USERPROFILE%\Desktop\Deuce Adventure Park OS.lnk" >nul 2>&1
-)
+powershell -NoProfile -Command "$desk = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::DesktopDirectory); if ($desk) { Remove-Item (Join-Path $desk 'Deuce Adventure Park OS.lnk') -Force -ErrorAction SilentlyContinue }; Remove-Item \"$env:USERPROFILE\Desktop\Deuce Adventure Park OS.lnk\" -Force -ErrorAction SilentlyContinue" >nul 2>&1
 
 echo [*] Removing Start Menu Shortcuts...
-set START_MENU_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Deuce Park
-if exist "%START_MENU_DIR%" (
-    rmdir /s /q "%START_MENU_DIR%" >nul 2>&1
-)
-
-set TARGET_DIR=%LOCALAPPDATA%\DeucePark
-if exist "%TARGET_DIR%" (
-    echo [*] Removing installed application directory (%TARGET_DIR%)...
-    REM If script is running inside TARGET_DIR, self-remove via temp batch
-    if /i "%~dp0"=="%TARGET_DIR%\" (
-        set CLEANUP_BAT=%TEMP%\deuce_cleanup.bat
-        echo @echo off > "%CLEANUP_BAT%"
-        echo timeout /t 2 /nobreak >nul >> "%CLEANUP_BAT%"
-        echo rmdir /s /q "%TARGET_DIR%" >> "%CLEANUP_BAT%"
-        echo del "%%~f0" >> "%CLEANUP_BAT%"
-        start "" /b "%CLEANUP_BAT%"
-    ) else (
-        rmdir /s /q "%TARGET_DIR%" >nul 2>&1
-    )
-)
+powershell -NoProfile -Command "$prog = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs); if ($prog) { Remove-Item (Join-Path $prog 'Deuce Park') -Recurse -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 echo.
 echo =======================================================================
-echo  SUCCESS: Deuce Adventure Park OS has been uninstalled from your PC.
+echo  SUCCESS: Deuce Adventure Park OS shortcuts have been removed.
 echo =======================================================================
 echo.
 pause

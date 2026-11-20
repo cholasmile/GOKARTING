@@ -8,8 +8,7 @@ echo =======================================================================
 echo.
 echo [*] Terminating application background servers on ports 3000 and 5000...
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "Get-NetTCPConnection -LocalPort 3000, 5000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\stop-servers.ps1" >nul 2>&1
 
 echo [*] Application servers stopped cleanly.
 echo.
