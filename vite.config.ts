@@ -12,27 +12,34 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+        devOptions: {
+          enabled: true
+        },
+        includeAssets: ['favicon.ico', 'pwa-192x192.png', 'pwa-512x512.png'],
         manifest: {
-          name: 'Deuce Adventure Park',
-          short_name: 'Deuce',
-          description: 'Adventure Park Offline OS',
+          id: '/',
+          name: 'Deuce Adventure Park OS',
+          short_name: 'Deuce OS',
+          description: 'Deuce Adventure Park Hybrid Management & Counter Ticketing OS',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          orientation: 'any',
           theme_color: '#0A0A0A',
           background_color: '#0A0A0A',
-          display: 'standalone',
           icons: [
             {
-              src: 'pwa-192x192.png',
+              src: '/pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png'
             },
             {
-              src: 'pwa-512x512.png',
+              src: '/pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png'
             },
             {
-              src: 'pwa-512x512.png',
+              src: '/pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any maskable'

@@ -2,14 +2,15 @@
 title Deuce Adventure Park OS - One-Click Installer
 color 0B
 cls
+cd /d "%~dp0"
 
 echo =======================================================================
 echo          DEUCE ADVENTURE PARK OS - ONE-CLICK INSTALLER WIZARD
 echo =======================================================================
 echo.
 echo Welcome to the Deuce Adventure Park OS installer.
-echo This wizard will configure all prerequisites, build assets, and create
-echo desktop and start menu shortcuts for one-click access.
+echo This wizard will configure all prerequisites, compile production assets,
+echo and create desktop and start menu shortcuts for one-click access.
 echo.
 echo =======================================================================
 echo  STEP 1: CHECKING SYSTEM REQUIREMENTS
@@ -76,8 +77,6 @@ echo  STEP 2: PREPARING APPLICATION PACKAGES AND ASSETS
 echo =======================================================================
 echo.
 
-cd /d "%~dp0"
-
 if exist "node_modules" goto modules_ok
 echo [*] Installing npm dependencies, please wait...
 call npm install
@@ -100,43 +99,12 @@ echo [OK] Production build verified.
 echo.
 
 echo =======================================================================
-echo  STEP 3: INSTALLATION DESTINATION
+echo  STEP 3: CONFIGURING DESKTOP AND START MENU SHORTCUTS
 echo =======================================================================
 echo.
-echo Choose installation type:
-echo   [1] Full System Install into AppData - Recommended dedicated directory
-echo   [2] Portable or In-Place Install - Run directly from current folder or USB
-echo.
-set /p INSTALL_CHOICE="Enter selection [1 or 2, default is 1]: "
-if "%INSTALL_CHOICE%"=="" set INSTALL_CHOICE=1
 
-if "%INSTALL_CHOICE%"=="2" goto setup_portable
-
-:setup_system
-set TARGET_DIR=%LOCALAPPDATA%\DeucePark
-echo [*] Target installation directory: %TARGET_DIR%
-if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
-
-echo [*] Copying application files to system folder...
-robocopy "%~dp0." "%TARGET_DIR%" /E /XD .git dist_electron /XF *.log /R:1 /W:1 >nul
-if %errorlevel% geq 8 (
-    xcopy "%~dp0*" "%TARGET_DIR%\" /E /I /H /Y /Q >nul
-)
-echo [OK] Files installed to system directory.
-goto create_shortcuts
-
-:setup_portable
 set TARGET_DIR=%~dp0
 if "%TARGET_DIR:~-1%"=="\" set TARGET_DIR=%TARGET_DIR:~0,-1%
-echo [*] Using portable location: %TARGET_DIR%
-
-:create_shortcuts
-echo.
-echo =======================================================================
-echo  STEP 4: CREATING SHORTCUTS
-echo =======================================================================
-echo.
-
 set ICON_PATH=%TARGET_DIR%\public\favicon.ico
 
 echo [*] Creating Desktop Shortcut...
@@ -151,7 +119,7 @@ if exist "%ICON_PATH%" echo oLink.IconLocation = "%ICON_PATH%" >> "%VBS_SCRIPT%"
 echo oLink.Save >> "%VBS_SCRIPT%"
 cscript //nologo "%VBS_SCRIPT%"
 del "%VBS_SCRIPT%" >nul 2>&1
-echo [OK] Desktop shortcut created.
+echo [OK] Desktop shortcut created successfully on your Desktop.
 
 echo [*] Creating Start Menu Shortcuts...
 set START_MENU_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Deuce Park
@@ -183,17 +151,17 @@ echo oLinkUninstall.Save >> "%VBS_SCRIPT_START%"
 
 cscript //nologo "%VBS_SCRIPT_START%"
 del "%VBS_SCRIPT_START%" >nul 2>&1
-echo [OK] Start Menu shortcuts created.
+echo [OK] Start Menu shortcuts created under Programs - Deuce Park.
 echo.
 
 echo =======================================================================
 echo  INSTALLATION COMPLETED SUCCESSFULLY!
 echo =======================================================================
 echo.
-echo  * Desktop Icon: Deuce Adventure Park OS
+echo  * Desktop Icon: Deuce Adventure Park OS (On your desktop)
 echo  * Start Menu: Programs to Deuce Park
-echo  * App URL: http://localhost:3000
-echo  * Dedicated Window Mode: Enabled Edge and Chrome app mode
+echo  * Interface: http://localhost:3000
+echo  * Dedicated App Window: Ready
 echo.
 
 set /p LAUNCH_NOW="Launch Deuce Adventure Park OS now? (Y/N) [Default: Y]: "
