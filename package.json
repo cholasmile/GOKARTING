@@ -9,8 +9,9 @@
   "scripts": {
     "dev": "concurrently \"tsx api/index.js\" \"vite --port=3000 --host=0.0.0.0\"",
     "build": "vite build",
+    "start": "node api/index.js",
     "preview": "vite preview --port=3000 --host=0.0.0.0",
-    "app:start": "concurrently \"tsx api/index.js\" \"vite preview --port=3000 --host=0.0.0.0\"",
+    "app:start": "node api/index.js",
     "desktop": "electron .",
     "desktop:build": "npm run build && electron-builder --win",
     "clean": "rm -rf dist",

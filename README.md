@@ -1,22 +1,47 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Deuce Adventure Park OS
 
-# Run and deploy your AI Studio app
+Hybrid Ticketing, Activity Management, POS & Offline-First Park Management System.
 
-This contains everything you need to run your app locally.
+---
 
-View your app in AI Studio: https://ai.studio/apps/b65b1fc3-5ce0-4397-b681-00875352723c
+## ⚡ Quick Start - One-Click Easy Install
 
-## Run Locally
+To install the application onto this PC with zero setup:
 
-**Prerequisites:**  Node.js
+👉 **Double-click [`INSTALL.bat`](file:///c:/Users/CHOLA/Downloads/deuce1/INSTALL.bat)**
 
+- **Automatic Prerequisites**: Detects & installs Node.js LTS if missing.
+- **Desktop & Start Menu Shortcuts**: Generates one-click desktop app shortcuts.
+- **App Window Mode**: Runs borderless like a native desktop software (Edge/Chrome app mode).
+- **Offline First**: Full offline SQLite ticketing & Supabase realtime sync.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
-<!-- Redeploy trigger: appended by automation -->
-<!-- Redeploy trigger: appended by automation -->
+For complete details, see [INSTALLATION_GUIDE.md](file:///c:/Users/CHOLA/Downloads/deuce1/INSTALLATION_GUIDE.md).
+
+---
+
+## 📂 Quick Scripts Reference
+
+| Script | Purpose |
+|---|---|
+| **[`INSTALL.bat`](file:///c:/Users/CHOLA/Downloads/deuce1/INSTALL.bat)** | Complete automated one-click installer & shortcut creator |
+| **[`Launch-App.bat`](file:///c:/Users/CHOLA/Downloads/deuce1/Launch-App.bat)** | Launch the app in standalone desktop app window mode |
+| **[`Stop-App.bat`](file:///c:/Users/CHOLA/Downloads/deuce1/Stop-App.bat)** | Cleanly stop background servers and free ports |
+| **[`Uninstall.bat`](file:///c:/Users/CHOLA/Downloads/deuce1/Uninstall.bat)** | Cleanly remove shortcuts and installed files |
+
+---
+
+## 💻 Developer Commands
+
+```bash
+# Install dependencies
+npm install
+
+# Start development servers (Vite + Express Backend)
+npm run dev
+
+# Build production bundle
+npm run build
+
+# Start production server
+npm start
+```
