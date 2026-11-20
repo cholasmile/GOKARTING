@@ -69,7 +69,7 @@ exit /b 1
 echo [OK] Node.js detected:
 node -v
 echo [OK] NPM detected:
-npm -v
+call npm -v
 echo.
 
 echo =======================================================================
@@ -88,6 +88,12 @@ if %errorlevel% neq 0 (
 
 :modules_ok
 echo [OK] Dependencies verified.
+
+if exist "dist\index.html" (
+    echo [OK] Production assets already compiled.
+    goto step3_shortcuts
+)
+
 echo [*] Building optimized production assets...
 call npm run build
 if not exist "dist\index.html" (
@@ -96,69 +102,27 @@ if not exist "dist\index.html" (
     exit /b 1
 )
 echo [OK] Production build verified.
-echo.
 
+:step3_shortcuts
+echo.
 echo =======================================================================
 echo  STEP 3: CONFIGURING DESKTOP AND START MENU SHORTCUTS
 echo =======================================================================
 echo.
 
-set TARGET_DIR=%~dp0
-if "%TARGET_DIR:~-1%"=="\" set TARGET_DIR=%TARGET_DIR:~0,-1%
-set ICON_PATH=%TARGET_DIR%\public\favicon.ico
+echo [*] Creating Desktop and Start Menu Shortcuts...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\scripts\create-shortcuts.ps1" -AppDir "%CD%"
+if %errorlevel% neq 0 (
+    echo [!] Warning: PowerShell shortcut creation encountered an issue. Creating fallback...
+    powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Deuce Adventure Park OS.lnk')); $s.TargetPath = '%~dp0Launch-App.bat'; $s.WorkingDirectory = '%~dp0'; $s.Save()"
+)
 
-echo [*] Creating Desktop Shortcut...
-set VBS_SCRIPT=%TEMP%\create_deuce_desktop.vbs
-echo Set oWS = WScript.CreateObject("WScript.Shell") > "%VBS_SCRIPT%"
-echo sLinkFile = "%USERPROFILE%\Desktop\Deuce Adventure Park OS.lnk" >> "%VBS_SCRIPT%"
-echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%VBS_SCRIPT%"
-echo oLink.TargetPath = "%TARGET_DIR%\Launch-App.bat" >> "%VBS_SCRIPT%"
-echo oLink.WorkingDirectory = "%TARGET_DIR%" >> "%VBS_SCRIPT%"
-echo oLink.Description = "Launch Deuce Adventure Park OS" >> "%VBS_SCRIPT%"
-if exist "%ICON_PATH%" echo oLink.IconLocation = "%ICON_PATH%" >> "%VBS_SCRIPT%"
-echo oLink.Save >> "%VBS_SCRIPT%"
-cscript //nologo "%VBS_SCRIPT%"
-del "%VBS_SCRIPT%" >nul 2>&1
-echo [OK] Desktop shortcut created successfully on your Desktop.
-
-echo [*] Creating Start Menu Shortcuts...
-set START_MENU_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Deuce Park
-if not exist "%START_MENU_DIR%" mkdir "%START_MENU_DIR%"
-
-set VBS_SCRIPT_START=%TEMP%\create_deuce_start.vbs
-echo Set oWS = WScript.CreateObject("WScript.Shell") > "%VBS_SCRIPT_START%"
-echo sLinkFile = "%START_MENU_DIR%\Deuce Adventure Park OS.lnk" >> "%VBS_SCRIPT_START%"
-echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%VBS_SCRIPT_START%"
-echo oLink.TargetPath = "%TARGET_DIR%\Launch-App.bat" >> "%VBS_SCRIPT_START%"
-echo oLink.WorkingDirectory = "%TARGET_DIR%" >> "%VBS_SCRIPT_START%"
-echo oLink.Description = "Launch Deuce Adventure Park OS" >> "%VBS_SCRIPT_START%"
-if exist "%ICON_PATH%" echo oLink.IconLocation = "%ICON_PATH%" >> "%VBS_SCRIPT_START%"
-echo oLink.Save >> "%VBS_SCRIPT_START%"
-
-echo sLinkStop = "%START_MENU_DIR%\Stop Deuce Park Service.lnk" >> "%VBS_SCRIPT_START%"
-echo Set oLinkStop = oWS.CreateShortcut(sLinkStop) >> "%VBS_SCRIPT_START%"
-echo oLinkStop.TargetPath = "%TARGET_DIR%\Stop-App.bat" >> "%VBS_SCRIPT_START%"
-echo oLinkStop.WorkingDirectory = "%TARGET_DIR%" >> "%VBS_SCRIPT_START%"
-echo oLinkStop.Description = "Stop Deuce Adventure Park Background Server" >> "%VBS_SCRIPT_START%"
-echo oLinkStop.Save >> "%VBS_SCRIPT_START%"
-
-echo sLinkUninstall = "%START_MENU_DIR%\Uninstall Deuce Park.lnk" >> "%VBS_SCRIPT_START%"
-echo Set oLinkUninstall = oWS.CreateShortcut(sLinkUninstall) >> "%VBS_SCRIPT_START%"
-echo oLinkUninstall.TargetPath = "%TARGET_DIR%\Uninstall.bat" >> "%VBS_SCRIPT_START%"
-echo oLinkUninstall.WorkingDirectory = "%TARGET_DIR%" >> "%VBS_SCRIPT_START%"
-echo oLinkUninstall.Description = "Uninstall Deuce Adventure Park OS" >> "%VBS_SCRIPT_START%"
-echo oLinkUninstall.Save >> "%VBS_SCRIPT_START%"
-
-cscript //nologo "%VBS_SCRIPT_START%"
-del "%VBS_SCRIPT_START%" >nul 2>&1
-echo [OK] Start Menu shortcuts created under Programs - Deuce Park.
 echo.
-
 echo =======================================================================
 echo  INSTALLATION COMPLETED SUCCESSFULLY!
 echo =======================================================================
 echo.
-echo  * Desktop Icon: Deuce Adventure Park OS (On your desktop)
+echo  * Desktop Icon: "Deuce Adventure Park OS" (Check your Desktop)
 echo  * Start Menu: Programs to Deuce Park
 echo  * Interface: http://localhost:3000
 echo  * Dedicated App Window: Ready
@@ -168,7 +132,7 @@ set /p LAUNCH_NOW="Launch Deuce Adventure Park OS now? (Y/N) [Default: Y]: "
 if "%LAUNCH_NOW%"=="" set LAUNCH_NOW=Y
 if /i "%LAUNCH_NOW%"=="Y" (
     echo [*] Starting Deuce Adventure Park OS...
-    start "" "%USERPROFILE%\Desktop\Deuce Adventure Park OS.lnk"
+    start "" "%~dp0Launch-App.bat"
 )
 
 echo.
