@@ -19,7 +19,7 @@ import { db } from '../db/db';
 import { syncEngine, SyncStatus } from '../lib/syncEngine';
 import { generateOfflineId, requestPersistentStorage } from '../lib/deviceSetup';
 import { salesSummaryEngine } from '../lib/salesSummaryEngine';
-import { INITIAL_USERS, INITIAL_ACTIVITIES, INITIAL_COMBO_PACKS } from '../data/initialData';
+import { INITIAL_USERS, INITIAL_ACTIVITIES, INITIAL_COMBO_PACKS, INITIAL_FOOD_VENDORS, INITIAL_GIFT_ITEMS } from '../data/initialData';
 
 interface AppContextProps {
   // Authentication & Role
@@ -252,6 +252,18 @@ interface AppContextProps {
     customerPhone?: string
   ) => FoodOrder;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
+
+  // Mutators - Gift Shop Orders & Cart
+  giftCart: FoodOrderItem[];
+  addToGiftCart: (item: MenuItem, quantity: number) => void;
+  removeFromGiftCart: (menuItemId: string) => void;
+  clearGiftCart: () => void;
+  submitGiftOrder: (
+    customerNameOrData: string | { customerName: string; customerEmail: string; paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash'; customerPhone?: string },
+    customerEmail?: string,
+    paymentMethod?: 'upi' | 'card' | 'net_banking' | 'cash',
+    customerPhone?: string
+  ) => FoodOrder;
 
   // Mutators - Go Karting
   updateKartStatus: (kartId: string, status: KartStatus, driverId?: string, sessionId?: string) => void;
@@ -719,23 +731,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
   const [vendors, setVendors] = useState<FoodVendor[]>(() => {
     const cached = localStorage.getItem('ap_vendors');
+    let list: FoodVendor[] = [];
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
       } catch {}
     }
-    return [];
+    if (list.length === 0) list = [...INITIAL_FOOD_VENDORS];
+    // Ensure vendor-gift-shop is present in vendors
+    if (!list.some(v => v.id === 'vendor-gift-shop')) {
+      const giftVendor = INITIAL_FOOD_VENDORS.find(v => v.id === 'vendor-gift-shop');
+      if (giftVendor) list.push(giftVendor);
+    }
+    return list;
   });
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => {
     const cached = localStorage.getItem('ap_menu_items');
+    let list: MenuItem[] = [];
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
       } catch {}
     }
-    return [];
+    // Ensure curated gift shop merchandise is present
+    INITIAL_GIFT_ITEMS.forEach(gi => {
+      if (!list.some(m => m.id === gi.id || m.name.toLowerCase() === gi.name.toLowerCase())) {
+        list.push(gi);
+      }
+    });
+    return list;
   });
   const [inventory, setInventory] = useState<InventoryItem[]>(() => {
     const cached = localStorage.getItem('ap_inventory');
@@ -1027,6 +1053,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   const [foodCart, setFoodCart] = useState<FoodOrderItem[]>([]);
+  const [giftCart, setGiftCart] = useState<FoodOrderItem[]>([]);
 
   // Counter UPI ID — settable by admin, persisted in localStorage
   const [counterUpiId, setCounterUpiIdState] = useState<string>(() =>
@@ -4526,6 +4553,175 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return newOrder;
   };
 
+  // Gift Cart Actions with live stock position checks
+  const addToGiftCart = (item: MenuItem, quantity: number) => {
+    setGiftCart(prev => {
+      const existing = prev.find(i => i.menuItemId === item.id);
+      const currentCartQty = existing ? existing.quantity : 0;
+      const availableStock = item.stockQuantity !== undefined ? item.stockQuantity : 9999;
+
+      if (availableStock <= 0) {
+        alert(`Sorry, "${item.name}" is currently Out of Stock.`);
+        return prev;
+      }
+
+      if (currentCartQty + quantity > availableStock) {
+        alert(`Cannot add more than available stock (${availableStock} units available for ${item.name}).`);
+        return prev;
+      }
+
+      const vendorName = vendors.find(v => v.id === item.vendorId)?.name || 'Deuce Souvenir & Gift Shop';
+
+      if (existing) {
+        return prev.map(i => i.menuItemId === item.id ? { ...i, quantity: i.quantity + quantity } : i);
+      } else {
+        return [...prev, {
+          id: generateOfflineId('gift-cart-item'),
+          menuItemId: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: quantity,
+          vendorId: item.vendorId,
+          vendorName: vendorName
+        }];
+      }
+    });
+  };
+
+  const removeFromGiftCart = (menuItemId: string) => {
+    setGiftCart(prev => prev.filter(i => i.menuItemId !== menuItemId));
+  };
+
+  const clearGiftCart = () => {
+    setGiftCart([]);
+  };
+
+  // Submit Gift Shop Retail Order
+  const submitGiftOrder = (
+    customerNameOrData: string | { customerName: string; customerEmail: string; paymentMethod: 'upi' | 'card' | 'net_banking' | 'cash'; customerPhone?: string },
+    customerEmail?: string,
+    paymentMethod?: 'upi' | 'card' | 'net_banking' | 'cash',
+    customerPhone?: string
+  ) => {
+    if (giftCart.length === 0) throw new Error('Gift cart is empty');
+
+    let finalName = 'Walk-in Guest';
+    let finalEmail = 'guest@deucepark.com';
+    let finalPhone = 'N/A';
+    let finalMethod: 'upi' | 'card' | 'net_banking' | 'cash' = 'cash';
+
+    if (typeof customerNameOrData === 'object' && customerNameOrData !== null) {
+      finalName = customerNameOrData.customerName || 'Walk-in Guest';
+      finalEmail = customerNameOrData.customerEmail || 'guest@deucepark.com';
+      finalPhone = customerNameOrData.customerPhone || 'N/A';
+      finalMethod = customerNameOrData.paymentMethod || 'cash';
+    } else {
+      finalName = (typeof customerNameOrData === 'string' && customerNameOrData) ? customerNameOrData : 'Walk-in Guest';
+      finalEmail = customerEmail || 'guest@deucepark.com';
+      finalMethod = paymentMethod || 'cash';
+      finalPhone = customerPhone || 'N/A';
+    }
+
+    const orderId = generateOfflineId('gord');
+    const txId = generateOfflineId('gtx');
+    const timestamp = new Date().toISOString();
+    const todayStr = timestamp.split('T')[0];
+
+    // Daily sequential token number for gift shop: GFT-101, 102...
+    const todayGiftOrdersCount = orders.filter(o => o.createdAt && o.createdAt.startsWith(todayStr) && (o.invoiceNumber?.startsWith('INV-GFT-') || o.items?.some(i => i.vendorId === 'vendor-gift-shop'))).length;
+    const tokenNumber = 101 + todayGiftOrdersCount;
+
+    // 12% Retail GST calculation (GST Inclusive in Item MRP)
+    const grandMRP = Math.round(giftCart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
+    const subtotal = Math.round((grandMRP / 1.12) * 100) / 100;
+    const taxAmount = Math.round((grandMRP - subtotal) * 100) / 100;
+    const cgstAmount = Math.round((taxAmount / 2) * 100) / 100;
+    const sgstAmount = Math.round((taxAmount - cgstAmount) * 100) / 100;
+    const totalAmount = grandMRP;
+    const taxRate = 0.12;
+    const invoiceNumber = `INV-GFT-${Date.now().toString().slice(-6)}`;
+
+    const newOrder: FoodOrder = {
+      id: orderId,
+      customerName: finalName,
+      customerEmail: finalEmail,
+      customerPhone: finalPhone,
+      items: [...giftCart],
+      subtotal,
+      taxRate,
+      taxAmount,
+      cgstAmount,
+      sgstAmount,
+      totalAmount,
+      status: 'delivered',
+      paymentStatus: 'paid',
+      invoiceNumber,
+      tokenNumber,
+      paymentMethod: finalMethod,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+
+    const newPayment: Payment = {
+      id: `pay-${Date.now()}`,
+      orderId,
+      amount: totalAmount,
+      method: finalMethod,
+      status: 'success',
+      transactionId: txId,
+      timestamp,
+      created_at: timestamp,
+      updated_at: timestamp,
+      invoice_id: invoiceNumber,
+      customer_id: finalEmail,
+      currency: 'INR',
+      payment_method: String(finalMethod).toUpperCase(),
+      payment_status: 'PAID',
+      customerName: finalName,
+      customerPhone: finalPhone,
+      activityName: 'DEUCE GIFT & SOUVENIR SHOP',
+      counterId: 'counter_1'
+    };
+
+    setOrders(prev => [newOrder, ...prev]);
+    setPayments(prev => [newPayment, ...prev]);
+
+    writeToLocalAndSync('orders', 'insert', newOrder);
+    writeToLocalAndSync('payments', 'insert', newPayment);
+
+    // Reduce Gift Shop Item Stock and update sales amount
+    setMenuItems(prev => {
+      const updatedList = prev.map(m => {
+        const cartItem = giftCart.find(ci => ci.menuItemId === m.id);
+        if (cartItem) {
+          const currentStock = m.stockQuantity !== undefined ? m.stockQuantity : 50;
+          const newQty = Math.max(0, currentStock - cartItem.quantity);
+          const updated = {
+            ...m,
+            stockQuantity: newQty,
+            quantitySold: (m.quantitySold || 0) + cartItem.quantity,
+            salesAmount: (m.salesAmount || 0) + (cartItem.price * cartItem.quantity),
+            isAvailable: newQty > 0 ? m.isAvailable : false,
+            updatedAt: timestamp
+          };
+          writeToLocalAndSync('menuItems', 'update', updated);
+          return updated;
+        }
+        return m;
+      });
+
+      try {
+        localStorage.setItem('ap_menu_items', JSON.stringify(updatedList));
+        db.menuItems.bulkPut(updatedList);
+      } catch {}
+
+      return updatedList;
+    });
+
+    clearGiftCart();
+    return newOrder;
+  };
+
   const updateOrderStatus = (orderId: string, status: OrderStatus) => {
     const now = new Date().toISOString();
     setOrders(prev => prev.map(o => {
@@ -4734,6 +4930,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       clearFoodCart,
       submitFoodOrder,
       updateOrderStatus,
+
+      giftCart,
+      addToGiftCart,
+      removeFromGiftCart,
+      clearGiftCart,
+      submitGiftOrder,
 
       sendMockNotification,
       resetAllData,

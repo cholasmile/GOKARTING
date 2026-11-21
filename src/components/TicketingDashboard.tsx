@@ -4,7 +4,7 @@ import {
   Utensils, Plus, Minus, ShoppingBag, Trash2, ArrowRight, XCircle, RotateCcw, AlertTriangle, 
   Check, X, QrCode, Calendar, TrendingUp, Clock, Coins, Receipt, Wallet, ArrowUpRight,
   Flame, Store, Coffee, ChevronRight, Layers, Tag, Edit, Eye, Filter, Package, Upload,
-  Sparkles, RefreshCw, Boxes, Globe
+  Sparkles, RefreshCw, Boxes, Globe, Gift
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Activity, Payment, FoodOrder, MenuItem } from '../types';
@@ -21,6 +21,7 @@ export const TicketingDashboard: React.FC = () => {
   const { 
     activities, currentUser, payments, orders, menuItems, vendors, inventory, tickets, bookings,
     foodCart, addToFoodCart, removeFromFoodCart, clearFoodCart, submitFoodOrder,
+    giftCart, addToGiftCart, removeFromGiftCart, clearGiftCart, submitGiftOrder,
     addMenuItem, updateMenuItem, deleteMenuItem, adjustMenuItemStock, updateMenuItemStock,
     cancelAndRefundTicket, counterUpiId, comboPacks
   } = useAppContext();
@@ -29,7 +30,17 @@ export const TicketingDashboard: React.FC = () => {
   const activeComboPacks = effectiveComboPacks.filter(p => p.isActive !== false);
 
   // Active top-level subtab
-  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'combo_pos' | 'online_bookings' | 'cafe_pos' | 'cafe_menu' | 'history'>('new_booking');
+  const [activeSubTab, setActiveSubTab] = useState<'new_booking' | 'combo_pos' | 'online_bookings' | 'cafe_pos' | 'cafe_menu' | 'gift_pos' | 'gift_inventory' | 'history'>('new_booking');
+  const [ticketingViewMode, setTicketingViewMode] = useState<'activities' | 'combos'>('activities');
+
+  // Auto-switch to appropriate role view on login
+  React.useEffect(() => {
+    if (currentUser?.role === 'gift_shop_staff') {
+      setActiveSubTab('gift_pos');
+    } else if (currentUser?.role === 'cafe_staff') {
+      setActiveSubTab('cafe_pos');
+    }
+  }, [currentUser]);
   
   // ── 1. Activity Booking State ───────────────────────────────────────────
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
@@ -102,7 +113,36 @@ export const TicketingDashboard: React.FC = () => {
   });
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
-  // ── 5. Sales History & Refund State ─────────────────────────────────────
+  // ── 4. Gift Shop POS State ──────────────────────────────────────────────
+  const [giftSearch, setGiftSearch] = useState('');
+  const [selectedGiftCategory, setSelectedGiftCategory] = useState<string>('all');
+  const [giftCustomerName, setGiftCustomerName] = useState('Walk-in Guest');
+  const [giftCustomerPhone, setGiftCustomerPhone] = useState('');
+  const [giftPaymentMethod, setGiftPaymentMethod] = useState<'cash' | 'upi' | 'card'>('cash');
+  const [isSubmittingGift, setIsSubmittingGift] = useState(false);
+  const [generatedGiftOrder, setGeneratedGiftOrder] = useState<FoodOrder | null>(null);
+
+  // ── 5. Gift Shop Catalog & Inventory State ──────────────────────────────
+  const [giftCatalogSearch, setGiftCatalogSearch] = useState('');
+  const [giftCatalogCategoryFilter, setGiftCatalogCategoryFilter] = useState('all');
+  const [giftCatalogViewMode, setGiftCatalogViewMode] = useState<'table' | 'cards'>('cards');
+  const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
+  const [editingGiftItem, setEditingGiftItem] = useState<MenuItem | null>(null);
+  const [giftForm, setGiftForm] = useState({
+    name: '',
+    description: '',
+    price: 399,
+    purchasePrice: 180,
+    category: 'Souvenirs & Keychains',
+    vendorId: 'vendor-gift-shop',
+    image: '',
+    stockQuantity: 50,
+    isAvailable: true,
+    unit: 'pcs'
+  });
+  const [isUploadingGiftImage, setIsUploadingGiftImage] = useState(false);
+
+  // ── 6. Sales History & Refund State ─────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
   const [methodFilter, setMethodFilter] = useState<'all' | 'cash' | 'upi'>('all');
   const [selectedRefundPayment, setSelectedRefundPayment] = useState<Payment | null>(null);
@@ -114,11 +154,37 @@ export const TicketingDashboard: React.FC = () => {
   const [refundNotice, setRefundNotice] = useState<string | null>(null);
   const [refundSuccessReceipt, setRefundSuccessReceipt] = useState<any | null>(null);
 
-  // Available food categories from existing menu items
-  const availableCategories = Array.from(new Set(menuItems.map(m => m.category).filter(Boolean)));
+  // Gift Shop Categories definition
+  const GIFT_CATEGORY_OPTIONS = [
+    'Caps & Headwear',
+    'Apparel & Clothing',
+    'Toys & Die-Cast Models',
+    'Souvenirs & Keychains',
+    'Drinkware & Flasks',
+    'Accessories & Gear'
+  ];
+
+  const isGiftItem = (item: MenuItem) => (
+    item.vendorId === 'vendor-gift-shop' ||
+    GIFT_CATEGORY_OPTIONS.includes(item.category) ||
+    item.category?.toLowerCase().includes('souvenir') ||
+    item.category?.toLowerCase().includes('merchandise') ||
+    item.category?.toLowerCase().includes('apparel')
+  );
+
+  const nonGiftMenuItems = menuItems.filter(m => !isGiftItem(m));
+  const giftMenuItems = menuItems.filter(isGiftItem);
+
+  // Available food categories from existing non-gift menu items
+  const availableCategories = Array.from(new Set(nonGiftMenuItems.map(m => m.category).filter(Boolean)));
   const allCategoryOptions = availableCategories.length > 0 
     ? availableCategories 
     : ['Beverages', 'Wood-Fired Pizza', 'Smash Burgers', 'Starters & Sides', 'Desserts & Shakes', 'Snacks & Fast Food', 'Main Course', 'Combos & Offers'];
+
+  const availableGiftCategories = Array.from(new Set(giftMenuItems.map(m => m.category).filter(Boolean)));
+  const allGiftCategoryOptions = availableGiftCategories.length > 0
+    ? Array.from(new Set([...GIFT_CATEGORY_OPTIONS, ...availableGiftCategories]))
+    : GIFT_CATEGORY_OPTIONS;
 
   // Helper date checker
   const isDateToday = (timestampStr?: string | number) => {
@@ -239,6 +305,102 @@ export const TicketingDashboard: React.FC = () => {
     }
   };
 
+  // ── Gift Shop POS Order Process ─────────────────────────────────────────
+  const handleProcessGiftOrder = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (giftCart.length === 0 || isSubmittingGift) return;
+    setIsSubmittingGift(true);
+    try {
+      const order = submitGiftOrder({
+        customerName: giftCustomerName || 'Walk-in Guest',
+        customerEmail: 'counter@deucepark.com',
+        customerPhone: giftCustomerPhone || undefined,
+        paymentMethod: giftPaymentMethod
+      });
+
+      setGeneratedGiftOrder(order);
+
+      // Auto-trigger print
+      printTicket({
+        receiptId: order.invoiceNumber || order.id,
+        tokenNumber: order.tokenNumber ? `#${order.tokenNumber}` : order.id,
+        timestamp: order.createdAt,
+        activityName: 'DEUCE GIFT & SOUVENIR SHOP',
+        packageName: 'Souvenirs & Merchandise',
+        customerName: giftCustomerName || 'Walk-in Guest',
+        customerPhone: giftCustomerPhone || undefined,
+        date: new Date().toISOString().split('T')[0],
+        slot: 'GIFT COUNTER',
+        items: order.items.map(i => ({ label: `${i.quantity}x ${i.name}`, value: `₹${(i.price * i.quantity).toFixed(2)}` })),
+        subtotalAmount: order.subtotal,
+        totalAmount: order.totalAmount,
+        paymentStatus: 'paid',
+        quantity: order.items.reduce((s, i) => s + i.quantity, 0),
+        paymentMethod: giftPaymentMethod
+      });
+
+      clearGiftCart();
+      setGiftCustomerPhone('');
+      setGiftCustomerName('Walk-in Guest');
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit gift shop order.');
+    } finally {
+      setIsSubmittingGift(false);
+    }
+  };
+
+  // ── Save or Update Gift Item Modal ──────────────────────────────────────
+  const handleSaveGiftItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!giftForm.name.trim()) return alert('Item name is required');
+
+    if (editingGiftItem) {
+      updateMenuItem({
+        ...editingGiftItem,
+        name: giftForm.name,
+        description: giftForm.description,
+        price: Number(giftForm.price),
+        purchasePrice: Number(giftForm.purchasePrice || 0),
+        category: giftForm.category,
+        vendorId: giftForm.vendorId || 'vendor-gift-shop',
+        image: giftForm.image || 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=400&q=80',
+        stockQuantity: Number(giftForm.stockQuantity || 0),
+        isAvailable: giftForm.isAvailable,
+        unit: giftForm.unit || 'pcs'
+      });
+    } else {
+      addMenuItem({
+        name: giftForm.name,
+        description: giftForm.description,
+        price: Number(giftForm.price),
+        purchasePrice: Number(giftForm.purchasePrice || 0),
+        category: giftForm.category,
+        vendorId: giftForm.vendorId || 'vendor-gift-shop',
+        image: giftForm.image || 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=400&q=80',
+        stockQuantity: Number(giftForm.stockQuantity || 0),
+        isAvailable: giftForm.isAvailable,
+        unit: giftForm.unit || 'pcs'
+      });
+    }
+
+    setIsGiftModalOpen(false);
+    setEditingGiftItem(null);
+  };
+
+  const handleGiftImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingGiftImage(true);
+    try {
+      const compressed = await compressImageFile(file, 800, 800, 0.7);
+      setGiftForm(prev => ({ ...prev, image: compressed }));
+    } catch (err) {
+      console.error('Gift item image compression failed:', err);
+    } finally {
+      setIsUploadingGiftImage(false);
+    }
+  };
+
   // ── Unified Deduplicated Payments Base ──────────────────────────────────
   const allDeduplicatedPaymentsMap = new Map<string, Payment>();
   payments.forEach(p => {
@@ -265,30 +427,29 @@ export const TicketingDashboard: React.FC = () => {
     return isPaid && isDateToday(p.timestamp || p.created_at);
   });
 
-  const todayActivityPaidList = todayPaidCounterList.filter(p => {
-    const isFood = Boolean(
-      p.orderId || 
-      p.activityName === 'Food Street Dining' || 
-      p.activityName?.toLowerCase().includes('food') || 
-      p.activityName?.toLowerCase().includes('cafe') || 
-      p.activityName?.toLowerCase().includes('dining')
-    );
-    return !isFood;
-  });
+  const isGiftPayment = (p: Payment) => Boolean(
+    p.activityName?.toLowerCase().includes('gift') ||
+    p.activityName?.toLowerCase().includes('souvenir') ||
+    p.activityName?.toLowerCase().includes('merchandise') ||
+    p.invoice_id?.startsWith('INV-GFT-')
+  );
 
-  const todayFoodPaidList = todayPaidCounterList.filter(p => {
-    return Boolean(
-      p.orderId || 
-      p.activityName === 'Food Street Dining' || 
-      p.activityName?.toLowerCase().includes('food') || 
-      p.activityName?.toLowerCase().includes('cafe') || 
-      p.activityName?.toLowerCase().includes('dining')
-    );
-  });
+  const isFoodPayment = (p: Payment) => !isGiftPayment(p) && Boolean(
+    p.orderId || 
+    p.activityName === 'Food Street Dining' || 
+    p.activityName?.toLowerCase().includes('food') || 
+    p.activityName?.toLowerCase().includes('cafe') || 
+    p.activityName?.toLowerCase().includes('dining')
+  );
+
+  const todayGiftPaidList = todayPaidCounterList.filter(isGiftPayment);
+  const todayFoodPaidList = todayPaidCounterList.filter(isFoodPayment);
+  const todayActivityPaidList = todayPaidCounterList.filter(p => !isFoodPayment(p) && !isGiftPayment(p));
 
   const todayActivityRevenue = todayActivityPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const todayFoodRevenue = todayFoodPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const todayCombinedTotalRevenue = todayActivityRevenue + todayFoodRevenue;
+  const todayGiftRevenue = todayGiftPaidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const todayCombinedTotalRevenue = todayActivityRevenue + todayFoodRevenue + todayGiftRevenue;
 
   // Breakdown for Ticketing
   const todayTicketingPaymentsList = allConsolidatedPayments.filter(p => {
@@ -468,13 +629,22 @@ export const TicketingDashboard: React.FC = () => {
     }
   };
 
-  // Filtered menu items for POS
-  const filteredMenuItems = menuItems.filter(item => {
+  // Filtered menu items for Cafe POS (concessions & dining)
+  const filteredMenuItems = nonGiftMenuItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(foodSearch.toLowerCase()) || 
                           item.category.toLowerCase().includes(foodSearch.toLowerCase());
     const matchesVendor = selectedVendorId === 'all' || item.vendorId === selectedVendorId;
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     return matchesSearch && matchesVendor && matchesCategory && item.isAvailable;
+  });
+
+  // Filtered merchandise items for Gift Shop POS
+  const filteredGiftItems = giftMenuItems.filter(item => {
+    const matchesSearch = item.name.toLowerCase().includes(giftSearch.toLowerCase()) || 
+                          item.category.toLowerCase().includes(giftSearch.toLowerCase()) ||
+                          item.description?.toLowerCase().includes(giftSearch.toLowerCase());
+    const matchesCategory = selectedGiftCategory === 'all' || item.category === selectedGiftCategory;
+    return matchesSearch && matchesCategory && item.isAvailable;
   });
 
 
@@ -511,9 +681,9 @@ export const TicketingDashboard: React.FC = () => {
       {/* Top Main Navigation Tabs */}
       <div className="flex border-b border-[#1C1C1C] gap-2 overflow-x-auto pb-1">
         <button 
-          onClick={() => setActiveSubTab('new_booking')}
+          onClick={() => { setActiveSubTab('new_booking'); setTicketingViewMode('activities'); }}
           className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            activeSubTab === 'new_booking' 
+            activeSubTab === 'new_booking' && ticketingViewMode === 'activities'
               ? 'border-[#00ABAB] text-[#00ABAB] bg-white/5 rounded-t-xl' 
               : 'border-transparent text-[#94A3B8] hover:text-white'
           }`}
@@ -522,9 +692,9 @@ export const TicketingDashboard: React.FC = () => {
         </button>
 
         <button 
-          onClick={() => setActiveSubTab('combo_pos')}
+          onClick={() => { setActiveSubTab('new_booking'); setTicketingViewMode('combos'); }}
           className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            activeSubTab === 'combo_pos' 
+            activeSubTab === 'combo_pos' || (activeSubTab === 'new_booking' && ticketingViewMode === 'combos')
               ? 'border-[#FFD700] text-[#FFD700] bg-amber-500/10 rounded-t-xl' 
               : 'border-transparent text-[#94A3B8] hover:text-[#FFD700]'
           }`}
@@ -577,6 +747,33 @@ export const TicketingDashboard: React.FC = () => {
         </button>
 
         <button 
+          onClick={() => setActiveSubTab('gift_pos')}
+          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeSubTab === 'gift_pos' 
+              ? 'border-[#FFB703] text-[#FFB703] bg-amber-500/10 rounded-t-xl' 
+              : 'border-transparent text-[#94A3B8] hover:text-[#FFB703]'
+          }`}
+        >
+          <Gift className="w-4 h-4 text-[#FFB703]" /> Gift Shop POS
+          {giftCart.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-[#FFB703] text-[#0A0A0A] text-xs font-black animate-pulse">
+              {giftCart.reduce((s, i) => s + i.quantity, 0)}
+            </span>
+          )}
+        </button>
+
+        <button 
+          onClick={() => setActiveSubTab('gift_inventory')}
+          className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeSubTab === 'gift_inventory' 
+              ? 'border-[#FFB703] text-[#FFB703] bg-amber-500/10 rounded-t-xl' 
+              : 'border-transparent text-[#94A3B8] hover:text-[#FFB703]'
+          }`}
+        >
+          <Package className="w-4 h-4 text-amber-400" /> Gift Shop Items & Inventory
+        </button>
+
+        <button 
           onClick={() => setActiveSubTab('history')}
           className={`px-5 py-3 font-bold text-sm transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeSubTab === 'history' 
@@ -592,192 +789,165 @@ export const TicketingDashboard: React.FC = () => {
       {/* 1. ACTIVITY TICKETING POS SUBTAB                                   */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {activeSubTab === 'new_booking' && (
-        <div className="glass-panel rounded-2xl p-6 border border-[#00ABAB]/30 animate-fade-in space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h2 className="text-xl font-black text-white flex items-center gap-2">
-                <Ticket className="w-6 h-6 text-[#00ABAB]" /> Select Park Activities to Book
-              </h2>
-              <p className="text-xs text-[#94A3B8] mt-0.5">
-                Multi-select one or multiple activities to generate synchronized passes or bundle passes.
-              </p>
-            </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <button 
-                onClick={selectAll}
-                className="flex-1 sm:flex-none px-4 py-2 border border-[#00ABAB] text-[#00ABAB] rounded-xl font-bold text-xs hover:bg-[#00ABAB]/10 transition-colors cursor-pointer"
-              >
-                {selectedActivities.length === visibleActivities.length ? 'Deselect All' : 'Select All Package'}
-              </button>
-              <button 
-                onClick={() => setIsCheckoutOpen(true)}
-                disabled={selectedActivities.length === 0}
-                className="flex-1 sm:flex-none px-6 py-2.5 bg-[#00ABAB] text-black rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#00ABAB]/80 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-[0_0_20px_rgba(0,171,171,0.3)]"
-              >
-                Proceed to Checkout ({selectedActivities.length})
-              </button>
-            </div>
-          </div>
-
-          {/* Quick link banner to Combo Packs */}
-          <div className="p-3.5 bg-gradient-to-r from-amber-950/40 via-[#0A0A0A] to-cyan-950/20 border border-[#FFD700]/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className={`glass-panel rounded-2xl p-6 border space-y-6 animate-fade-in ${
+          ticketingViewMode === 'combos' ? 'border-[#FFD700]/40' : 'border-[#00ABAB]/30'
+        }`}>
+          {/* ── Mode Toggle Button (Activities vs Combo Packages) ── */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-black/40 p-3 rounded-2xl border border-white/10">
             <div className="flex items-center gap-3">
-              <span className="p-2 rounded-xl bg-amber-400/10 text-amber-300 border border-amber-400/30">
-                <Boxes className="w-5 h-5" />
-              </span>
-              <div>
-                <p className="text-xs font-bold text-white">Guest wants a multi-activity package deal?</p>
-                <p className="text-[10px] text-[#94A3B8]">Curated combo packs offer huge savings across Go-Karting, Shooting, Simulators & more.</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setActiveSubTab('combo_pos')}
-              className="px-4 py-1.5 bg-[#FFD700] text-[#0A0A0A] rounded-xl font-black text-xs uppercase tracking-wider hover:bg-white transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Boxes className="w-3.5 h-3.5" /> Open Combo Packs Counter <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-
-          {/* Quick link banner to Cafe POS */}
-          <div className="p-3.5 bg-gradient-to-r from-teal-950/40 via-[#0A0A0A] to-amber-950/20 border border-[#00ABAB]/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="p-2 rounded-xl bg-amber-400/10 text-amber-300 border border-amber-400/30">
-                <Coffee className="w-5 h-5" />
-              </span>
-              <div>
-                <p className="text-xs font-bold text-white">Guest wants snacks, beverages, or meals?</p>
-                <p className="text-[10px] text-[#94A3B8]">Food & Cafe POS is integrated right into your counter terminal.</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setActiveSubTab('cafe_pos')}
-              className="px-4 py-1.5 bg-[#14F1D9] text-[#0A0A0A] rounded-xl font-black text-xs uppercase tracking-wider hover:bg-white transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Utensils className="w-3.5 h-3.5" /> Open Cafe POS Terminal <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {visibleActivities.map(act => {
-              const isSelected = selectedActivities.some(a => a.id === act.id);
-              return (
-                <div 
-                  key={act.id} 
-                  onClick={() => toggleActivity(act)}
-                  className={`bg-[#0A0A0A] p-6 rounded-2xl border transition-all cursor-pointer group relative ${
-                    isSelected ? 'border-[#00ABAB] ring-2 ring-[#00ABAB]/40 shadow-[0_0_25px_rgba(0,171,171,0.2)]' : 'border-[#1C1C1C] hover:border-[#00ABAB]/50'
+              <span className="text-xs text-[#94A3B8] font-bold uppercase font-mono hidden sm:inline">Ticketing Mode:</span>
+              <div className="inline-flex p-1 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setTicketingViewMode('activities')}
+                  className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    ticketingViewMode === 'activities'
+                      ? 'bg-[#00ABAB] text-black shadow-[0_0_15px_rgba(0,171,171,0.35)]'
+                      : 'text-[#94A3B8] hover:text-white'
                   }`}
                 >
-                  {isSelected && (
-                    <div className="absolute top-4 right-4 bg-[#00ABAB] text-black rounded-full p-1 z-10 shadow-lg">
-                      <CheckCircle className="w-5 h-5" />
-                    </div>
-                  )}
-                  <div className="h-36 rounded-xl overflow-hidden mb-4 border border-[#1C1C1C] relative">
-                    <img src={act.image} alt={act.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    {isSelected && <div className="absolute inset-0 bg-[#00ABAB]/20" />}
-                  </div>
-                  <h3 className="text-lg font-bold text-white group-hover:text-[#40E0D0] transition-colors">{act.name}</h3>
-                  <p className="text-xs text-[#94A3B8] line-clamp-2 mt-1">{act.description}</p>
-                  <div className="text-sm mt-3 font-mono pt-3 border-t border-[#1C1C1C]">
-                    {act.packages && act.packages.length > 0 ? (
-                      <span className="text-[#00ABAB] font-bold">
-                        Packages from ₹{Math.min(...act.packages.map(p => p.price))} ({act.packages.length} Options)
-                      </span>
-                    ) : (
-                      <span className="text-[#94A3B8]">
-                        Adult: ₹{act.adultPrice || 0} | Child: ₹{act.childPrice || 0}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                  <Ticket className="w-4 h-4" /> Single Activities ({visibleActivities.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTicketingViewMode('combos')}
+                  className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    ticketingViewMode === 'combos'
+                      ? 'bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.35)] font-black'
+                      : 'text-[#94A3B8] hover:text-[#FFD700]'
+                  }`}
+                >
+                  <Boxes className="w-4 h-4 text-inherit" /> Combo Packages ({activeComboPacks.length})
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Actions depending on mode */}
+            {ticketingViewMode === 'activities' ? (
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button 
+                  onClick={selectAll}
+                  className="flex-1 sm:flex-none px-4 py-2 border border-[#00ABAB] text-[#00ABAB] rounded-xl font-bold text-xs hover:bg-[#00ABAB]/10 transition-colors cursor-pointer"
+                >
+                  {selectedActivities.length === visibleActivities.length ? 'Deselect All' : 'Select All Activities'}
+                </button>
+                <button 
+                  onClick={() => setIsCheckoutOpen(true)}
+                  disabled={selectedActivities.length === 0}
+                  className="flex-1 sm:flex-none px-6 py-2.5 bg-[#00ABAB] text-black rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#00ABAB]/80 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-[0_0_20px_rgba(0,171,171,0.3)]"
+                >
+                  Proceed to Checkout ({selectedActivities.length})
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-[#FFD700] bg-[#FFD700]/10 border border-[#FFD700]/30 px-3 py-1.5 rounded-xl font-bold">
+                  ⚡ Showing Multi-Activity Bundles Only
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* ── MULTI-ACTIVITY COMBO PACKS ON TICKETING POS ── */}
-          <div className="mt-8 pt-6 border-t border-[#1C1C1C] space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className="p-2 rounded-xl bg-[#FFD700]/15 border border-[#FFD700]/40 text-[#FFD700]">
-                  <Boxes className="w-5 h-5" />
-                </span>
+          {/* ── VIEW 1: SINGLE ACTIVITIES ONLY ── */}
+          {ticketingViewMode === 'activities' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
-                  <h3 className="text-base font-black text-white flex items-center gap-2">
-                    Multi-Activity Combo Packs ({activeComboPacks.length} Active Bundles)
-                  </h3>
-                  <p className="text-xs text-[#94A3B8]">
-                    Curated adventure passes combining Go-Karting, Air Rifle, and Horse Riding with high discounts.
+                  <h2 className="text-xl font-black text-white flex items-center gap-2">
+                    <Ticket className="w-6 h-6 text-[#00ABAB]" /> Select Park Activities to Book
+                  </h2>
+                  <p className="text-xs text-[#94A3B8] mt-0.5">
+                    Multi-select one or multiple activities to generate synchronized passes or bundle passes.
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setActiveSubTab('combo_pos')}
-                className="px-4 py-2 bg-[#FFD700] hover:bg-white text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-[0_0_15px_rgba(255,215,0,0.3)]"
-              >
-                <Boxes className="w-4 h-4" /> Open Full Combo POS Counter <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {activeComboPacks.map(pack => {
-                const savings = Math.max(0, pack.originalPrice - pack.comboPrice);
-                const savingsPct = pack.originalPrice > 0 ? Math.round((savings / pack.originalPrice) * 100) : 0;
-                return (
-                  <div
-                    key={pack.id}
-                    className="glass-panel rounded-2xl border border-[#FFD700]/30 hover:border-[#FFD700] bg-[#0A0A0A] p-4 flex flex-col justify-between transition-all hover:shadow-[0_0_25px_rgba(255,215,0,0.15)] group"
-                  >
+              {/* Quick link banner to Cafe & Gift Shop POS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="p-3.5 bg-gradient-to-r from-teal-950/40 via-[#0A0A0A] to-amber-950/20 border border-[#00ABAB]/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2 rounded-xl bg-amber-400/10 text-amber-300 border border-amber-400/30">
+                      <Coffee className="w-5 h-5" />
+                    </span>
                     <div>
-                      <div className="flex items-center justify-between gap-1 mb-2">
-                        <span className="px-2 py-0.5 rounded-full bg-[#FFD700] text-black text-[9px] font-black uppercase tracking-wider">
-                          {pack.badge || 'COMBO DEAL'}
-                        </span>
-                        <span className="text-[10px] text-emerald-400 font-bold font-mono">
-                          Save ₹{savings} ({savingsPct}%)
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-black text-white group-hover:text-[#FFD700] transition-colors line-clamp-1">
-                        {pack.name}
-                      </h4>
-                      <p className="text-[11px] text-[#94A3B8] mt-1 line-clamp-2">
-                        {pack.description}
-                      </p>
-
-                      <div className="mt-3 space-y-1 bg-black/40 p-2.5 rounded-xl border border-white/5">
-                        <span className="text-[9px] font-mono font-bold text-[#FFD700] uppercase block">
-                          Included In Pass:
-                        </span>
-                        {(pack.items || []).map((item, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-[10px] text-white/90">
-                            <span className="truncate pr-1">• {item.activityName}</span>
-                            <span className="text-[#14F1D9] font-mono font-bold shrink-0">{item.unitOrDuration}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
-                      <div>
-                        <span className="text-[9px] text-[#94A3B8] line-through font-mono block">
-                          ₹{pack.originalPrice}
-                        </span>
-                        <span className="text-base font-black text-[#FFD700] font-mono">
-                          ₹{pack.comboPrice}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => setActiveSubTab('combo_pos')}
-                        className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#FFD700] to-[#FFAA00] hover:from-white hover:to-white text-black font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        Sell Pass <ArrowRight className="w-3 h-3" />
-                      </button>
+                      <p className="text-xs font-bold text-white">Food & Dining POS</p>
+                      <p className="text-[10px] text-[#94A3B8]">Snacks, drinks, meals with live kitchen KOT.</p>
                     </div>
                   </div>
-                );
-              })}
+                  <button
+                    onClick={() => setActiveSubTab('cafe_pos')}
+                    className="px-3.5 py-1.5 bg-[#14F1D9] text-[#0A0A0A] rounded-xl font-black text-xs uppercase tracking-wider hover:bg-white transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Utensils className="w-3.5 h-3.5" /> Cafe POS <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div className="p-3.5 bg-gradient-to-r from-amber-950/40 via-[#0A0A0A] to-yellow-950/20 border border-[#FFB703]/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2 rounded-xl bg-yellow-400/10 text-yellow-300 border border-yellow-400/30">
+                      <Gift className="w-5 h-5" />
+                    </span>
+                    <div>
+                      <p className="text-xs font-bold text-white">Gift Shop & Souvenirs POS</p>
+                      <p className="text-[10px] text-[#94A3B8]">Caps, tees, models, keychains, and merch.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveSubTab('gift_pos')}
+                    className="px-3.5 py-1.5 bg-[#FFB703] text-[#0A0A0A] rounded-xl font-black text-xs uppercase tracking-wider hover:bg-white transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5" /> Gift Shop POS <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Activities Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {visibleActivities.map(act => {
+                  const isSelected = selectedActivities.some(a => a.id === act.id);
+                  return (
+                    <div 
+                      key={act.id} 
+                      onClick={() => toggleActivity(act)}
+                      className={`bg-[#0A0A0A] p-6 rounded-2xl border transition-all cursor-pointer group relative ${
+                        isSelected ? 'border-[#00ABAB] ring-2 ring-[#00ABAB]/40 shadow-[0_0_25px_rgba(0,171,171,0.2)]' : 'border-[#1C1C1C] hover:border-[#00ABAB]/50'
+                      }`}
+                    >
+                      {isSelected && (
+                        <div className="absolute top-4 right-4 bg-[#00ABAB] text-black rounded-full p-1 z-10 shadow-lg">
+                          <CheckCircle className="w-5 h-5" />
+                        </div>
+                      )}
+                      <div className="h-36 rounded-xl overflow-hidden mb-4 border border-[#1C1C1C] relative">
+                        <img src={act.image} alt={act.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                        {isSelected && <div className="absolute inset-0 bg-[#00ABAB]/20" />}
+                      </div>
+                      <h3 className="text-lg font-bold text-white group-hover:text-[#40E0D0] transition-colors">{act.name}</h3>
+                      <p className="text-xs text-[#94A3B8] line-clamp-2 mt-1">{act.description}</p>
+                      <div className="text-sm mt-3 font-mono pt-3 border-t border-[#1C1C1C]">
+                        {act.packages && act.packages.length > 0 ? (
+                          <span className="text-[#00ABAB] font-bold">
+                            Packages from ₹{Math.min(...act.packages.map(p => p.price))} ({act.packages.length} Options)
+                          </span>
+                        ) : (
+                          <span className="text-[#94A3B8]">
+                            Adult: ₹{act.adultPrice || 0} | Child: ₹{act.childPrice || 0}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* ── VIEW 2: COMBO PACKAGES ONLY ── */}
+          {ticketingViewMode === 'combos' && (
+            <div className="animate-fade-in">
+              <ComboPackSalesCounter />
+            </div>
+          )}
 
           {/* Today's Combined Counter Summary */}
           <div className="mt-8 pt-6 border-t border-[#1C1C1C] space-y-4">
@@ -804,7 +974,7 @@ export const TicketingDashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="p-3 bg-[#0A0A0A] border border-cyan-500/20 rounded-xl flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Ticket className="w-4 h-4 text-cyan-400" />
@@ -819,11 +989,22 @@ export const TicketingDashboard: React.FC = () => {
               <div className="p-3 bg-[#0A0A0A] border border-amber-500/20 rounded-xl flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Utensils className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs text-[#94A3B8]">Cafe & Food Sales:</span>
+                  <span className="text-xs text-[#94A3B8]">Cafe & Food:</span>
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-bold font-mono text-amber-400">₹{todayFoodRevenue.toLocaleString('en-IN')}</span>
                   <div className="text-[9px] text-[#94A3B8] font-mono">{todayFoodPaidList.length} orders</div>
+                </div>
+              </div>
+
+              <div className="p-3 bg-[#0A0A0A] border border-yellow-500/20 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Gift className="w-4 h-4 text-yellow-400" />
+                  <span className="text-xs text-[#94A3B8]">Gift Shop:</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-bold font-mono text-yellow-400">₹{todayGiftRevenue.toLocaleString('en-IN')}</span>
+                  <div className="text-[9px] text-[#94A3B8] font-mono">{todayGiftPaidList.length} sales</div>
                 </div>
               </div>
 
@@ -1536,6 +1717,810 @@ export const TicketingDashboard: React.FC = () => {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 4. GIFT SHOP POS TERMINAL                                           */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeSubTab === 'gift_pos' && (
+        <div className="glass-panel rounded-2xl p-6 border border-[#FFB703]/30 space-y-6 animate-fade-in">
+          <div className="flex flex-col lg:flex-row gap-6">
+            
+            {/* LEFT COLUMN: SOUVENIRS & MERCHANDISE CATALOG */}
+            <div className="flex-1 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h2 className="text-xl font-black text-white flex items-center gap-2">
+                    <Gift className="w-5 h-5 text-[#FFB703]" /> Deuce Gift Shop & Merchandise POS
+                  </h2>
+                  <p className="text-xs text-[#94A3B8]">Scan or select souvenir apparel, collectibles, and gifts. Real-time stock sync & instant billing.</p>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                  <div className="relative flex-1 sm:w-56 min-w-[160px]">
+                    <Search className="w-4 h-4 text-[#94A3B8] absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Search gift, apparel, model..."
+                      value={giftSearch}
+                      onChange={e => setGiftSearch(e.target.value)}
+                      className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-[#94A3B8] focus:border-[#FFB703] focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingGiftItem(null);
+                      setGiftForm({
+                        name: '',
+                        description: '',
+                        price: 399,
+                        purchasePrice: 180,
+                        category: 'Souvenirs & Keychains',
+                        vendorId: 'vendor-gift-shop',
+                        image: '',
+                        stockQuantity: 50,
+                        isAvailable: true,
+                        unit: 'pcs'
+                      });
+                      setIsGiftModalOpen(true);
+                    }}
+                    className="px-3 py-2 bg-[#FFB703] text-black font-bold text-xs rounded-xl hover:bg-white transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-lg whitespace-nowrap"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Product
+                  </button>
+                </div>
+              </div>
+
+              {/* Category Filter Chips */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+                <button
+                  onClick={() => setSelectedGiftCategory('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    selectedGiftCategory === 'all'
+                      ? 'bg-[#FFB703] text-[#0A0A0A]'
+                      : 'bg-[#0A0A0A] text-[#94A3B8] border border-[#1C1C1C] hover:text-white'
+                  }`}
+                >
+                  All Merchandise ({giftMenuItems.length})
+                </button>
+                {allGiftCategoryOptions.map(cat => {
+                  const count = giftMenuItems.filter(m => m.category === cat).length;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedGiftCategory(cat)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                        selectedGiftCategory === cat
+                          ? 'bg-[#FFB703] text-[#0A0A0A]'
+                          : 'bg-[#0A0A0A] text-[#94A3B8] border border-[#1C1C1C] hover:text-white'
+                      }`}
+                    >
+                      {cat} {count > 0 && `(${count})`}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Items Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[580px] overflow-y-auto pr-2 custom-scrollbar">
+                {filteredGiftItems.length === 0 ? (
+                  <div className="col-span-2 py-16 text-center text-[#94A3B8] bg-[#0A0A0A]/60 rounded-2xl border border-dashed border-[#1C1C1C] space-y-3">
+                    <Gift className="w-10 h-10 mx-auto text-amber-500/30" />
+                    <p className="text-xs">No souvenir products match your search or category filter.</p>
+                    <button
+                      onClick={() => {
+                        setEditingGiftItem(null);
+                        setGiftForm({
+                          name: '',
+                          description: '',
+                          price: 399,
+                          purchasePrice: 180,
+                          category: 'Souvenirs & Keychains',
+                          vendorId: 'vendor-gift-shop',
+                          image: '',
+                          stockQuantity: 50,
+                          isAvailable: true,
+                          unit: 'pcs'
+                        });
+                        setIsGiftModalOpen(true);
+                      }}
+                      className="px-4 py-2 bg-[#FFB703] text-black font-bold text-xs rounded-xl hover:bg-white transition-all cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" /> Add First Gift Product
+                    </button>
+                  </div>
+                ) : (
+                  filteredGiftItems.map(item => {
+                    const stockQty = item.stockQuantity ?? 50;
+                    const isOutOfStock = stockQty <= 0 || !item.isAvailable;
+                    const inCartItem = giftCart.find(c => c.menuItemId === item.id);
+
+                    return (
+                      <div 
+                        key={item.id} 
+                        className={`bg-[#0A0A0A] border rounded-2xl p-4 flex gap-3.5 transition-all group relative overflow-hidden ${
+                          isOutOfStock ? 'opacity-50 border-rose-900/40 bg-rose-950/10' : inCartItem ? 'border-[#FFB703] ring-1 ring-[#FFB703]/40' : 'border-[#1C1C1C] hover:border-[#FFB703]/50'
+                        }`}
+                      >
+                        <div className="w-24 h-24 rounded-xl overflow-hidden bg-black/40 border border-[#1C1C1C] flex-shrink-0 relative">
+                          <img 
+                            src={item.image || 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=400&q=80'} 
+                            alt={item.name} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                          />
+                          {inCartItem && (
+                            <div className="absolute top-1 left-1 bg-[#FFB703] text-black text-[9px] font-black px-1.5 py-0.5 rounded-full shadow">
+                              {inCartItem.quantity} in cart
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex-1 flex flex-col justify-between min-w-0">
+                          <div>
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#FFB703] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 truncate">
+                                {item.category}
+                              </span>
+                              <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                                isOutOfStock ? 'text-rose-400 border-rose-500/30 bg-rose-500/10' : stockQty <= 10 ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                              }`}>
+                                {isOutOfStock ? 'Out of stock' : `${stockQty} in stock`}
+                              </span>
+                            </div>
+
+                            <h4 className="text-sm font-bold text-white group-hover:text-[#FFB703] transition-colors truncate">{item.name}</h4>
+                            <p className="text-[11px] text-[#94A3B8] line-clamp-2 mt-0.5">{item.description}</p>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-3 pt-2 border-t border-[#1C1C1C]">
+                            <div className="font-mono">
+                              <span className="text-base font-black text-[#FFB703]">₹{item.price}</span>
+                              <span className="text-[10px] text-[#94A3B8] ml-1">/ {item.unit || 'pcs'}</span>
+                            </div>
+
+                            {inCartItem ? (
+                              <div className="flex items-center gap-1.5 bg-black border border-[#FFB703]/50 rounded-xl p-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (inCartItem.quantity > 1) {
+                                      addToGiftCart(item, -1);
+                                    } else {
+                                      removeFromGiftCart(item.id);
+                                    }
+                                  }}
+                                  className="w-6 h-6 rounded-lg bg-white/5 hover:bg-white/10 text-white flex items-center justify-center font-bold text-xs cursor-pointer"
+                                >
+                                  -
+                                </button>
+                                <span className="font-mono font-bold text-xs px-2 text-[#FFB703]">{inCartItem.quantity}</span>
+                                <button
+                                  type="button"
+                                  disabled={inCartItem.quantity >= stockQty}
+                                  onClick={() => addToGiftCart(item, 1)}
+                                  className="w-6 h-6 rounded-lg bg-[#FFB703] hover:bg-white text-black flex items-center justify-center font-bold text-xs cursor-pointer disabled:opacity-40"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isOutOfStock}
+                                onClick={() => addToGiftCart(item, 1)}
+                                className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1 transition-all cursor-pointer ${
+                                  isOutOfStock
+                                    ? 'bg-white/5 text-[#94A3B8] cursor-not-allowed'
+                                    : 'bg-[#FFB703] text-black hover:bg-white shadow-[0_0_12px_rgba(255,183,3,0.3)]'
+                                }`}
+                              >
+                                <Plus className="w-3.5 h-3.5" /> Add to Cart
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: GIFT CART & CHECKOUT TERMINAL */}
+            <div className="w-full lg:w-96 flex-shrink-0">
+              <div className="bg-[#0A0A0A] border border-[#FFB703]/30 rounded-2xl p-5 sticky top-24 space-y-5 shadow-2xl">
+                <div className="flex justify-between items-center border-b border-[#1C1C1C] pb-3">
+                  <div className="flex items-center gap-2">
+                    <ShoppingBag className="w-5 h-5 text-[#FFB703]" />
+                    <h3 className="font-bold text-white text-base">Gift Shop Current Bill</h3>
+                  </div>
+                  {giftCart.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearGiftCart}
+                      className="text-[11px] text-rose-400 hover:text-rose-300 font-mono font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" /> Clear
+                    </button>
+                  )}
+                </div>
+
+                {giftCart.length === 0 ? (
+                  <div className="py-12 text-center text-[#94A3B8] space-y-2">
+                    <Gift className="w-12 h-12 mx-auto text-amber-500/20" />
+                    <p className="text-xs font-bold text-white">Bill is currently empty</p>
+                    <p className="text-[11px] text-[#94A3B8]">Select merchandise or souvenirs on the left to add items to guest ticket.</p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleProcessGiftOrder} className="space-y-4">
+                    {/* Cart Items List */}
+                    <div className="max-h-56 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+                      {giftCart.map(item => (
+                        <div key={item.id} className="flex justify-between items-center text-xs bg-white/5 border border-white/5 p-2 rounded-xl">
+                          <div className="flex-1 pr-2">
+                            <p className="font-bold text-white truncate">{item.name}</p>
+                            <p className="text-[10px] text-[#94A3B8] font-mono">₹{item.price} each</p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 bg-[#0A0A0A] border border-[#1C1C1C] rounded-lg p-0.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const matchingMenuItem = menuItems.find(m => m.id === item.menuItemId);
+                                  if (matchingMenuItem) {
+                                    if (item.quantity > 1) {
+                                      addToGiftCart(matchingMenuItem, -1);
+                                    } else {
+                                      removeFromGiftCart(item.menuItemId);
+                                    }
+                                  }
+                                }}
+                                className="w-5 h-5 rounded bg-white/5 hover:bg-white/10 text-white flex items-center justify-center font-bold text-[10px] cursor-pointer"
+                              >
+                                -
+                              </button>
+                              <span className="font-mono font-bold text-xs px-1.5 text-white">{item.quantity}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const matchingMenuItem = menuItems.find(m => m.id === item.menuItemId);
+                                  if (matchingMenuItem) addToGiftCart(matchingMenuItem, 1);
+                                }}
+                                className="w-5 h-5 rounded bg-[#FFB703] hover:bg-white text-black flex items-center justify-center font-bold text-[10px] cursor-pointer"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <span className="font-mono font-black text-[#FFB703] w-16 text-right">
+                              ₹{(item.price * item.quantity).toFixed(2)}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => removeFromGiftCart(item.menuItemId)}
+                              className="text-gray-500 hover:text-rose-400 p-1 cursor-pointer"
+                              title="Remove item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Customer Info Form */}
+                    <div className="pt-2 border-t border-[#1C1C1C] space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-[#94A3B8] uppercase font-mono font-bold block mb-1">Customer Name</label>
+                          <input
+                            type="text"
+                            value={giftCustomerName}
+                            onChange={e => setGiftCustomerName(e.target.value)}
+                            placeholder="Walk-in Guest"
+                            className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[#94A3B8] focus:border-[#FFB703] focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] text-[#94A3B8] uppercase font-mono font-bold block mb-1">Mobile No (Optional)</label>
+                          <input
+                            type="tel"
+                            value={giftCustomerPhone}
+                            onChange={e => setGiftCustomerPhone(e.target.value)}
+                            placeholder="9876543210"
+                            className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[#94A3B8] focus:border-[#FFB703] focus:outline-none font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Payment Tender Method */}
+                      <div>
+                        <label className="text-[10px] text-[#94A3B8] uppercase font-mono font-bold block mb-1.5">Payment Method</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[
+                            { id: 'cash', label: 'Cash', icon: Banknote },
+                            { id: 'upi', label: 'UPI / QR', icon: Smartphone },
+                            { id: 'card', label: 'Card POS', icon: CreditCard }
+                          ].map(mode => {
+                            const Icon = mode.icon;
+                            return (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                onClick={() => setGiftPaymentMethod(mode.id as any)}
+                                className={`py-2 px-2 rounded-xl text-xs font-bold flex flex-col items-center gap-1 border transition-all cursor-pointer ${
+                                  giftPaymentMethod === mode.id
+                                    ? 'bg-[#FFB703]/20 border-[#FFB703] text-[#FFB703]'
+                                    : 'bg-white/5 border-transparent text-[#94A3B8] hover:text-white'
+                                }`}
+                              >
+                                <Icon className="w-4 h-4" />
+                                <span>{mode.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {giftPaymentMethod === 'upi' && counterUpiId && (
+                        <div className="p-2.5 bg-violet-500/10 border border-violet-500/20 rounded-xl text-[11px] flex items-center justify-between">
+                          <span className="text-[#94A3B8]">Counter UPI ID:</span>
+                          <span className="font-mono font-bold text-violet-300">{counterUpiId}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bill Totals Summary */}
+                    {(() => {
+                      const grandMRP = Math.round(giftCart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
+                      const subtotal = Math.round((grandMRP / 1.12) * 100) / 100;
+                      const taxAmount = Math.round((grandMRP - subtotal) * 100) / 100;
+
+                      return (
+                        <div className="pt-3 border-t border-[#1C1C1C] space-y-1.5 text-xs font-mono">
+                          <div className="flex justify-between text-[#94A3B8]">
+                            <span>Items Count:</span>
+                            <span className="text-white">{giftCart.reduce((s, i) => s + i.quantity, 0)} pcs</span>
+                          </div>
+                          <div className="flex justify-between text-[#94A3B8]">
+                            <span>Base Subtotal:</span>
+                            <span className="text-white">₹{subtotal.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-[#94A3B8]">
+                            <span>SGST (6%) + CGST (6%):</span>
+                            <span className="text-white">₹{taxAmount.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-base font-black text-white pt-2 border-t border-[#1C1C1C]">
+                            <span>Total Due:</span>
+                            <span className="text-[#FFB703]">₹{grandMRP.toFixed(2)}</span>
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={isSubmittingGift}
+                            className="w-full mt-3 py-3 bg-gradient-to-r from-[#FFB703] to-amber-500 hover:from-white hover:to-white text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-[0_0_20px_rgba(255,183,3,0.3)] flex items-center justify-center gap-2"
+                          >
+                            {isSubmittingGift ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Printer className="w-4 h-4" /> Charge &amp; Print Thermal Bill
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </form>
+                )}
+
+                {/* Last Generated Bill Notification & Quick Reprint */}
+                {generatedGiftOrder && (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-2 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase font-bold text-emerald-400 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> Sale Confirmed
+                      </span>
+                      <span className="text-[10px] font-mono text-white">Token #{generatedGiftOrder.tokenNumber}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs font-mono">
+                      <span className="text-[#94A3B8]">{generatedGiftOrder.invoiceNumber}</span>
+                      <span className="font-bold text-white">₹{generatedGiftOrder.totalAmount.toFixed(2)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        printTicket({
+                          receiptId: generatedGiftOrder.invoiceNumber || generatedGiftOrder.id,
+                          tokenNumber: generatedGiftOrder.tokenNumber ? `#${generatedGiftOrder.tokenNumber}` : generatedGiftOrder.id,
+                          timestamp: generatedGiftOrder.createdAt,
+                          activityName: 'DEUCE GIFT & SOUVENIR SHOP',
+                          packageName: 'Souvenirs & Merchandise',
+                          customerName: generatedGiftOrder.customerName || 'Walk-in Guest',
+                          customerPhone: generatedGiftOrder.customerPhone,
+                          date: new Date().toISOString().split('T')[0],
+                          slot: 'GIFT COUNTER',
+                          items: generatedGiftOrder.items.map(i => ({ label: `${i.quantity}x ${i.name}`, value: `₹${(i.price * i.quantity).toFixed(2)}` })),
+                          subtotalAmount: generatedGiftOrder.subtotal,
+                          totalAmount: generatedGiftOrder.totalAmount,
+                          paymentStatus: 'paid',
+                          quantity: generatedGiftOrder.items.reduce((s, i) => s + i.quantity, 0),
+                          paymentMethod: (generatedGiftOrder.paymentMethod as any) || 'cash'
+                        });
+                      }}
+                      className="w-full py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-[10px] rounded-lg uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Printer className="w-3 h-3" /> Reprint Last Bill
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* 5. GIFT SHOP CATALOG & INVENTORY MANAGEMENT                          */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeSubTab === 'gift_inventory' && (
+        <div className="glass-panel rounded-2xl p-6 border border-[#FFB703]/30 space-y-6 animate-fade-in">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 className="text-xl font-black text-white flex items-center gap-2">
+                <Package className="w-6 h-6 text-[#FFB703]" /> Gift Shop Catalog & Inventory Management
+              </h2>
+              <p className="text-xs text-[#94A3B8]">
+                Add souvenir merchandise, adjust stock levels, configure retail and cost prices, and track profit margins.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => {
+                  setEditingGiftItem(null);
+                  setGiftForm({
+                    name: '',
+                    description: '',
+                    price: 399,
+                    purchasePrice: 180,
+                    category: 'Souvenirs & Keychains',
+                    vendorId: 'vendor-gift-shop',
+                    image: '',
+                    stockQuantity: 50,
+                    isAvailable: true,
+                    unit: 'pcs'
+                  });
+                  setIsGiftModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#FFB703] hover:bg-white text-black rounded-xl transition-all cursor-pointer shadow-lg"
+              >
+                <Plus className="h-4 w-4" /> + Add Gift Product
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-3 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl">
+              <span className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block">Total Merchandise</span>
+              <span className="text-lg font-mono font-black text-white">{giftMenuItems.length} products</span>
+            </div>
+            <div className="p-3 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl">
+              <span className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block">Units In Stock</span>
+              <span className="text-lg font-mono font-black text-[#FFB703]">
+                {giftMenuItems.reduce((s, i) => s + (i.stockQuantity || 0), 0)} units
+              </span>
+            </div>
+            <div className="p-3 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl">
+              <span className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block">Retail Valuation</span>
+              <span className="text-lg font-mono font-black text-emerald-400">
+                ₹{giftMenuItems.reduce((s, i) => s + ((i.stockQuantity || 0) * (i.price || 0)), 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div className="p-3 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl">
+              <span className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block">Low Stock Alerts</span>
+              <span className="text-lg font-mono font-black text-amber-400">
+                {giftMenuItems.filter(i => (i.stockQuantity || 0) <= 10).length} items
+              </span>
+            </div>
+          </div>
+
+          {/* Search, Filter & View Mode */}
+          <div className="glass-panel border border-[#FFB703]/30 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+              <Search className="h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search souvenir catalog..."
+                value={giftCatalogSearch}
+                onChange={e => setGiftCatalogSearch(e.target.value)}
+                className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-[#FFB703]"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={giftCatalogCategoryFilter}
+                onChange={e => setGiftCatalogCategoryFilter(e.target.value)}
+                className="bg-[#0A0A0A] border border-[#1C1C1C] rounded-lg px-2.5 py-1.5 text-white focus:outline-none font-mono cursor-pointer"
+              >
+                <option value="all">All Categories</option>
+                {allGiftCategoryOptions.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+
+              <div className="flex border border-[#1C1C1C] rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setGiftCatalogViewMode('cards')}
+                  className={`px-3 py-1 text-xs font-bold cursor-pointer ${
+                    giftCatalogViewMode === 'cards' ? 'bg-[#FFB703] text-black' : 'bg-[#0A0A0A] text-white'
+                  }`}
+                >
+                  Cards
+                </button>
+                <button
+                  onClick={() => setGiftCatalogViewMode('table')}
+                  className={`px-3 py-1 text-xs font-bold cursor-pointer ${
+                    giftCatalogViewMode === 'table' ? 'bg-[#FFB703] text-black' : 'bg-[#0A0A0A] text-white'
+                  }`}
+                >
+                  Table
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Gift Merchandise Items Display */}
+          {(() => {
+            const filteredCatalog = giftMenuItems.filter(item => {
+              const matchesSearch = item.name.toLowerCase().includes(giftCatalogSearch.toLowerCase()) ||
+                                    item.category.toLowerCase().includes(giftCatalogSearch.toLowerCase()) ||
+                                    item.description?.toLowerCase().includes(giftCatalogSearch.toLowerCase());
+              const matchesCat = giftCatalogCategoryFilter === 'all' || item.category === giftCatalogCategoryFilter;
+              return matchesSearch && matchesCat;
+            });
+
+            if (giftCatalogViewMode === 'table') {
+              return (
+                <div className="border border-[#1C1C1C] rounded-2xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#0A0A0A] text-[#94A3B8] font-mono border-b border-[#1C1C1C]">
+                        <tr>
+                          <th className="p-3">Product</th>
+                          <th className="p-3">Category</th>
+                          <th className="p-3 text-right">Selling Price</th>
+                          <th className="p-3 text-right">Cost Price</th>
+                          <th className="p-3 text-right">Margin</th>
+                          <th className="p-3 text-center">Stock Level</th>
+                          <th className="p-3 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#1C1C1C]">
+                        {filteredCatalog.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="p-8 text-center text-[#94A3B8]">
+                              No gift items found matching your filters.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredCatalog.map(item => {
+                            const cost = item.purchasePrice || 0;
+                            const margin = item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0;
+                            const stockQty = item.stockQuantity ?? 50;
+
+                            return (
+                              <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                <td className="p-3">
+                                  <div className="flex items-center gap-3">
+                                    <img 
+                                      src={item.image || 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=400&q=80'} 
+                                      alt={item.name} 
+                                      className="w-10 h-10 rounded-lg object-cover bg-black/40 border border-[#1C1C1C]" 
+                                    />
+                                    <div>
+                                      <p className="font-bold text-white">{item.name}</p>
+                                      <p className="text-[10px] text-[#94A3B8] font-mono">{item.unit || 'pcs'}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="p-3">
+                                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#FFB703] bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                                    {item.category}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-right font-mono font-black text-[#FFB703]">
+                                  ₹{item.price}
+                                </td>
+                                <td className="p-3 text-right font-mono text-[#94A3B8]">
+                                  ₹{cost}
+                                </td>
+                                <td className="p-3 text-right font-mono text-emerald-400 font-bold">
+                                  {margin.toFixed(1)}%
+                                </td>
+                                <td className="p-3 text-center">
+                                  <div className="flex items-center justify-center gap-1.5 font-mono">
+                                    <button
+                                      type="button"
+                                      onClick={() => adjustMenuItemStock(item.id, -1)}
+                                      className="w-5 h-5 rounded bg-white/5 hover:bg-white/10 text-white flex items-center justify-center text-xs cursor-pointer"
+                                      title="-1 Unit"
+                                    >
+                                      -
+                                    </button>
+                                    <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
+                                      stockQty <= 0 ? 'text-rose-400 border-rose-500/30 bg-rose-500/10' : stockQty <= 10 ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-white border-white/10'
+                                    }`}>
+                                      {stockQty}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => adjustMenuItemStock(item.id, 10)}
+                                      className="px-1.5 h-5 rounded bg-[#FFB703]/20 hover:bg-[#FFB703] text-[#FFB703] hover:text-black flex items-center justify-center text-[10px] font-bold cursor-pointer"
+                                      title="+10 Units"
+                                    >
+                                      +10
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="p-3 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setEditingGiftItem(item);
+                                        setGiftForm({
+                                          name: item.name,
+                                          description: item.description,
+                                          price: item.price,
+                                          purchasePrice: item.purchasePrice || 0,
+                                          category: item.category,
+                                          vendorId: item.vendorId || 'vendor-gift-shop',
+                                          image: item.image,
+                                          stockQuantity: item.stockQuantity ?? 50,
+                                          isAvailable: item.isAvailable,
+                                          unit: item.unit || 'pcs'
+                                        });
+                                        setIsGiftModalOpen(true);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-white/5 hover:bg-[#FFB703]/20 text-[#94A3B8] hover:text-[#FFB703] transition-colors cursor-pointer"
+                                      title="Edit Product"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
+                                          deleteMenuItem(item.id);
+                                        }
+                                      }}
+                                      className="p-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 text-[#94A3B8] hover:text-rose-400 transition-colors cursor-pointer"
+                                      title="Delete Product"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredCatalog.length === 0 ? (
+                  <div className="col-span-3 py-12 text-center text-[#94A3B8]">
+                    No merchandise products found matching your search.
+                  </div>
+                ) : (
+                  filteredCatalog.map(item => {
+                    const stockQty = item.stockQuantity ?? 50;
+                    const cost = item.purchasePrice || 0;
+                    const margin = item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0;
+
+                    return (
+                      <div key={item.id} className="bg-[#0A0A0A] border border-[#1C1C1C] hover:border-[#FFB703]/50 rounded-2xl p-4 space-y-3 transition-all group">
+                        <div className="h-36 rounded-xl overflow-hidden bg-black/40 border border-[#1C1C1C] relative">
+                          <img 
+                            src={item.image || 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=400&q=80'} 
+                            alt={item.name} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                          />
+                          <div className="absolute top-2 left-2">
+                            <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#FFB703] bg-black/80 px-2 py-0.5 rounded border border-[#FFB703]/30 backdrop-blur-sm">
+                              {item.category}
+                            </span>
+                          </div>
+                          <div className="absolute top-2 right-2">
+                            <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border backdrop-blur-sm ${
+                              stockQty <= 0 ? 'text-rose-400 border-rose-500/30 bg-black/80' : stockQty <= 10 ? 'text-amber-400 border-amber-500/30 bg-black/80' : 'text-emerald-400 border-emerald-500/30 bg-black/80'
+                            }`}>
+                              {stockQty} in stock
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="font-bold text-white text-sm group-hover:text-[#FFB703] transition-colors truncate">{item.name}</h4>
+                          <p className="text-[11px] text-[#94A3B8] line-clamp-2 mt-0.5">{item.description}</p>
+                        </div>
+
+                        <div className="pt-2 border-t border-[#1C1C1C] flex items-center justify-between text-xs font-mono">
+                          <div>
+                            <span className="text-[#94A3B8] text-[10px] block">Selling Price</span>
+                            <span className="text-base font-black text-[#FFB703]">₹{item.price}</span>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-[#94A3B8] text-[10px] block">Margin</span>
+                            <span className="text-xs font-bold text-emerald-400">{margin.toFixed(0)}% (₹{(item.price - cost).toFixed(0)})</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-[#1C1C1C] flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => adjustMenuItemStock(item.id, 10)}
+                            className="px-2.5 py-1 bg-white/5 hover:bg-[#FFB703]/20 text-[#94A3B8] hover:text-[#FFB703] rounded-lg text-xs font-mono font-bold transition-all cursor-pointer"
+                          >
+                            +10 Stock
+                          </button>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                setEditingGiftItem(item);
+                                setGiftForm({
+                                  name: item.name,
+                                  description: item.description,
+                                  price: item.price,
+                                  purchasePrice: item.purchasePrice || 0,
+                                  category: item.category,
+                                  vendorId: item.vendorId || 'vendor-gift-shop',
+                                  image: item.image,
+                                  stockQuantity: item.stockQuantity ?? 50,
+                                  isAvailable: item.isAvailable,
+                                  unit: item.unit || 'pcs'
+                                });
+                                setIsGiftModalOpen(true);
+                              }}
+                              className="p-1.5 rounded-lg bg-white/5 hover:bg-[#FFB703]/20 text-[#94A3B8] hover:text-[#FFB703] transition-colors cursor-pointer"
+                              title="Edit"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to delete "${item.name}"?`)) {
+                                  deleteMenuItem(item.id);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 text-[#94A3B8] hover:text-rose-400 transition-colors cursor-pointer"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* 5. CURRENT DAY TRANSACTIONS & SALES DASHBOARD                       */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {activeSubTab === 'history' && (
@@ -1878,8 +2863,172 @@ export const TicketingDashboard: React.FC = () => {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* MODAL: GENERATED BILL RECEIPT                                       */}
+      {/* MODAL: ADD / EDIT GIFT MERCHANDISE ITEM                             */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
+      {isGiftModalOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+          <form onSubmit={handleSaveGiftItem} className="glass-panel border border-[#FFB703]/40 p-6 rounded-3xl max-w-lg w-full space-y-4 bg-[#0A0A0A]">
+            <div className="flex justify-between items-center border-b border-[#1C1C1C] pb-3">
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <Gift className="w-5 h-5 text-[#FFB703]" />
+                {editingGiftItem ? 'Edit Gift Merchandise' : 'Add New Gift Product'}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setIsGiftModalOpen(false)}
+                className="text-[#94A3B8] hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Product Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Deuce Pro Racing Cap"
+                  value={giftForm.name}
+                  onChange={e => setGiftForm({ ...giftForm, name: e.target.value })}
+                  className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#FFB703]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Category</label>
+                  <select
+                    value={giftForm.category}
+                    onChange={e => setGiftForm({ ...giftForm, category: e.target.value })}
+                    className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#FFB703] font-mono"
+                  >
+                    {allGiftCategoryOptions.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Unit of Measure</label>
+                  <input
+                    type="text"
+                    placeholder="pcs / set"
+                    value={giftForm.unit || 'pcs'}
+                    onChange={e => setGiftForm({ ...giftForm, unit: e.target.value })}
+                    className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#FFB703]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Selling Price (₹) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={giftForm.price}
+                    onChange={e => setGiftForm({ ...giftForm, price: Number(e.target.value) })}
+                    className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#FFB703] font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Purchase / Cost Price (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={giftForm.purchasePrice || 0}
+                    onChange={e => setGiftForm({ ...giftForm, purchasePrice: Number(e.target.value) })}
+                    className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#FFB703] font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Available Stock Quantity</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={giftForm.stockQuantity}
+                  onChange={e => setGiftForm({ ...giftForm, stockQuantity: Number(e.target.value) })}
+                  className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#FFB703] font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Product Photo URL or Upload</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="https://images.unsplash.com/..."
+                    value={giftForm.image}
+                    onChange={e => setGiftForm({ ...giftForm, image: e.target.value })}
+                    className="flex-1 bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#FFB703]"
+                  />
+                  <label className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleGiftImageUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                {isUploadingGiftImage && <p className="text-[10px] text-[#FFB703] mt-1 font-mono">Compressing &amp; uploading image...</p>}
+                {giftForm.image && (
+                  <div className="mt-2 w-14 h-14 rounded-lg overflow-hidden border border-[#1C1C1C]">
+                    <img src={giftForm.image} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-[10px] text-[#94A3B8] font-mono uppercase font-bold block mb-1">Description (Specs / Features)</label>
+                <textarea
+                  rows={2}
+                  placeholder="Material, size options, branded embroidery details..."
+                  value={giftForm.description}
+                  onChange={e => setGiftForm({ ...giftForm, description: e.target.value })}
+                  className="w-full bg-[#0A0A0A] border border-[#1C1C1C] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#FFB703]"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="gift-available-chk"
+                  checked={giftForm.isAvailable}
+                  onChange={e => setGiftForm({ ...giftForm, isAvailable: e.target.checked })}
+                  className="rounded text-[#FFB703] focus:ring-[#FFB703] cursor-pointer"
+                />
+                <label htmlFor="gift-available-chk" className="text-white font-bold cursor-pointer">
+                  Immediately available for billing at Gift Shop POS
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[#1C1C1C]">
+              <button
+                type="button"
+                onClick={() => setIsGiftModalOpen(false)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-[#FFB703] hover:bg-white text-black font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all shadow-lg"
+              >
+                {editingGiftItem ? 'Save Changes' : 'Create Product'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
       {generatedBillOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
           <div className="glass-panel w-full max-w-sm p-6 rounded-3xl border border-[#14F1D9]/40 relative bg-[#050816] text-center font-sans shadow-[0_0_40px_rgba(20,241,217,0.2)]">

@@ -181,10 +181,10 @@
     "details": "Package: Sharp Shooter (30 Shots) | Qty: 1 | Ammo: 4.5mm Pro Match",
     "quantity": 1,
     "totalAmount": 25,
-    "paymentStatus": "pending",
-    "status": "reserved",
+    "paymentStatus": "paid",
+    "status": "confirmed",
     "bookingDate": "2026-08-04T17:17:45.588Z",
-    "updatedAt": "2026-11-05T02:32:27.582Z",
+    "updatedAt": "2026-11-21T01:37:53.915Z",
     "organizationId": "org_deuce_default"
   },
   {

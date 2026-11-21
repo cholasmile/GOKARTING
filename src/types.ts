@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type UserRole = 'super_admin' | 'finance_sub_admin' | 'activity_staff' | 'food_vendor' | 'cafe_staff' | 'customer' | 'go_karting_manager' | 'go_karting_staff' | 'ticket_counter_staff' | 'horse_riding_staff' | 'shooting_staff';
+export type UserRole = 'super_admin' | 'finance_sub_admin' | 'activity_staff' | 'food_vendor' | 'cafe_staff' | 'gift_shop_staff' | 'customer' | 'go_karting_manager' | 'go_karting_staff' | 'ticket_counter_staff' | 'horse_riding_staff' | 'shooting_staff';
 
 export interface User {
   id: string;
@@ -392,7 +392,7 @@ export interface Ticket {
 export interface FoodVendor {
   id: string;
   name: string;
-  type: 'cafe' | 'fast_food' | 'juice' | 'ice_cream';
+  type: 'cafe' | 'fast_food' | 'juice' | 'ice_cream' | 'gift_shop' | 'retail';
   image: string;
   ownerName: string;
   stallNumber: string;

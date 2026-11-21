@@ -112,8 +112,18 @@ export function printTicket(opts: PrintTicketOptions) {
                  slot === 'CAFE COUNTER' ||
                  slot === 'Counter POS';
 
-  // 5% GST specifically for Food Street (2.5% CGST + 2.5% SGST); 18% standard for non-food activities (9% CGST + 9% SGST)
-  const gstDivisor = isFood ? 1.05 : 1.18;
+  const isGift = activityName.toLowerCase().includes('gift') ||
+                 activityName.toLowerCase().includes('souvenir') ||
+                 activityName.toLowerCase().includes('merchandise') ||
+                 activityName.toLowerCase().includes('retail') ||
+                 receiptId.startsWith('INV-GFT-') ||
+                 slot === 'GIFT COUNTER' ||
+                 slot === 'RETAIL COUNTER';
+
+  const isRetail = isFood || isGift;
+
+  // GST calculation: 5% for Food (2.5% CGST + 2.5% SGST); 12% for Souvenirs/Retail; 18% standard for activities
+  const gstDivisor = isFood ? 1.05 : isGift ? 1.12 : 1.18;
   const netTaxable = subtotalAmount != null 
     ? subtotalAmount 
     : Math.round((totalAmount / gstDivisor) * 100) / 100;
@@ -123,7 +133,7 @@ export function printTicket(opts: PrintTicketOptions) {
   const totalGst = sgst + cgst;
   const baseSubtotal = subtotalAmount != null ? subtotalAmount : (totalAmount + discountAmount);
   const grandTotal = totalAmount;
-  const gstRateText = isFood ? '2.5%' : '9%';
+  const gstRateText = isFood ? '2.5%' : isGift ? '6%' : '9%';
 
   const now = new Date().toLocaleString('en-IN', {
     day: '2-digit',
@@ -524,7 +534,7 @@ export function printTicket(opts: PrintTicketOptions) {
         </div>
       </div>
 
-      ${isFood ? `
+      ${isRetail ? `
       <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 5px 0; margin: 5px 0; text-align: center;">
         <div style="font-size: 14px; font-weight: 800; letter-spacing: 0.5px;">TOKEN NO: <span style="font-size: 18px; font-family: monospace;">${token}</span></div>
         <div style="font-size: 10px; font-weight: 700; margin-top: 2px;">TIME STAMP: <strong>${timeStamp}</strong></div>
@@ -560,7 +570,7 @@ export function printTicket(opts: PrintTicketOptions) {
         </div>
       </div>
 
-      ${(!isFood && specsList.length > 0) ? `
+      ${(!isRetail && specsList.length > 0) ? `
       <div class="specs-bar">
         <div class="specs-bar-title">SESSION SPECIFICATIONS &amp; ENTITLEMENTS</div>
         <div class="specs-bar-content">
@@ -574,7 +584,7 @@ export function printTicket(opts: PrintTicketOptions) {
       <table class="items-table">
         <thead>
           <tr>
-            <th>${isFood ? 'Item Name' : 'Ticket Split Up &amp; Specs'}</th>
+            <th>${isRetail ? 'Item Name' : 'Ticket Split Up &amp; Specs'}</th>
             <th style="text-align: right;">Price</th>
           </tr>
         </thead>
@@ -606,7 +616,7 @@ export function printTicket(opts: PrintTicketOptions) {
       </div>
 
       <div class="footer-note">
-        ${isFood ? `<strong>Thank you for visiting DEUCE SPORTS GROUP!</strong><div style="font-size: 8.5px; color: #555; margin-top: 3px;">Printed: ${timeStamp}</div>` : `Valid for date/slot printed above. Non-refundable.<br/><strong>Thank you for visiting DEUCE SPORTS GROUP!</strong><div style="font-size: 8.5px; color: #555; margin-top: 3px;">Printed: ${timeStamp}</div>`}
+        ${isRetail ? `<strong>Thank you for shopping at DEUCE SPORTS GROUP!</strong><div style="font-size: 8.5px; color: #555; margin-top: 3px;">Printed: ${timeStamp}</div>` : `Valid for date/slot printed above. Non-refundable.<br/><strong>Thank you for visiting DEUCE SPORTS GROUP!</strong><div style="font-size: 8.5px; color: #555; margin-top: 3px;">Printed: ${timeStamp}</div>`}
       </div>
     </div>
   </div>

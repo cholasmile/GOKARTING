@@ -1,5 +1,28 @@
 [
   {
+    "id": "pay-bk-POS-3D7172-1785863865588-5905",
+    "bookingId": "bk-POS-3D7172-1785863865588-5905",
+    "amount": 25,
+    "method": "upi",
+    "status": "paid",
+    "transactionId": "TX-bk-POS-3D7172-1785863865588-5905",
+    "timestamp": "2026-11-21T01:37:53.915Z",
+    "invoice_id": "INV-B-bk-POS-3D7172-1785863865588-5905",
+    "customer_id": "",
+    "currency": "INR",
+    "payment_method": "UPI",
+    "payment_status": "PAID",
+    "ticketId": "tkt-bk-POS-3D7172-1785863865588-5905",
+    "customerName": "",
+    "customerPhone": "",
+    "activityName": "Precision Air Gun Shooting",
+    "counterId": "counter_1",
+    "paid_at": "2026-11-21T01:37:53.915Z",
+    "updated_at": "2026-11-21T01:37:53.915Z",
+    "updatedAt": "2026-11-21T01:37:53.916Z",
+    "organizationId": "org_deuce_default"
+  },
+  {
     "id": "pay-1793888348252",
     "bookingId": "bk-POS-3D7172-1793888348252-1799",
     "amount": 250,

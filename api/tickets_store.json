@@ -64,9 +64,11 @@
     "ticketType": "Package: Sharp Shooter (30 Shots) | Qty: 1 | Ammo: 4.5mm Pro Match",
     "quantity": 1,
     "qrCodeValue": "adventure-park-ticket-bk-POS-3D7172-1785863865588-5905",
-    "status": "valid",
-    "updatedAt": "2026-11-05T02:32:27.739Z",
-    "organizationId": "org_deuce_default"
+    "status": "used",
+    "updatedAt": "2026-11-21T01:37:58.952Z",
+    "organizationId": "org_deuce_default",
+    "scannedAt": "2026-11-21T01:37:58.952Z",
+    "scannedBy": "Activity Ranger Smith"
   },
   {
     "id": "tkt-bk-POS-3D7172-1785863835373-8030",

@@ -31,6 +31,7 @@ export const INITIAL_USERS: User[] = [
   { id: 'usr-hrs', name: 'Horse Riding Staff', email: 'horseriding@deucepark.com', password: 'staff', role: 'horse_riding_staff', employeeId: 'EMP-HRS-07', streetAddress: '7 Equestrian Lane, Mangalam', city: 'Yelagiri Hills', state: 'Tamil Nadu', pincode: '635853', aadhaarNumber: '3210 9876 7007', department: 'Horse Riding', designation: 'Stable In-Charge', monthlySalary: 20000, dailyRate: 667 },
   { id: 'usr-sht', name: 'Precision Shooting Range Staff', email: 'shooting@deucepark.com', password: 'staff', role: 'shooting_staff', employeeId: 'EMP-SHT-08', streetAddress: '11 Pine Grove Road', city: 'Yelagiri Hills', state: 'Tamil Nadu', pincode: '635853', aadhaarNumber: '2109 8765 8008', department: 'Air Rifle Shooting', designation: 'Range Safety Officer', monthlySalary: 20000, dailyRate: 667 },
   { id: 'usr-tcs', name: 'Ticket Counter Staff', email: 'ticketing@deucepark.com', password: 'staff', role: 'ticket_counter_staff', employeeId: 'EMP-TCK-09', streetAddress: '5 Gate Avenue, Main Entrance', city: 'Yelagiri Hills', state: 'Tamil Nadu', pincode: '635853', aadhaarNumber: '1098 7654 9009', department: 'Ticketing & Counter', designation: 'Counter Cashier', monthlySalary: 18000, dailyRate: 600 },
+  { id: 'usr-gift', name: 'Deuce Gift Shop Staff', email: 'giftshop@deucepark.com', password: 'gift', role: 'gift_shop_staff', vendorId: 'vendor-gift-shop', employeeId: 'EMP-GFT-11', streetAddress: '10 Souvenir Arcade, Main Promenade', city: 'Yelagiri Hills', state: 'Tamil Nadu', pincode: '635853', aadhaarNumber: '8901 2345 6789', department: 'Gift Shop & Merchandise', designation: 'Store In-Charge', monthlySalary: 18000, dailyRate: 600 },
   { id: 'usr-fin', name: 'Finance Entry Sub-Admin', email: 'finance@deucepark.com', password: 'finance', role: 'finance_sub_admin', employeeId: 'EMP-FIN-10', streetAddress: '3 Accounts Wing, Admin House', city: 'Yelagiri Hills', state: 'Tamil Nadu', pincode: '635853', aadhaarNumber: '9012 3456 0010', department: 'Administration / Office', designation: 'Accounts Sub-Admin', monthlySalary: 28000, dailyRate: 933 },
 ];
 
@@ -141,6 +142,148 @@ export const INITIAL_FOOD_VENDORS: FoodVendor[] = [
     image: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=800&q=80',
     ownerName: 'Oliver Chen',
     stallNumber: 'Stall F-04'
+  },
+  {
+    id: 'vendor-gift-shop',
+    name: 'Deuce Souvenir & Gift Shop',
+    type: 'gift_shop',
+    image: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80',
+    ownerName: 'Deuce Retail Management',
+    stallNumber: 'Shop G-01'
+  }
+];
+
+// ── Curated Deuce Gift & Souvenir Shop Merchandise Items ──
+export const INITIAL_GIFT_ITEMS: MenuItem[] = [
+  {
+    id: 'gift-item-1',
+    vendorId: 'vendor-gift-shop',
+    name: 'Deuce Pro Racing Cap',
+    description: 'Embroidered Deuce Racing adjustable athletic cap with moisture-wicking fabric.',
+    price: 399,
+    purchasePrice: 180,
+    category: 'Caps & Headwear',
+    isAvailable: true,
+    image: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=400&q=80',
+    stockQuantity: 45,
+    unit: 'pcs'
+  },
+  {
+    id: 'gift-item-2',
+    vendorId: 'vendor-gift-shop',
+    name: 'Deuce "Live The Rush" Cotton T-Shirt',
+    description: '100% premium breathable cotton unisex graphic tee with track circuit print.',
+    price: 599,
+    purchasePrice: 250,
+    category: 'Apparel & Clothing',
+    isAvailable: true,
+    image: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=400&q=80',
+    stockQuantity: 60,
+    unit: 'pcs'
+  },
+  {
+    id: 'gift-item-3',
+    vendorId: 'vendor-gift-shop',
+    name: 'Deuce Championship Fleece Hoodie',
+    description: 'Heavyweight warm fleece zip-up hoodie with racing stripes and front pockets.',
+    price: 1299,
+    purchasePrice: 650,
+    category: 'Apparel & Clothing',
+    isAvailable: true,
+    image: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=400&q=80',
+    stockQuantity: 30,
+    unit: 'pcs'
+  },
+  {
+    id: 'gift-item-4',
+    vendorId: 'vendor-gift-shop',
+    name: 'Die-Cast 1:24 Racing Go-Kart Model',
+    description: 'Detailed metal alloy miniature replica of our flagship Yelagiri track kart.',
+    price: 749,
+    purchasePrice: 320,
+    category: 'Toys & Die-Cast Models',
+    isAvailable: true,
+    image: 'https://images.unsplash.com/photo-1594787318286-3d835c1d207f?auto=format&fit=crop&w=400&q=80',
+    stockQuantity: 35,
+    unit: 'pcs'
+  },
+  {
+    id: 'gift-item-5',
+    vendorId: 'vendor-gift-shop',
+    name: 'Deuce Turbo Engraved Metal Keychain',
+    description: 'Heavy-duty polished alloy keychain with laser-etched track emblem.',
+    price: 149,
+    purchasePrice: 45,
+    category: 'Souvenirs & Keychains',
+    isAvailable: true,
+    image: 'https://images.unsplash.com/photo-1614252235316-8c857d38b5f4?auto=format&fit=crop&w=400&q=80',
+    stockQuantity: 100,
+    unit: 'pcs'
+  },
+  {
+    id: 'gift-item-6',
+    vendorId: 'vendor-gift-shop',
+    name: 'Stainless Steel Sports Sipper (750ml)',
+    description: 'Double-walled insulated matte black thermal bottle keeping drinks cold for 24h.',
+    price: 499,
+    purchasePrice: 190,
+    category: 'Drinkware & Flasks',
+    isAvailable: true,
+    image: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=400&q=80',
+    stockQuantity: 40,
+    unit: 'pcs'
+  },
+  {
+    id: 'gift-item-7',
+    vendorId: 'vendor-gift-shop',
+    name: 'Polarized UV400 Racing Sunglasses',
+    description: 'Aerodynamic sport-wrap sunglasses with anti-glare tinted polycarbonate lenses.',
+    price: 699,
+    purchasePrice: 280,
+    category: 'Accessories & Gear',
+    isAvailable: true,
+    image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=400&q=80',
+    stockQuantity: 25,
+    unit: 'pcs'
+  },
+  {
+    id: 'gift-item-8',
+    vendorId: 'vendor-gift-shop',
+    name: 'Deuce Silicone Wristbands (Set of 2)',
+    description: 'Durable debossed silicone speed bands in Deuce cyan and neon gold.',
+    price: 99,
+    purchasePrice: 25,
+    category: 'Souvenirs & Keychains',
+    isAvailable: true,
+    image: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=400&q=80',
+    stockQuantity: 120,
+    unit: 'pcs'
+  },
+  {
+    id: 'gift-item-9',
+    vendorId: 'vendor-gift-shop',
+    name: 'Deuce Adventure Water-Resistant Daypack',
+    description: 'Lightweight ripstop backpack with padded shoulder straps and helmet clip.',
+    price: 1499,
+    purchasePrice: 700,
+    category: 'Accessories & Gear',
+    isAvailable: true,
+    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=400&q=80',
+    stockQuantity: 20,
+    unit: 'pcs'
+  },
+  {
+    id: 'gift-item-10',
+    vendorId: 'vendor-gift-shop',
+    name: 'Trackside Matte Ceramic Coffee Mug',
+    description: '350ml high-gloss ceramic mug with race finish flag and logo.',
+    price: 299,
+    purchasePrice: 90,
+    category: 'Drinkware & Flasks',
+    isAvailable: true,
+    image: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80',
+    stockQuantity: 60,
+    unit: 'pcs'
   }
 ];
 

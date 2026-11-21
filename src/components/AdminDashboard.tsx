@@ -4041,6 +4041,8 @@ export const AdminDashboard: React.FC = () => {
                     <option value="fast_food">Fast Food Grill</option>
                     <option value="juice">Juice Corner</option>
                     <option value="ice_cream">Ice Cream Dessert</option>
+                    <option value="gift_shop">Gift Shop / Souvenirs</option>
+                    <option value="retail">Retail Merchandise Store</option>
                   </select>
                 </div>
               </div>

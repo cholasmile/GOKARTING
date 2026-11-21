@@ -64,6 +64,7 @@ function LoginPage() {
         (matchedUser.role === 'activity_staff' && password === 'staff') ||
         (matchedUser.role === 'food_vendor' && (password === 'vendor' || password === 'cafe' || password === 'staff')) ||
         (matchedUser.role === 'cafe_staff' && (password === 'cafe' || password === 'vendor' || password === 'staff')) ||
+        (matchedUser.role === 'gift_shop_staff' && (password === 'gift' || password === 'shop' || password === 'staff')) ||
         (matchedUser.role === 'go_karting_manager' && (password === 'manager' || password === 'staff' || password === 'karting')) ||
         (matchedUser.role === 'go_karting_staff' && (password === 'staff' || password === 'karting')) ||
         (matchedUser.role === 'horse_riding_staff' && (password === 'staff' || password === 'horse')) ||
@@ -79,7 +80,7 @@ function LoginPage() {
         else if (matchedUser.role === 'go_karting_manager' || matchedUser.role === 'go_karting_staff') navigate('/staff/karting');
         else if (matchedUser.role === 'horse_riding_staff') navigate('/staff/horse-riding');
         else if (matchedUser.role === 'shooting_staff') navigate('/staff/shooting');
-        else if (matchedUser.role === 'food_vendor' || matchedUser.role === 'cafe_staff' || matchedUser.role === 'ticket_counter_staff') navigate('/staff/ticketing');
+        else if (matchedUser.role === 'food_vendor' || matchedUser.role === 'cafe_staff' || matchedUser.role === 'gift_shop_staff' || matchedUser.role === 'ticket_counter_staff') navigate('/staff/ticketing');
         else navigate('/staff');
       } else {
         setError('Incorrect password. Access denied.');
@@ -231,6 +232,7 @@ function LoginPage() {
                         else if (cleanEmail.includes('horse')) role = 'horse_riding_staff';
                         else if (cleanEmail.includes('shooting')) role = 'shooting_staff';
                         else if (cleanEmail.includes('cafe') || cleanEmail.includes('vendor')) role = 'food_vendor';
+                        else if (cleanEmail.includes('gift') || cleanEmail.includes('souvenir') || cleanEmail.includes('merch')) role = 'gift_shop_staff';
                         else if (cleanEmail.includes('staff') || cleanEmail.endsWith('@deucepark.com') || cleanEmail.endsWith('@adventurepark.com')) role = 'activity_staff';
 
                         authUser = {
@@ -250,7 +252,7 @@ function LoginPage() {
                     else if (authUser.role === 'go_karting_manager' || authUser.role === 'go_karting_staff') navigate('/staff/karting');
                     else if (authUser.role === 'horse_riding_staff') navigate('/staff/horse-riding');
                     else if (authUser.role === 'shooting_staff') navigate('/staff/shooting');
-                    else if (authUser.role === 'food_vendor' || authUser.role === 'cafe_staff' || authUser.role === 'ticket_counter_staff') navigate('/staff/ticketing');
+                    else if (authUser.role === 'food_vendor' || authUser.role === 'cafe_staff' || authUser.role === 'gift_shop_staff' || authUser.role === 'ticket_counter_staff') navigate('/staff/ticketing');
                     else if (authUser.role === 'activity_staff') navigate('/staff');
                     else navigate('/');
                   } catch (err: any) {

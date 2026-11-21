@@ -12,6 +12,7 @@ coverage/
 .runtime/
 scratch/
 data/
+dev-dist/
 *.sqlite*
 api/*_store.json
 !api/combo_packs_store.json
